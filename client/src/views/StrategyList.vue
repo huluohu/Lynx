@@ -2,7 +2,10 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">🎯 策略管理</h1>
-      <router-link to="/strategies/create" class="btn btn-primary">+ 创建策略</router-link>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" @click="showAI = true">🤖 AI 生成</button>
+        <router-link to="/strategies/create" class="btn btn-primary">+ 创建策略</router-link>
+      </div>
     </div>
 
     <div class="card" v-if="strategies.length">
@@ -23,22 +26,30 @@
       </table>
     </div>
     <div v-else class="card empty">
-      <div class="empty-icon">🎯</div><p>还没有策略，<router-link to="/strategies/create">创建一个</router-link></p>
+      <div class="empty-icon">🎯</div><p>还没有策略，<router-link to="/strategies/create">创建一个</router-link> 或使用 <a href="#" @click.prevent="showAI = true">🤖 AI 生成</a></p>
     </div>
+
+    <AppDrawer v-model="showAI" title="🤖 AI 生成策略">
+      <AIStrategyGenerator @done="onAIDone" />
+    </AppDrawer>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
+import AppDrawer from '../components/AppDrawer.vue'
+import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 
 const strategies = ref([])
+const showAI = ref(false)
 
 async function loadData() {
   const res = await api('/api/strategies')
   const json = await res.json()
   strategies.value = json.data || []
 }
+function onAIDone() { showAI.value = false; loadData() }
 function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏' }[t] || t }
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }

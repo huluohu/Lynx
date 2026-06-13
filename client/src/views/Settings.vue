@@ -51,6 +51,24 @@
         </div>
       </div>
 
+      <!-- AI 配置 -->
+      <div class="card">
+        <div class="section-title">🤖 AI 策略生成</div>
+        <div class="form-group">
+          <label class="form-label">API 地址</label>
+          <input class="form-input" type="text" v-model="form.ai_api_url" placeholder="https://api.openai.com/v1/chat/completions" @blur="saveKey('ai_api_url', form.ai_api_url)" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">API Key</label>
+          <input class="form-input" type="password" v-model="form.ai_api_key" placeholder="sk-..." @blur="saveKey('ai_api_key', form.ai_api_key)" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">模型名称</label>
+          <input class="form-input" type="text" v-model="form.ai_model" placeholder="gpt-4o-mini" @blur="saveKey('ai_model', form.ai_model)" />
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">支持 OpenAI 兼容接口。也可通过环境变量 AI_API_URL / AI_API_KEY / AI_MODEL 配置。</span>
+      </div>
+
       <!-- 认证 -->
       <div class="card">
         <div class="section-title">🔐 安全</div>
@@ -76,6 +94,9 @@ const form = reactive({
   refresh_interval: '60',
   price_alert_threshold: '2',
   plan_approaching_pct: '5',
+  ai_api_url: '',
+  ai_api_key: '',
+  ai_model: '',
   wechat_notify: 'true',
   webpush_notify: 'true',
   notify_plan_triggered: 'true',

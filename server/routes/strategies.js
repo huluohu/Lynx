@@ -106,4 +106,55 @@ router.post('/:id/generate-plan', (req, res) => {
   }
 });
 
+// POST AI 智能生成策略
+router.post('/ai-generate', async (req, res) => {
+  const { asset_id, budget, goal, risk_level } = req.body;
+  if (!asset_id) return res.status(400).json({ success: false, error: '请选择资产' });
+
+  try {
+    const { aiGenerateStrategy } = await import('../services/ai.js');
+    const result = await aiGenerateStrategy(getDb(), {
+      assetId: asset_id,
+      budget: Number(budget) || 20000,
+      goal: goal || 'recovery',
+      riskLevel: risk_level || 'medium',
+    });
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// POST AI 生成后确认保存
+router.post('/ai-confirm', (req, res) => {
+  const { asset_id, strategy, plans } = req.body;
+  if (!strategy || !plans) return res.status(400).json({ success: false, error: '缺少策略数据' });
+
+  const db = getDb();
+  try {
+    // 保存策略
+    const params = typeof strategy.parameters === 'string' ? strategy.parameters : JSON.stringify(strategy.parameters);
+    const sResult = db.prepare(
+      'INSERT INTO strategies (name, description, type, asset_id, parameters, status) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(strategy.name, strategy.description || '', strategy.type, asset_id, params, 'active');
+    const strategyId = sResult.lastInsertRowid;
+
+    // 保存操盘计划
+    const insert = db.prepare(
+      'INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    const insertMany = db.transaction((items) => {
+      for (const p of items) {
+        insert.run(strategyId, asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
+          p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
+      }
+    });
+    insertMany(plans);
+
+    res.json({ success: true, data: { strategyId } });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
 export default router;

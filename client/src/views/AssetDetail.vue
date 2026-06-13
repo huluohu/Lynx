@@ -4,6 +4,7 @@
       <h1 class="page-title">{{ asset.icon }} {{ asset.name }}</h1>
       <div class="page-actions">
         <button class="btn btn-primary" @click="showTxDrawer = true">+ 记录交易</button>
+        <button class="btn" @click="showAIDrawer = true">🤖 AI 建议</button>
         <button class="btn" @click="showEditDrawer = true">✏️ 编辑</button>
         <button class="btn btn-danger" @click="showDeleteConfirm = true">🗑️</button>
         <router-link to="/assets" class="btn">← 返回</router-link>
@@ -102,6 +103,11 @@
       :loading="deleting"
       @confirm="doDelete"
     />
+
+    <!-- AI Drawer -->
+    <AppDrawer v-model="showAIDrawer" title="🤖 AI 策略建议">
+      <AIStrategyGenerator :preset-asset-id="route.params.id" @done="showAIDrawer = false" />
+    </AppDrawer>
   </div>
 </template>
 
@@ -113,6 +119,7 @@ import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,6 +129,7 @@ const holding = ref(null)
 const transactions = ref([])
 const showTxDrawer = ref(false)
 const showEditDrawer = ref(false)
+const showAIDrawer = ref(false)
 const showDeleteConfirm = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
