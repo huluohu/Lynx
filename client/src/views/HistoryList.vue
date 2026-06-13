@@ -46,7 +46,7 @@
     </div>
 
     <div class="card" v-if="history.length">
-      <table>
+      <table class="hide-mobile">
         <thead><tr><th>日期</th><th>资产</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th><th>盈亏</th><th>原因</th></tr></thead>
         <tbody>
           <tr v-for="h in history" :key="h.id">
@@ -61,6 +61,23 @@
           </tr>
         </tbody>
       </table>
+
+      <!-- Mobile cards -->
+      <div class="show-mobile history-cards">
+        <div v-for="h in history" :key="h.id" class="history-card">
+          <div class="history-card-header">
+            <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
+            <span style="font-weight:600">{{ h.asset_name }}</span>
+            <span style="color:var(--text-muted);font-size:12px;margin-left:auto">{{ h.executed_at?.slice(0,10) }}</span>
+          </div>
+          <div class="history-card-body">
+            <span>{{ h.quantity }} × ¥{{ h.price }}</span>
+            <span>= ¥{{ fmt(h.total) }}</span>
+            <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':''}}\¥{{ fmt(Math.abs(h.pnl)) }}</span>
+          </div>
+          <div v-if="h.reason" class="history-card-reason">{{ h.reason }}</div>
+        </div>
+      </div>
     </div>
     <div v-else class="card empty"><div class="empty-icon">📝</div><p>暂无历史记录</p></div>
   </div>
@@ -107,3 +124,18 @@ function fmt(n) {
 }
 onMounted(loadData)
 </script>
+
+<style scoped>
+.hide-mobile { display: table; }
+.show-mobile { display: none !important; }
+.history-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.history-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.history-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.history-card-body { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.history-card-reason { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: flex !important; }
+}
+</style>
