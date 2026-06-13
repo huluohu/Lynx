@@ -18,7 +18,10 @@
             <td style="color:var(--red)">{{ h.stop_loss ? '¥'+h.stop_loss : '-' }}</td>
             <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span></td>
             <td @click.stop>
-              <button class="btn btn-sm" @click="openTx(h)">+ 交易</button>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm" @click="openDetail(h)">详情</button>
+                <button class="btn btn-sm" @click="openTx(h)">+ 交易</button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -147,9 +150,9 @@ onMounted(loadData)
 .info-label { color: var(--text-dim); font-size: 13px; }
 
 .hide-mobile { display: table; }
-.show-mobile { display: none; }
+.show-mobile { display: none !important; }
 
-.holding-cards { display: flex; flex-direction: column; gap: 8px; }
+.holding-cards { flex-direction: column; gap: 8px; }
 .holding-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; transition: background 0.15s; }
 .holding-card:active { background: var(--bg-hover); }
 .holding-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

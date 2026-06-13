@@ -100,9 +100,9 @@ onMounted(loadData)
 
 <style scoped>
 .hide-mobile { display: table; }
-.show-mobile { display: none; }
+.show-mobile { display: none !important; }
 
-.asset-cards { display: flex; flex-direction: column; gap: 8px; }
+.asset-cards { flex-direction: column; gap: 8px; }
 .asset-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-decoration: none; color: var(--text); transition: background 0.15s; }
 .asset-card:active { background: var(--bg-hover); }
 .asset-card-top { display: flex; justify-content: space-between; align-items: center; }

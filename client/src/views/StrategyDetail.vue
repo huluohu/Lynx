@@ -67,7 +67,7 @@
       </table>
 
       <!-- Mobile cards -->
-      <div v-else-if="plans.length" class="show-mobile plan-cards">
+      <div v-if="plans.length" class="show-mobile plan-cards">
         <div v-for="p in plans" :key="p.id" class="plan-card">
           <div class="plan-card-header">
             <span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? '买入' : '卖出' }}</span>
@@ -189,9 +189,9 @@ onMounted(loadData)
 .line-tag.sell { background: rgba(239,68,68,0.1); color: var(--red); }
 
 .hide-mobile { display: table; }
-.show-mobile { display: none; }
+.show-mobile { display: none !important; }
 
-.plan-cards { display: flex; flex-direction: column; gap: 8px; }
+.plan-cards { flex-direction: column; gap: 8px; }
 .plan-card {
   border: 1px solid var(--border);
   border-radius: 8px;

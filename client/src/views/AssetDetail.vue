@@ -51,7 +51,7 @@
         </tbody>
       </table>
       <!-- Mobile cards -->
-      <div v-else-if="transactions.length" class="show-mobile tx-cards">
+      <div v-if="transactions.length" class="show-mobile tx-cards">
         <div v-for="t in transactions" :key="t.id" class="tx-card">
           <div class="tx-card-top">
             <span class="badge" :class="t.type==='buy'?'badge-buy':'badge-sell'">{{ t.type==='buy'?'买入':'卖出' }}</span>
@@ -188,9 +188,9 @@ onMounted(loadData)
 .info-label { color: var(--text-dim); font-size: 13px; }
 
 .hide-mobile { display: table; }
-.show-mobile { display: none; }
+.show-mobile { display: none !important; }
 
-.tx-cards { display: flex; flex-direction: column; gap: 8px; }
+.tx-cards { flex-direction: column; gap: 8px; }
 .tx-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
 .tx-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .tx-card-body { display: flex; justify-content: space-between; font-size: 14px; }
