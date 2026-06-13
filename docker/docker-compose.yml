@@ -1,8 +1,6 @@
 services:
   invest-compass:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: invest-compass:latest
     container_name: invest-compass
     restart: unless-stopped
     network_mode: bridge
@@ -22,7 +20,7 @@ services:
       AUTH_GATEWAY_PORT: "19000"
     volumes:
       # 持久化 SQLite 数据库
-      - ../data:/app/data:rw
+      - ./data:/app/data:rw
     deploy:
       resources:
         limits:
