@@ -78,6 +78,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth.js'
+import { api } from './utils/api.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -87,7 +88,7 @@ let pollTimer
 
 async function fetchUnread() {
   try {
-    const res = await fetch('/api/notifications/unread-count', { headers: authStore.getHeaders() })
+    const res = await api('/api/notifications/unread-count')
     const json = await res.json()
     if (json.success) unreadCount.value = json.data.count
   } catch { /* ignore */ }
