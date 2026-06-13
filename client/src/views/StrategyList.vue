@@ -27,7 +27,7 @@
 
       <!-- Mobile cards -->
       <div class="show-mobile strategy-cards">
-        <router-link v-for="s in strategies" :key="s.id" :to="`/strategies/${s.id}`" class="strategy-card">
+        <div v-for="s in strategies" :key="s.id" class="strategy-card" @click="openDetail(s)">
           <div class="strategy-card-header">
             <span style="font-weight:600">{{ s.name }}</span>
             <span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span>
@@ -37,15 +37,42 @@
             <span class="badge badge-buy">{{ typeLabel(s.type) }}</span>
             <span style="color:var(--text-muted);font-size:12px">{{ s.created_at?.slice(0,10) }}</span>
           </div>
-        </router-link>
+        </div>
       </div>
     </div>
     <div v-else class="card empty">
       <div class="empty-icon">🎯</div><p>还没有策略，<router-link to="/strategies/create">创建一个</router-link> 或使用 <a href="#" @click.prevent="showAI = true">🤖 AI 生成</a></p>
     </div>
 
+    <!-- AI Drawer -->
     <AppDrawer v-model="showAI" title="🤖 AI 生成策略">
       <AIStrategyGenerator @done="onAIDone" />
+    </AppDrawer>
+
+    <!-- Mobile Detail Drawer -->
+    <AppDrawer v-model="showDetailDrawer" :title="detailStrategy?.name || ''">
+      <div v-if="detailStrategy" class="detail-drawer-content">
+        <div class="detail-section">
+          <div class="detail-row"><span>类型</span><span class="badge badge-buy">{{ typeLabel(detailStrategy.type) }}</span></div>
+          <div class="detail-row"><span>关联资产</span><span>{{ detailStrategy.asset_name || '-' }}</span></div>
+          <div class="detail-row"><span>状态</span><span class="badge" :class="statusBadge(detailStrategy.status)">{{ statusLabel(detailStrategy.status) }}</span></div>
+          <div class="detail-row"><span>创建时间</span><span style="color:var(--text-dim)">{{ detailStrategy.created_at?.slice(0,10) }}</span></div>
+        </div>
+
+        <div v-if="detailPlans.length" class="detail-section">
+          <div class="detail-section-title">操盘计划 ({{ detailPlans.length }} 步)</div>
+          <div v-for="p in detailPlans" :key="p.id" class="plan-mini">
+            <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'" style="font-size:11px">{{ p.action==='buy'?'买':'卖' }}</span>
+            <span>{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
+            <span v-if="p.amount" style="color:var(--text-dim)">¥{{ Math.round(p.amount) }}</span>
+          </div>
+        </div>
+
+        <div class="detail-actions">
+          <router-link :to="`/strategies/${detailStrategy.id}`" class="btn btn-primary" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看完整详情</router-link>
+          <router-link :to="`/strategies/${detailStrategy.id}/edit`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">✏️ 编辑</router-link>
+        </div>
+      </div>
     </AppDrawer>
   </div>
 </template>
@@ -58,16 +85,33 @@ import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 
 const strategies = ref([])
 const showAI = ref(false)
+const showDetailDrawer = ref(false)
+const detailStrategy = ref(null)
+const detailPlans = ref([])
 
 async function loadData() {
   const res = await api('/api/strategies')
   const json = await res.json()
   strategies.value = json.data || []
 }
+
+async function openDetail(s) {
+  detailStrategy.value = s
+  detailPlans.value = []
+  showDetailDrawer.value = true
+  // Load plans
+  try {
+    const res = await api(`/api/plans?strategy_id=${s.id}`)
+    const json = await res.json()
+    detailPlans.value = (json.data || []).slice(0, 5)
+  } catch {}
+}
+
 function onAIDone() { showAI.value = false; loadData() }
 function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏' }[t] || t }
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
+function triggerLabel(t) { return { price_above:'≥', price_below:'≤', time:'时间' }[t] || t }
 onMounted(loadData)
 </script>
 
@@ -75,10 +119,17 @@ onMounted(loadData)
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
 .strategy-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
-.strategy-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-decoration: none; color: var(--text); transition: background 0.15s; }
-.strategy-card:hover { background: var(--bg-hover); }
+.strategy-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; color: var(--text); transition: background 0.15s; }
+.strategy-card:active { background: var(--bg-hover); }
 .strategy-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .strategy-card-body { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+
+.detail-drawer-content { display: flex; flex-direction: column; gap: 16px; }
+.detail-section { background: var(--bg); border-radius: 10px; padding: 4px 0; }
+.detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); padding: 8px 14px 4px; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; }
+.plan-mini { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; }
+.detail-actions { display: flex; gap: 10px; margin-top: 8px; }
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }

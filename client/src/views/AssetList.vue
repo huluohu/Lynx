@@ -32,7 +32,7 @@
 
       <!-- Mobile cards -->
       <div class="show-mobile asset-cards">
-        <router-link v-for="a in assets" :key="a.id" :to="`/assets/${a.id}`" class="asset-card">
+        <div v-for="a in assets" :key="a.id" class="asset-card" @click="openDetail(a)">
           <div class="asset-card-top">
             <span style="font-size:20px">{{ a.icon || '💰' }}</span>
             <span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span>
@@ -43,7 +43,7 @@
             <span v-if="a.quantity">{{ a.quantity.toFixed(4) }}</span>
             <span v-if="a.total_invested">¥{{ fmt(a.total_invested) }}</span>
           </div>
-        </router-link>
+        </div>
       </div>
     </div>
     <div v-else class="card empty">
@@ -54,6 +54,29 @@
     <!-- Transaction Drawer -->
     <AppDrawer v-model="showTxDrawer" :title="`记录交易 - ${txAsset?.name || ''}`">
       <TransactionForm v-if="txAsset" :asset-id="txAsset.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
+    </AppDrawer>
+
+    <!-- Mobile Detail Drawer -->
+    <AppDrawer v-model="showDetailDrawer" :title="detailAsset ? `${detailAsset.icon || '💰'} ${detailAsset.name}` : ''">
+      <div v-if="detailAsset" class="detail-drawer-content">
+        <div class="detail-section">
+          <div class="detail-row"><span>代码</span><span style="color:var(--text-dim)">{{ detailAsset.symbol }}</span></div>
+          <div class="detail-row"><span>类型</span><span class="badge" :class="typeBadge(detailAsset.type)">{{ detailAsset.type }}</span></div>
+          <div class="detail-row"><span>计价货币</span><span>{{ detailAsset.currency || 'CNY' }}</span></div>
+        </div>
+
+        <div v-if="detailAsset.quantity" class="detail-section">
+          <div class="detail-section-title">持仓信息</div>
+          <div class="detail-row"><span>数量</span><b>{{ detailAsset.quantity?.toFixed(4) }}</b></div>
+          <div class="detail-row"><span>成本价</span><span>¥{{ fmt(detailAsset.avg_cost) }}</span></div>
+          <div class="detail-row"><span>总投入</span><span>¥{{ fmt(detailAsset.total_invested) }}</span></div>
+        </div>
+
+        <div class="detail-actions">
+          <button class="btn btn-primary" style="flex:1" @click="detailOpenTx">+ 记录交易</button>
+          <router-link :to="`/assets/${detailAsset.id}`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看详情页</router-link>
+        </div>
+      </div>
     </AppDrawer>
   </div>
 </template>
@@ -69,11 +92,24 @@ const toast = useToast()
 const assets = ref([])
 const showTxDrawer = ref(false)
 const txAsset = ref(null)
+const showDetailDrawer = ref(false)
+const detailAsset = ref(null)
 
 async function loadData() {
   const res = await api('/api/assets')
   const json = await res.json()
   assets.value = json.data || []
+}
+
+function openDetail(a) {
+  detailAsset.value = a
+  showDetailDrawer.value = true
+}
+
+function detailOpenTx() {
+  txAsset.value = detailAsset.value
+  showDetailDrawer.value = false
+  showTxDrawer.value = true
 }
 
 function openTx(a) {
@@ -103,10 +139,16 @@ onMounted(loadData)
 .show-mobile { display: none !important; }
 
 .asset-cards { flex-direction: column; gap: 8px; }
-.asset-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; text-decoration: none; color: var(--text); transition: background 0.15s; }
+.asset-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; color: var(--text); transition: background 0.15s; }
 .asset-card:active { background: var(--bg-hover); }
 .asset-card-top { display: flex; justify-content: space-between; align-items: center; }
 .asset-card-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+.detail-drawer-content { display: flex; flex-direction: column; gap: 16px; }
+.detail-section { background: var(--bg); border-radius: 10px; padding: 4px 0; }
+.detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); padding: 8px 14px 4px; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; }
+.detail-actions { display: flex; gap: 10px; margin-top: 8px; }
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }

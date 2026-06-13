@@ -1,7 +1,24 @@
 import http from 'http';
 import https from 'https';
 
-const USD_CNY = 6.77;
+let cachedRate = { usd_cny: 7.25, updated: 0 };
+
+// 获取实时汇率（缓存1小时）
+async function getUsdCny() {
+  const now = Date.now();
+  if (now - cachedRate.updated < 3600000) return cachedRate.usd_cny;
+
+  // 尝试免费汇率 API
+  try {
+    const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
+    if (data?.rates?.CNY) {
+      cachedRate = { usd_cny: data.rates.CNY, updated: now };
+      return cachedRate.usd_cny;
+    }
+  } catch {}
+
+  return cachedRate.usd_cny;
+}
 
 export function httpGet(url, opts = {}) {
   return new Promise((resolve) => {
@@ -36,41 +53,80 @@ export function httpPost(hostname, port, pathname, body, headers = {}) {
 
 // ===== 金价查询 =====
 export async function fetchGold(assetId, symbol) {
+  // Primary: Auth Gateway proxy
   const port = process.env.AUTH_GATEWAY_PORT || 19000;
-  const body = JSON.stringify({
-    sub_channel: 'qclaw',
-    query: `${symbol} 黄金价格`,
-    request_id: String(Date.now()),
-    data_type: 'api'
-  });
+  try {
+    const body = JSON.stringify({
+      sub_channel: 'qclaw',
+      query: `${symbol} 黄金价格`,
+      request_id: String(Date.now()),
+      data_type: 'api'
+    });
 
-  const data = await httpPost('localhost', port, '/proxy/api', body, {
-    'Remote-URL': 'https://jprx.m.qq.com/aizone/skillserver/v1/proxy/teamrouter_neodata/query',
-  });
+    const data = await httpPost('localhost', port, '/proxy/api', body, {
+      'Remote-URL': 'https://jprx.m.qq.com/aizone/skillserver/v1/proxy/teamrouter_neodata/query',
+    });
 
-  const apiData = data?.data?.apiData?.apiRecall || [];
-
-  // AU9999 和 XAUUSD (伦敦金)
-  for (const item of apiData) {
-    for (const d of item.data || []) {
-      if (assetId === 1 && d.symbol?.includes('AU9999')) return parseFloat(d.new);
-      if (assetId === 2 && d.symbol?.includes('AUUSDO')) return parseFloat(d.new);
+    const apiData = data?.data?.apiData?.apiRecall || [];
+    for (const item of apiData) {
+      for (const d of item.data || []) {
+        if (assetId === 1 && d.symbol?.includes('AU9999')) return parseFloat(d.new);
+        if (assetId === 2 && d.symbol?.includes('AUUSDO')) return parseFloat(d.new);
+      }
     }
-  }
+  } catch {}
+
+  // Fallback: 通过公开 API 获取国际金价
+  try {
+    // XAUUSD from metals.live (free, no key)
+    const metals = await httpGet('https://api.metals.live/v1/spot', { timeout: 5000 });
+    if (Array.isArray(metals)) {
+      const gold = metals.find(m => m.gold !== undefined);
+      if (gold) {
+        const xauUsd = parseFloat(gold.gold);
+        if (assetId === 2) return xauUsd; // 伦敦金 USD
+        if (assetId === 1) {
+          // AU9999 ≈ XAUUSD * 汇率 / 31.1035 (盎司→克)
+          const rate = await getUsdCny();
+          return Math.round(xauUsd * rate / 31.1035 * 100) / 100;
+        }
+      }
+    }
+  } catch {}
+
   return null;
 }
 
 // ===== BTC 查询 =====
 export async function fetchBTC() {
+  // Primary: CoinGecko
   const body = await httpGet('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_7d_change=true');
   const b = body?.bitcoin;
-  if (!b) return null;
-  return {
-    usd: b.usd,
-    cny: Math.round(b.usd * USD_CNY),
-    ch24: b.usd_24h_change || 0,
-    ch7d: b.usd_7d_change || 0,
-  };
+  if (b) {
+    const rate = await getUsdCny();
+    return {
+      usd: b.usd,
+      cny: Math.round(b.usd * rate),
+      ch24: b.usd_24h_change || 0,
+      ch7d: b.usd_7d_change || 0,
+    };
+  }
+
+  // Fallback: Binance public API
+  const ticker = await httpGet('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', { timeout: 5000 });
+  if (ticker?.lastPrice) {
+    const price = parseFloat(ticker.lastPrice);
+    const change = parseFloat(ticker.priceChangePercent) || 0;
+    const rate = await getUsdCny();
+    return {
+      usd: price,
+      cny: Math.round(price * rate),
+      ch24: change,
+      ch7d: 0,
+    };
+  }
+
+  return null;
 }
 
 // ===== 根据 asset 类型调度 =====
