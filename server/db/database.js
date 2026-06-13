@@ -1,0 +1,41 @@
+import Database from 'better-sqlite3';
+import { readFileSync, readdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const DB_PATH = process.env.DB_PATH || join(__dirname, '..', '..', 'data', 'invest.db');
+
+let db;
+
+export function getDb() {
+  if (!db) {
+    db = new Database(DB_PATH);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+  }
+  return db;
+}
+
+export function runMigrations() {
+  const d = getDb();
+  const migDir = join(__dirname, '..', '..', 'migrations');
+  const files = readdirSync(migDir).filter(f => f.endsWith('.sql')).sort();
+
+  // migration tracking
+  d.exec(`CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TEXT DEFAULT (datetime('now')))`);
+
+  for (const f of files) {
+    const applied = d.prepare('SELECT 1 FROM _migrations WHERE name = ?').get(f);
+    if (applied) continue;
+
+    const sql = readFileSync(join(migDir, f), 'utf8');
+    d.exec(sql);
+    d.prepare('INSERT INTO _migrations (name) VALUES (?)').run(f);
+    console.log(`  ✅ Migration: ${f}`);
+  }
+}
+
+export function closeDb() {
+  if (db) { db.close(); db = null; }
+}

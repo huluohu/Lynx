@@ -1,0 +1,109 @@
+import { Router } from 'express';
+import { getDb } from '../db/database.js';
+import { generatePlan } from '../services/strategy.js';
+
+const router = Router();
+
+// GET 策略列表
+router.get('/', (req, res) => {
+  const db = getDb();
+  const rows = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol
+    FROM strategies s LEFT JOIN assets a ON s.asset_id = a.id ORDER BY s.created_at DESC`).all();
+  res.json({ success: true, data: rows });
+});
+
+// GET 单个
+router.get('/:id', (req, res) => {
+  const db = getDb();
+  const row = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol
+    FROM strategies s LEFT JOIN assets a ON s.asset_id = a.id WHERE s.id = ?`).get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, data: row });
+});
+
+// POST 创建
+router.post('/', (req, res) => {
+  const db = getDb();
+  const { name, description, type, asset_id, parameters } = req.body;
+  if (!name || !type) return res.status(400).json({ success: false, error: 'name/type required' });
+
+  const params = JSON.stringify(parameters || {});
+  const info = db.prepare(`INSERT INTO strategies (name, description, type, asset_id, parameters)
+    VALUES (?, ?, ?, ?, ?)`).run(name, description || null, type, asset_id || null, params);
+
+  const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(info.lastInsertRowid);
+  res.status(201).json({ success: true, data: row });
+});
+
+// PUT 编辑
+router.put('/:id', (req, res) => {
+  const db = getDb();
+  const existing = db.prepare('SELECT * FROM strategies WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
+
+  const { name, description, type, asset_id, parameters, status } = req.body;
+  db.prepare(`UPDATE strategies SET name=?, description=?, type=?, asset_id=?, parameters=?,
+    status=?, updated_at=datetime('now') WHERE id=?`).run(
+    name ?? existing.name, description ?? existing.description, type ?? existing.type,
+    asset_id ?? existing.asset_id, parameters ? JSON.stringify(parameters) : existing.parameters,
+    status ?? existing.status, req.params.id
+  );
+
+  const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(req.params.id);
+  res.json({ success: true, data: row });
+});
+
+// DELETE
+router.delete('/:id', (req, res) => {
+  const db = getDb();
+  db.prepare('DELETE FROM strategies WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// POST 激活
+router.post('/:id/activate', (req, res) => {
+  const db = getDb();
+  db.prepare("UPDATE strategies SET status='active', updated_at=datetime('now') WHERE id = ?").run(req.params.id);
+  res.json({ success: true });
+});
+
+// POST 智能生成操盘计划
+router.post('/:id/generate-plan', (req, res) => {
+  const db = getDb();
+  const strategy = db.prepare(`SELECT s.*, h.quantity, h.avg_cost, h.total_invested
+    FROM strategies s LEFT JOIN holdings h ON s.asset_id = h.asset_id AND h.status = 'active'
+    WHERE s.id = ?`).get(req.params.id);
+  if (!strategy) return res.status(404).json({ success: false, error: 'Strategy not found' });
+
+  const params = JSON.parse(strategy.parameters);
+  const holding = {
+    quantity: strategy.quantity || 0,
+    avg_cost: strategy.avg_cost || 0,
+    total_invested: strategy.total_invested || 0,
+  };
+
+  try {
+    const plans = generatePlan(holding, strategy.type, params);
+
+    // 删除旧计划，写入新计划
+    db.prepare('DELETE FROM trading_plans WHERE strategy_id = ?').run(strategy.id);
+
+    const insert = db.prepare(`INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
+    const insertMany = db.transaction((items) => {
+      for (const p of items)
+        insert.run(strategy.id, strategy.asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
+          p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
+    });
+
+    insertMany(plans);
+
+    const result = db.prepare('SELECT * FROM trading_plans WHERE strategy_id = ? ORDER BY seq').all(strategy.id);
+    res.json({ success: true, data: result, count: result.length });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+export default router;

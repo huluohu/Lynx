@@ -1,0 +1,12 @@
+{
+  "name": "invest-compass",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node server/index.js",
+    "client": "cd client && npx vite --host 0.0.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
