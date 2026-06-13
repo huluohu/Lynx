@@ -60,6 +60,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { api } from '../utils/api.js'
 
 const route = useRoute()
 const strategy = ref({})
@@ -71,11 +72,11 @@ const paramsJson = computed(() => {
 })
 
 async function loadData() {
-  const res = await fetch(`/api/strategies/${route.params.id}`)
+  const res = await api(`/api/strategies/${route.params.id}`)
   const json = await res.json()
   if (json.data) strategy.value = json.data
 
-  const pres = await fetch(`/api/plans?strategy_id=${route.params.id}`)
+  const pres = await api(`/api/plans?strategy_id=${route.params.id}`)
   const pjson = await pres.json()
   plans.value = pjson.data || []
 }
@@ -83,7 +84,7 @@ async function loadData() {
 async function generatePlan() {
   generating.value = true
   try {
-    const res = await fetch(`/api/strategies/${route.params.id}/generate-plan`, { method: 'POST' })
+    const res = await api(`/api/strategies/${route.params.id}/generate-plan`, { method: 'POST' })
     const json = await res.json()
     if (json.success) plans.value = json.data || []
     else alert('生成失败: ' + json.error)

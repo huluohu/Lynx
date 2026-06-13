@@ -67,6 +67,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
+import { api } from '../utils/api.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -94,7 +95,7 @@ const notifyEvents = [
 
 async function load() {
   try {
-    const res = await fetch('/api/settings', { headers: authStore.getHeaders() })
+    const res = await api('/api/settings')
     const json = await res.json()
     if (!json.success) return
     for (const [k, v] of Object.entries(json.data)) {
@@ -105,9 +106,8 @@ async function load() {
 
 async function saveKey(key, value) {
   try {
-    await fetch(`/api/settings/${key}`, {
+    await api(`/api/settings/${key}`, {
       method: 'PUT',
-      headers: authStore.getHeaders(),
       body: JSON.stringify({ value })
     })
     showSaved()

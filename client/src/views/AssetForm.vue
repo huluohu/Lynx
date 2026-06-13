@@ -76,6 +76,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '../utils/api.js'
 
 const router = useRouter()
 const submitting = ref(false)
@@ -86,9 +87,8 @@ async function submit() {
   submitting.value = true
   try {
     // Create asset
-    const res = await fetch('/api/assets', {
+    const res = await api('/api/assets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form)
     })
     const json = await res.json()
@@ -96,9 +96,8 @@ async function submit() {
 
     // Create holding if provided
     if (holding.quantity && holding.avg_cost) {
-      await fetch('/api/holdings', {
+      await api('/api/holdings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           asset_id: json.data.id,
           quantity: Number(holding.quantity),

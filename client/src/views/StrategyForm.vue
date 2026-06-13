@@ -86,6 +86,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '../utils/api.js'
 
 const router = useRouter()
 const submitting = ref(false)
@@ -113,9 +114,8 @@ async function submit() {
       try { p.sell_lines = JSON.parse(sellLinesText.value || '[]') } catch { p.sell_lines = [] }
     }
 
-    const res = await fetch('/api/strategies', {
+    const res = await api('/api/strategies', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: form.name, description: form.description, type: form.type, asset_id: form.asset_id, parameters: p })
     })
     const json = await res.json()
@@ -127,7 +127,7 @@ async function submit() {
 }
 
 onMounted(async () => {
-  const res = await fetch('/api/assets')
+  const res = await api('/api/assets')
   const json = await res.json()
   assets.value = json.data || []
 })

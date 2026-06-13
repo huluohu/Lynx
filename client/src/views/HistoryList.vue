@@ -68,6 +68,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const history = ref([])
 const assets = ref([])
@@ -76,7 +77,7 @@ const submitting = ref(false)
 const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
 
 async function loadData() {
-  const [hres, ares] = await Promise.all([fetch('/api/history'), fetch('/api/assets')])
+  const [hres, ares] = await Promise.all([api('/api/history'), api('/api/assets')])
   history.value = (await hres.json()).data || []
   assets.value = (await ares.json()).data || []
 }
@@ -94,7 +95,7 @@ async function addRecord() {
       pnl: form.pnl ? Number(form.pnl) : null,
       pnl_pct: form.pnl_pct ? Number(form.pnl_pct) : null,
     }
-    await fetch('/api/history', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+    await api('/api/history', { method:'POST', body:JSON.stringify(body) })
     showForm.value = false
     loadData()
   } catch (e) { alert('保存失败') }

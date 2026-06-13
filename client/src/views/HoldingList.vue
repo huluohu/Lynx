@@ -28,11 +28,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const holdings = ref([])
 
 async function loadData() {
-  const res = await fetch('/api/holdings')
+  const res = await api('/api/holdings')
   const json = await res.json()
   holdings.value = json.data || []
 }

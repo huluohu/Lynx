@@ -22,17 +22,18 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const news = ref([])
-async function fetch() {
-  const res = await fetch('/api/news')
+async function loadData() {
+  const res = await api('/api/news')
   const json = await res.json()
   news.value = json.data || []
 }
 async function markRead(n) {
   if (n.read) return
-  await fetch(`/api/news/${n.id}`, { method: 'PUT' })
+  await api(`/api/news/${n.id}`, { method: 'PUT' })
   n.read = 1
 }
-onMounted(fetch)
+onMounted(loadData)
 </script>

@@ -26,11 +26,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const plans = ref([])
 
 async function loadData() {
-  const res = await fetch('/api/plans')
+  const res = await api('/api/plans')
   const json = await res.json()
   plans.value = json.data || []
 }

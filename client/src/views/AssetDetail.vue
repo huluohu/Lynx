@@ -70,6 +70,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { api } from '../utils/api.js'
 
 const route = useRoute()
 const asset = ref({})
@@ -77,14 +78,14 @@ const holding = ref(null)
 const transactions = ref([])
 
 async function loadData() {
-  const res = await fetch(`/api/assets/${route.params.id}`)
+  const res = await api(`/api/assets/${route.params.id}`)
   const json = await res.json()
   if (json.data) {
     asset.value = json.data
     holding.value = json.data.quantity ? json.data : null
   }
   // transactions
-  const tres = await fetch(`/api/transactions?asset_id=${route.params.id}`)
+  const tres = await api(`/api/transactions?asset_id=${route.params.id}`)
   const tjson = await tres.json()
   transactions.value = tjson.data || []
 }

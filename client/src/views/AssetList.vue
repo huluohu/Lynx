@@ -35,11 +35,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const assets = ref([])
 
 async function loadData() {
-  const res = await fetch('/api/assets')
+  const res = await api('/api/assets')
   const json = await res.json()
   assets.value = json.data || []
 }

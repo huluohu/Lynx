@@ -135,6 +135,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, total_pl_pct: 0 })
 const allocation = ref([])
@@ -153,8 +154,8 @@ async function refresh() {
   loading.value = true
   try {
     const [summaryRes, alertsRes] = await Promise.all([
-      fetch('/api/dashboard/summary'),
-      fetch('/api/dashboard/alerts')
+      api('/api/dashboard/summary'),
+      api('/api/dashboard/alerts')
     ])
     const sJson = await summaryRes.json()
     const aJson = await alertsRes.json()

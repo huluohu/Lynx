@@ -33,6 +33,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { api } from '../utils/api.js'
 
 const prices = ref([])
 const loading = ref(false)
@@ -40,7 +41,7 @@ const loading = ref(false)
 async function refresh() {
   loading.value = true
   try {
-    const res = await fetch('/api/market/prices')
+    const res = await api('/api/market/prices')
     const json = await res.json()
     prices.value = json.data || []
   } catch (e) { console.error(e) }
