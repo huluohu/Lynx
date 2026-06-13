@@ -10,6 +10,7 @@ const routes = [
   { path: '/holdings', name: 'Holdings', component: () => import('./views/HoldingList.vue') },
   { path: '/strategies', name: 'Strategies', component: () => import('./views/StrategyList.vue') },
   { path: '/strategies/create', name: 'StrategyCreate', component: () => import('./views/StrategyForm.vue') },
+  { path: '/strategies/:id/edit', name: 'StrategyEdit', component: () => import('./views/StrategyForm.vue') },
   { path: '/strategies/:id', name: 'StrategyDetail', component: () => import('./views/StrategyDetail.vue') },
   { path: '/plans', name: 'Plans', component: () => import('./views/PlanList.vue') },
   { path: '/market', name: 'Market', component: () => import('./views/MarketView.vue') },

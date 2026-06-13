@@ -1,5 +1,6 @@
 <template>
   <div class="app-layout">
+    <AppToast />
     <!-- Menu toggle (mobile) -->
     <button class="menu-toggle" @click="sidebarOpen = !sidebarOpen">☰</button>
 
@@ -79,6 +80,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth.js'
 import { api } from './utils/api.js'
+import AppToast from './components/AppToast.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

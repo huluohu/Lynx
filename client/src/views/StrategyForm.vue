@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">🎯 创建策略</h1>
+      <h1 class="page-title">🎯 {{ isEdit ? '编辑策略' : '创建策略' }}</h1>
     </div>
 
     <div class="card" style="max-width:640px">
@@ -68,14 +68,30 @@
         <!-- Recovery -->
         <div v-if="form.type === 'recovery'">
           <div class="form-group"><label class="form-label">可用预算 (¥)</label><input class="form-input" type="number" v-model="params.budget" placeholder="20000" /></div>
-          <div class="section-title" style="margin-top:8px;font-size:12px">补仓线 (JSON格式: [{"price":880,"amount":8800},{"price":860,"amount":12000}])</div>
-          <div class="form-group"><textarea class="form-textarea" v-model="buyLinesText" placeholder='[{"price":880,"amount":8800}]' style="font-size:12px;font-family:monospace"></textarea></div>
-          <div class="section-title" style="font-size:12px">减仓线 (JSON格式: [{"price":950,"amount":9500}])</div>
-          <div class="form-group"><textarea class="form-textarea" v-model="sellLinesText" placeholder='[{"price":950,"amount":9500}]' style="font-size:12px;font-family:monospace"></textarea></div>
+
+          <div class="section-title" style="margin-top:12px">📉 补仓线</div>
+          <div class="lines-editor">
+            <div v-for="(line, i) in buyLines" :key="'b'+i" class="line-row">
+              <div class="form-group" style="margin:0;flex:1"><input class="form-input" type="number" step="any" v-model="line.price" placeholder="触发价格" /></div>
+              <div class="form-group" style="margin:0;flex:1"><input class="form-input" type="number" step="any" v-model="line.amount" placeholder="买入金额" /></div>
+              <button type="button" class="btn btn-sm btn-danger" @click="buyLines.splice(i,1)">✕</button>
+            </div>
+            <button type="button" class="btn btn-sm" @click="buyLines.push({price:'',amount:''})">+ 添加补仓线</button>
+          </div>
+
+          <div class="section-title" style="margin-top:12px">📈 减仓线</div>
+          <div class="lines-editor">
+            <div v-for="(line, i) in sellLines" :key="'s'+i" class="line-row">
+              <div class="form-group" style="margin:0;flex:1"><input class="form-input" type="number" step="any" v-model="line.price" placeholder="触发价格" /></div>
+              <div class="form-group" style="margin:0;flex:1"><input class="form-input" type="number" step="any" v-model="line.amount" placeholder="卖出金额" /></div>
+              <button type="button" class="btn btn-sm btn-danger" @click="sellLines.splice(i,1)">✕</button>
+            </div>
+            <button type="button" class="btn btn-sm" @click="sellLines.push({price:'',amount:''})">+ 添加减仓线</button>
+          </div>
         </div>
 
         <div style="display:flex;gap:12px;margin-top:16px">
-          <button type="submit" class="btn btn-primary" :disabled="submitting">{{ submitting ? '创建中...' : '创建策略' }}</button>
+          <button type="submit" class="btn btn-primary" :disabled="submitting">{{ submitting ? '创建中...' : (isEdit ? '保存修改' : '创建策略') }}</button>
           <router-link to="/strategies" class="btn">取消</router-link>
         </div>
       </form>
@@ -85,16 +101,21 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { api } from '../utils/api.js'
+import { useToast } from '../utils/toast.js'
 
 const router = useRouter()
+const route = useRoute()
+const toast = useToast()
 const submitting = ref(false)
 const assets = ref([])
+const isEdit = ref(false)
+const strategyId = ref(null)
 const form = reactive({ name: '', description: '', type: '', asset_id: null })
 const params = reactive({ amount_per: 1000, periods: 10, frequency: 'weekly', low: 800, high: 1200, grids: 5, target_value: 50000, growth_rate_val: 2, budget: 20000 })
-const buyLinesText = ref('')
-const sellLinesText = ref('')
+const buyLines = reactive([])
+const sellLines = reactive([])
 
 function onTypeChange() {
   // reset defaults
@@ -103,26 +124,28 @@ function onTypeChange() {
 async function submit() {
   submitting.value = true
   try {
-    // Build params based on type
     let p = {}
     if (form.type === 'dca') p = { amount_per: Number(params.amount_per), periods: Number(params.periods), frequency: params.frequency }
     else if (form.type === 'grid') p = { low: Number(params.low), high: Number(params.high), grids: Number(params.grids), budget: Number(params.budget) || 20000 }
     else if (form.type === 'value_avg') p = { target_value: Number(params.target_value), periods: Number(params.periods), growth_rate: Number(params.growth_rate_val) / 100 }
     else if (form.type === 'recovery') {
       p = { budget: Number(params.budget) || 20000 }
-      try { p.buy_lines = JSON.parse(buyLinesText.value || '[]') } catch { p.buy_lines = [] }
-      try { p.sell_lines = JSON.parse(sellLinesText.value || '[]') } catch { p.sell_lines = [] }
+      p.buy_lines = buyLines.filter(l => l.price).map(l => ({ price: Number(l.price), amount: Number(l.amount) }))
+      p.sell_lines = sellLines.filter(l => l.price).map(l => ({ price: Number(l.price), amount: Number(l.amount) }))
     }
 
-    const res = await api('/api/strategies', {
-      method: 'POST',
+    const url = isEdit.value ? `/api/strategies/${strategyId.value}` : '/api/strategies'
+    const method = isEdit.value ? 'PUT' : 'POST'
+    const res = await api(url, {
+      method,
       body: JSON.stringify({ name: form.name, description: form.description, type: form.type, asset_id: form.asset_id, parameters: p })
     })
     const json = await res.json()
-    if (!json.success) return alert('创建失败: ' + json.error)
+    if (!json.success) return toast.error(json.error || '保存失败')
 
-    router.push('/strategies')
-  } catch (e) { alert('创建失败: ' + e.message) }
+    toast.success(isEdit.value ? '策略已更新' : '策略已创建')
+    router.push(isEdit.value ? `/strategies/${strategyId.value}` : '/strategies')
+  } catch (e) { toast.error(e.message) }
   submitting.value = false
 }
 
@@ -130,5 +153,45 @@ onMounted(async () => {
   const res = await api('/api/assets')
   const json = await res.json()
   assets.value = json.data || []
+
+  // Edit mode: load existing strategy
+  if (route.params.id) {
+    isEdit.value = true
+    strategyId.value = route.params.id
+    const sres = await api(`/api/strategies/${route.params.id}`)
+    const sjson = await sres.json()
+    if (sjson.data) {
+      const s = sjson.data
+      form.name = s.name
+      form.description = s.description || ''
+      form.type = s.type
+      form.asset_id = s.asset_id
+      try {
+        const p = JSON.parse(s.parameters || '{}')
+        if (s.type === 'dca') { params.amount_per = p.amount_per; params.periods = p.periods; params.frequency = p.frequency }
+        else if (s.type === 'grid') { params.low = p.low; params.high = p.high; params.grids = p.grids; params.budget = p.budget }
+        else if (s.type === 'value_avg') { params.target_value = p.target_value; params.periods = p.periods; params.growth_rate_val = (p.growth_rate || 0) * 100 }
+        else if (s.type === 'recovery') {
+          params.budget = p.budget
+          if (p.buy_lines) p.buy_lines.forEach(l => buyLines.push({ price: l.price, amount: l.amount }))
+          if (p.sell_lines) p.sell_lines.forEach(l => sellLines.push({ price: l.price, amount: l.amount }))
+        }
+      } catch {}
+    }
+  }
 })
 </script>
+
+<style scoped>
+.lines-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.line-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+</style>
