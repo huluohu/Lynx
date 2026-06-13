@@ -7,11 +7,14 @@ const router = Router();
 router.get('/', (req, res) => {
   const { status, limit = 20 } = req.query;
   let sql = 'SELECT * FROM notifications';
-  const conds = [];
-  if (status) conds.push(`status = '${status}'`);
-  if (conds.length) sql += ' WHERE ' + conds.join(' AND ');
+  const params = [];
+  if (status) {
+    sql += ' WHERE status = ?';
+    params.push(status);
+  }
   sql += ' ORDER BY created_at DESC LIMIT ?';
-  const rows = getDb().prepare(sql).all(Number(limit));
+  params.push(Number(limit));
+  const rows = getDb().prepare(sql).all(...params);
   res.json({ success: true, data: rows });
 });
 
@@ -47,7 +50,8 @@ router.get('/send-wechat', (req, res) => {
 
   // 标记为 sent
   const ids = rows.map(r => r.id);
-  db.prepare(`UPDATE notifications SET status = 'sent', sent_at = datetime('now') WHERE id IN (${ids.join(',')})`).run();
+  const placeholders = ids.map(() => '?').join(',');
+  db.prepare(`UPDATE notifications SET status = 'sent', sent_at = datetime('now') WHERE id IN (${placeholders})`).run(...ids);
 
   // 格式化消息
   const lines = ['📊 **投资提醒**'];

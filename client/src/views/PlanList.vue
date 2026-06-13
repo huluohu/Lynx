@@ -29,7 +29,7 @@ import { ref, onMounted } from 'vue'
 
 const plans = ref([])
 
-async function fetch() {
+async function loadData() {
   const res = await fetch('/api/plans')
   const json = await res.json()
   plans.value = json.data || []
@@ -37,5 +37,5 @@ async function fetch() {
 function triggerLabel(t) { return { price_above:'≥', price_below:'≤', time:'时间' }[t] || t }
 function statusLabel(s) { return { pending:'等待', triggered:'⚡触发中', executed:'已执行', cancelled:'取消' }[s] || s }
 function statusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
-onMounted(fetch)
+onMounted(loadData)
 </script>

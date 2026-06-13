@@ -75,7 +75,7 @@ const showForm = ref(false)
 const submitting = ref(false)
 const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
 
-async function fetch() {
+async function loadData() {
   const [hres, ares] = await Promise.all([fetch('/api/history'), fetch('/api/assets')])
   history.value = (await hres.json()).data || []
   assets.value = (await ares.json()).data || []
@@ -96,7 +96,7 @@ async function addRecord() {
     }
     await fetch('/api/history', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
     showForm.value = false
-    fetch()
+    loadData()
   } catch (e) { alert('保存失败') }
   submitting.value = false
 }
@@ -104,5 +104,5 @@ function fmt(n) {
   if (!n && n!==0) return '0'
   return Math.round(Number(n)).toLocaleString()
 }
-onMounted(fetch)
+onMounted(loadData)
 </script>

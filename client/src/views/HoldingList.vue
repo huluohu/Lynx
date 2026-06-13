@@ -31,7 +31,7 @@ import { ref, onMounted } from 'vue'
 
 const holdings = ref([])
 
-async function fetch() {
+async function loadData() {
   const res = await fetch('/api/holdings')
   const json = await res.json()
   holdings.value = json.data || []
@@ -40,5 +40,5 @@ function fmt(n) {
   if (!n && n !== 0) return '0'
   return Math.round(n).toLocaleString()
 }
-onMounted(fetch)
+onMounted(loadData)
 </script>

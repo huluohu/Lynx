@@ -38,7 +38,7 @@ import { ref, onMounted } from 'vue'
 
 const assets = ref([])
 
-async function fetch() {
+async function loadData() {
   const res = await fetch('/api/assets')
   const json = await res.json()
   assets.value = json.data || []
@@ -52,5 +52,5 @@ function fmt(n) {
   return Math.round(n).toLocaleString()
 }
 
-onMounted(fetch)
+onMounted(loadData)
 </script>

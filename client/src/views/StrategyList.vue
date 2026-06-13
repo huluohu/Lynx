@@ -33,7 +33,7 @@ import { ref, onMounted } from 'vue'
 
 const strategies = ref([])
 
-async function fetch() {
+async function loadData() {
   const res = await fetch('/api/strategies')
   const json = await res.json()
   strategies.value = json.data || []
@@ -41,5 +41,5 @@ async function fetch() {
 function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏' }[t] || t }
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
-onMounted(fetch)
+onMounted(loadData)
 </script>

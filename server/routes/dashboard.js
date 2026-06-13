@@ -210,13 +210,6 @@ router.get('/allocation', (req, res) => {
     FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'
     GROUP BY a.type`).all();
 
-  // 价格
-  const prices = {};
-  const priceRows = db.prepare(`SELECT a.type, pc.price FROM price_cache pc
-    JOIN (SELECT asset_id, MAX(fetched_at) as max_ts FROM price_cache GROUP BY asset_id) latest
-    ON pc.asset_id = latest.asset_id AND pc.fetched_at = latest.max_ts
-    JOIN assets a ON pc.asset_id = a.id`).all();
-
   res.json({ success: true, data: rows });
 });
 

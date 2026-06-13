@@ -1,0 +1,10 @@
+node_modules
+client/node_modules
+.git
+.idea
+*.log
+.DS_Store
+data/*.db
+data/*.db-wal
+data/*.db-shm
+price_cache.json

@@ -351,6 +351,7 @@ tr:hover td { background: var(--bg-hover); }
   table { font-size: 11px; }
   th, td { padding: 8px 6px; }
   .asset-card-price { font-size: 24px; }
+  .card { overflow-x: auto; }
 }
 
 /* Hamburger for mobile */

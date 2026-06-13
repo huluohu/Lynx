@@ -70,7 +70,7 @@ const paramsJson = computed(() => {
   try { return JSON.stringify(JSON.parse(strategy.value.parameters || '{}'), null, 2) } catch { return strategy.value.parameters }
 })
 
-async function fetch() {
+async function loadData() {
   const res = await fetch(`/api/strategies/${route.params.id}`)
   const json = await res.json()
   if (json.data) strategy.value = json.data
@@ -96,5 +96,5 @@ function triggerLabel(t) { return { price_above:'价格上涨至', price_below:'
 function statusLabel(s) { return { pending:'等待', triggered:'⚡触发', executed:'已执行', cancelled:'取消' }[s] || s }
 function statusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
 
-onMounted(fetch)
+onMounted(loadData)
 </script>

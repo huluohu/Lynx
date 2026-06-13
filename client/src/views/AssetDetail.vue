@@ -76,7 +76,7 @@ const asset = ref({})
 const holding = ref(null)
 const transactions = ref([])
 
-async function fetch() {
+async function loadData() {
   const res = await fetch(`/api/assets/${route.params.id}`)
   const json = await res.json()
   if (json.data) {
@@ -97,5 +97,5 @@ function fmt(n) {
   return Number(n).toLocaleString()
 }
 
-onMounted(fetch)
+onMounted(loadData)
 </script>

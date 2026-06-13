@@ -15,7 +15,7 @@ router.get('/prices', async (req, res) => {
     // 先查缓存（5分钟内）
     const cached = db.prepare("SELECT * FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-5 minutes') ORDER BY fetched_at DESC LIMIT 1").get(a.id);
     if (cached) {
-      results.push({ asset_id: a.id, name: a.name, symbol: a.symbol, type: a.type, price: cached.price, currency: cached.currency, source: cached.source, cached: false });
+      results.push({ asset_id: a.id, name: a.name, symbol: a.symbol, type: a.type, price: cached.price, currency: cached.currency, source: cached.source, cached: true });
       continue;
     }
 

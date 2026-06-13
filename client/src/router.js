@@ -16,6 +16,7 @@ const routes = [
   { path: '/news', name: 'News', component: () => import('./views/NewsList.vue') },
   { path: '/history', name: 'History', component: () => import('./views/HistoryList.vue') },
   { path: '/settings', name: 'Settings', component: () => import('./views/Settings.vue') },
+  { path: '/:pathMatch(.*)*', name: 'NotFound', redirect: '/' },
 ]
 
 const router = createRouter({
