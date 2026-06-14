@@ -78,10 +78,11 @@
             </div>
             <div class="progress-bar"><div class="progress-fill green" :style="{width: Math.max(a.weight || 0, 2)+'%'}"></div></div>
             <div class="alloc-footer">
-              <span style="color:var(--text-muted)">投入 {{ cs(a) }}{{ fmt(a.total_invested) }} · 市值 {{ cs(a) }}{{ fmt(a.market_value) }}</span>
-              <span :class="a.pl >= 0 ? 'pnl positive' : 'pnl negative'">
-                {{ a.pl >= 0 ? '+' : '' }}{{ fmtPl(a.pl) }}
+              <span style="color:var(--text-muted)">投入 {{ cs(a) }}{{ fmt(a.total_invested) }}</span>
+              <span v-if="a.has_real_price" :class="a.pl >= 0 ? 'pnl positive' : 'pnl negative'">
+                {{ a.pl >= 0 ? '+' : '' }}{{ fmtPl(a.pl) }} ({{ a.pl_pct >= 0 ? '+' : '' }}{{ fmtPct(a.pl_pct) }}%)
               </span>
+              <span v-else class="no-price-hint">暂无行情</span>
             </div>
           </div>
         </div>
@@ -184,7 +185,8 @@ function fmt(n) {
   return Math.round(n).toLocaleString()
 }
 function fmtPl(n) {
-  if (!n || Math.abs(n) < 1) return '±0'
+  if (n === null || n === undefined) return '-'
+  if (Math.abs(n) < 1) return '±0'
   const sign = n >= 0 ? '+' : '-'
   return `${sign}${fmt(Math.abs(n))}`
 }
@@ -226,6 +228,11 @@ onMounted(refresh)
   align-items: center;
   font-size: 12px;
   margin-top: 4px;
+}
+.no-price-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
 }
 
 @media (max-width: 768px) {

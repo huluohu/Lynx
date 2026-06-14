@@ -22,12 +22,13 @@ router.get('/summary', (req, res) => {
   const allocation = [];
 
   for (const h of holdings) {
+    const hasRealPrice = !!prices[h.asset_id];
     const price = prices[h.asset_id] || h.avg_cost;
     const marketValue = h.quantity * price;
     const pl = marketValue - h.total_invested;
     totalInvested += h.total_invested;
     totalMarketValue += marketValue;
-    totalPL += pl;
+    if (hasRealPrice) totalPL += pl;
     allocation.push({
       asset_id: h.asset_id,
       name: h.name,
@@ -38,10 +39,11 @@ router.get('/summary', (req, res) => {
       quantity: h.quantity,
       avg_cost: h.avg_cost,
       price,
+      has_real_price: hasRealPrice,
       total_invested: h.total_invested,
       market_value: marketValue,
-      pl,
-      pl_pct: h.total_invested ? (pl / h.total_invested * 100) : 0,
+      pl: hasRealPrice ? pl : null,
+      pl_pct: hasRealPrice && h.total_invested ? (pl / h.total_invested * 100) : null,
       weight: 0,
     });
   }
