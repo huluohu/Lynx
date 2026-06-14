@@ -4,6 +4,9 @@
  */
 import http from 'http';
 import https from 'https';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('ai');
 
 // 从 settings 或环境变量获取配置
 function getAIConfig(db) {
@@ -170,6 +173,8 @@ export async function aiGenerateStrategy(db, { assetId, budget, goal, riskLevel 
     throw new Error('请先在设置中配置 AI API 地址和密钥');
   }
 
+  log.info('AI strategy generation started', { assetId, budget, goal, riskLevel, model: config.model });
+
   // 收集上下文
   const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
   if (!asset) throw new Error('资产不存在');
@@ -184,6 +189,8 @@ export async function aiGenerateStrategy(db, { assetId, budget, goal, riskLevel 
   // 最近交易
   const recentTrades = db.prepare('SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 10').all(assetId);
 
+  log.debug('AI context collected', { asset: asset.name, hasHolding: !!holding, currentPrice, trades: recentTrades.length });
+
   // 构建 prompt
   const prompt = buildPrompt({
     asset, holding, currentPrice, recentTrades,
@@ -193,21 +200,33 @@ export async function aiGenerateStrategy(db, { assetId, budget, goal, riskLevel 
   });
 
   // 调用 LLM
+  const startTime = Date.now();
   const response = await callLLM(config.apiUrl, config.apiKey, config.model, prompt);
-  if (!response) throw new Error('AI 服务无响应，请检查网络和配置');
+  const elapsed = Date.now() - startTime;
+
+  if (!response) {
+    log.error('AI service no response', { elapsed: `${elapsed}ms` });
+    throw new Error('AI 服务无响应，请检查网络和配置');
+  }
+
+  log.info('AI response received', { elapsed: `${elapsed}ms`, hasChoices: !!response.choices });
 
   // 提取内容
   const content = response.choices?.[0]?.message?.content;
   if (!content) {
     const errMsg = response.error?.message || '未获取到有效回复';
+    log.error('AI response invalid', { error: errMsg, response: JSON.stringify(response).slice(0, 200) });
     throw new Error(`AI 返回异常: ${errMsg}`);
   }
 
   // 解析 JSON
   const result = extractJSON(content);
   if (!result || !result.strategy || !result.plans) {
+    log.error('AI JSON parse failed', { contentPreview: content.slice(0, 300) });
     throw new Error('AI 返回格式异常，无法解析策略');
   }
+
+  log.info('AI strategy generated', { strategyName: result.strategy.name, plans: result.plans.length });
 
   return {
     strategy: result.strategy,

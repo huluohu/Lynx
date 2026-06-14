@@ -4,6 +4,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 import { runMigrations, closeDb } from './db/database.js';
+import { createLogger, requestLogger } from './utils/logger.js';
 import { authMiddleware, createAuthRouter } from './routes/auth.js';
 import assetsRouter from './routes/assets.js';
 import holdingsRouter from './routes/holdings.js';
@@ -19,12 +20,18 @@ import notificationsRouter from './routes/notifications.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3456;
+const log = createLogger('server');
 
 // ===== 数据库迁移 =====
+log.info('Running database migrations...');
 runMigrations();
+log.info('Database ready');
 
 const app = express();
 app.use(express.json());
+
+// ===== 请求日志 =====
+app.use(requestLogger());
 
 // ===== CORS =====
 app.use((req, res, next) => {
@@ -33,6 +40,12 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
+});
+
+// ===== 全局错误处理 =====
+app.use((err, req, res, next) => {
+  log.error('Unhandled error', { path: req.url, error: err.message, stack: err.stack?.split('\n')[1]?.trim() });
+  res.status(500).json({ success: false, error: '服务器内部错误' });
 });
 
 // ===== Health（无需认证） =====
@@ -62,21 +75,23 @@ app.use('/api/notifications', notificationsRouter);
 // ===== 静态文件（生产环境） =====
 const distDir = join(__dirname, '..', 'client', 'dist');
 if (!existsSync(distDir)) {
-  console.log('📦 开发模式：API 就绪，前端请用 Vite');
+  log.info('Development mode - API only, use Vite for frontend');
 } else {
   app.use(express.static(distDir));
   app.get('*', (req, res) => {
     let html = readFileSync(join(distDir, 'index.html'), 'utf8');
     res.type('html').send(html);
   });
+  log.info('Production mode - serving static files from dist/');
 }
 
 // ===== 启动 =====
 app.listen(PORT, () => {
-  console.log(`🚀 投资罗盘 · InvestCompass at http://localhost:${PORT}`);
-  console.log(`   Database: ${process.env.DB_PATH || 'data/invest.db'}`);
+  log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/invest.db' });
 });
 
 // 优雅关闭
-process.on('SIGINT', () => { closeDb(); process.exit(0); });
-process.on('SIGTERM', () => { closeDb(); process.exit(0); });
+process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); closeDb(); process.exit(0); });
+process.on('SIGTERM', () => { log.info('Shutting down (SIGTERM)'); closeDb(); process.exit(0); });
+process.on('uncaughtException', (err) => { log.error('Uncaught exception', { error: err.message, stack: err.stack }); process.exit(1); });
+process.on('unhandledRejection', (reason) => { log.error('Unhandled rejection', { error: String(reason) }); });

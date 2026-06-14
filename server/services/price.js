@@ -1,6 +1,8 @@
 import http from 'http';
 import https from 'https';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
 // 获取实时汇率（缓存1小时）
@@ -13,9 +15,12 @@ async function getUsdCny() {
     const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
     if (data?.rates?.CNY) {
       cachedRate = { usd_cny: data.rates.CNY, updated: now };
+      log.info('USD/CNY rate updated', { rate: data.rates.CNY });
       return cachedRate.usd_cny;
     }
-  } catch {}
+  } catch (e) {
+    log.warn('Failed to fetch USD/CNY rate', { error: e.message });
+  }
 
   return cachedRate.usd_cny;
 }
@@ -100,9 +105,11 @@ export async function fetchGold(assetId, symbol) {
 // ===== BTC 查询 =====
 export async function fetchBTC() {
   // Primary: CoinGecko
+  log.debug('Fetching BTC price from CoinGecko');
   const body = await httpGet('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_7d_change=true');
   const b = body?.bitcoin;
   if (b) {
+    log.info('BTC price fetched (CoinGecko)', { usd: b.usd });
     const rate = await getUsdCny();
     return {
       usd: b.usd,
@@ -113,10 +120,12 @@ export async function fetchBTC() {
   }
 
   // Fallback: Binance public API
+  log.info('CoinGecko failed, trying Binance fallback');
   const ticker = await httpGet('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', { timeout: 5000 });
   if (ticker?.lastPrice) {
     const price = parseFloat(ticker.lastPrice);
     const change = parseFloat(ticker.priceChangePercent) || 0;
+    log.info('BTC price fetched (Binance)', { usd: price });
     const rate = await getUsdCny();
     return {
       usd: price,
@@ -126,6 +135,7 @@ export async function fetchBTC() {
     };
   }
 
+  log.warn('All BTC price sources failed');
   return null;
 }
 
@@ -134,15 +144,22 @@ export async function fetchPrice(asset) {
   try {
     if (asset.type === 'gold') {
       const price = await fetchGold(asset.id, asset.symbol);
-      return price ? { price, currency: 'CNY', source: 'neodata' } : null;
+      if (price) {
+        log.debug('Gold price resolved', { assetId: asset.id, price });
+        return { price, currency: 'CNY', source: 'neodata' };
+      }
+      log.warn('Gold price fetch failed', { assetId: asset.id, symbol: asset.symbol });
+      return null;
     }
     if (asset.type === 'crypto') {
       const data = await fetchBTC();
       if (!data) return null;
       return { price: data.usd, currency: 'USD', source: 'coingecko', details: data };
     }
+    log.debug('No price fetcher for asset type', { type: asset.type });
     return null;
-  } catch {
+  } catch (e) {
+    log.error('fetchPrice exception', { assetId: asset.id, error: e.message });
     return null;
   }
 }

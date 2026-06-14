@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { generatePlan } from '../services/strategy.js';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('strategies');
 const router = Router();
 
 // GET 策略列表
@@ -111,6 +113,7 @@ router.post('/ai-generate', async (req, res) => {
   const { asset_id, budget, goal, risk_level } = req.body;
   if (!asset_id) return res.status(400).json({ success: false, error: '请选择资产' });
 
+  log.info('AI generate request', { asset_id, budget, goal, risk_level });
   try {
     const { aiGenerateStrategy } = await import('../services/ai.js');
     const result = await aiGenerateStrategy(getDb(), {
@@ -119,8 +122,10 @@ router.post('/ai-generate', async (req, res) => {
       goal: goal || 'recovery',
       riskLevel: risk_level || 'medium',
     });
+    log.info('AI generate success', { asset_id, strategyName: result.strategy?.name });
     res.json({ success: true, data: result });
   } catch (e) {
+    log.error('AI generate failed', { asset_id, error: e.message });
     res.status(400).json({ success: false, error: e.message });
   }
 });
