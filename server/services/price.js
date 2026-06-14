@@ -6,7 +6,7 @@ const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
 // ===== 汇率 (缓存1小时) =====
-async function getUsdCny() {
+export async function getUsdCny() {
   const now = Date.now();
   if (now - cachedRate.updated < 3600000) return cachedRate.usd_cny;
 

@@ -88,7 +88,28 @@ if (!existsSync(distDir)) {
 // ===== 启动 =====
 app.listen(PORT, () => {
   log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/invest.db' });
+
+  // 启动后延迟30秒拉取新闻（避免阻塞启动）
+  setTimeout(async () => {
+    try {
+      const { fetchAllNews } = await import('./services/news.js');
+      await fetchAllNews();
+    } catch (e) {
+      log.warn('Initial news fetch failed', { error: e.message });
+    }
+  }, 30000);
 });
+
+// 定时拉取新闻（每30分钟）
+const NEWS_INTERVAL = 30 * 60 * 1000;
+setInterval(async () => {
+  try {
+    const { fetchAllNews } = await import('./services/news.js');
+    await fetchAllNews();
+  } catch (e) {
+    log.warn('Scheduled news fetch failed', { error: e.message });
+  }
+}, NEWS_INTERVAL);
 
 // 优雅关闭
 process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); closeDb(); process.exit(0); });

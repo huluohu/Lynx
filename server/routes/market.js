@@ -42,6 +42,17 @@ router.get('/prices', async (req, res) => {
   res.json({ success: true, data: results });
 });
 
+// GET 当前汇率
+router.get('/rate', async (req, res) => {
+  try {
+    const { getUsdCny } = await import('../services/price.js');
+    const rate = await getUsdCny();
+    res.json({ success: true, data: { usd_cny: rate, updated: new Date().toISOString() } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: '获取汇率失败' });
+  }
+});
+
 // GET 单个
 router.get('/prices/:assetId', async (req, res) => {
   const db = getDb();

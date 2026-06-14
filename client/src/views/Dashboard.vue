@@ -2,7 +2,10 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">📊 仪表盘</h1>
-      <button class="btn" @click="refresh" :disabled="loading">{{ loading ? '刷新中...' : '🔄 刷新' }}</button>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
+        <button class="btn" @click="refresh" :disabled="loading">{{ loading ? '刷新中...' : '🔄 刷新' }}</button>
+      </div>
     </div>
 
     <!-- ===== 提醒模块 ===== -->
@@ -142,6 +145,7 @@ const activePlans = ref([])
 const recentTrades = ref([])
 const alerts = ref([])
 const loading = ref(false)
+const usdCny = ref(null)
 
 const alertCounts = computed(() => {
   const c = { danger: 0, warning: 0, info: 0 }
@@ -152,12 +156,14 @@ const alertCounts = computed(() => {
 async function refresh() {
   loading.value = true
   try {
-    const [summaryRes, alertsRes] = await Promise.all([
+    const [summaryRes, alertsRes, rateRes] = await Promise.all([
       api('/api/dashboard/summary'),
-      api('/api/dashboard/alerts')
+      api('/api/dashboard/alerts'),
+      api('/api/market/rate'),
     ])
     const sJson = await summaryRes.json()
     const aJson = await alertsRes.json()
+    const rJson = await rateRes.json()
 
     if (sJson.data) {
       summary.value = sJson.data.summary
@@ -167,6 +173,9 @@ async function refresh() {
     }
     if (aJson.data) {
       alerts.value = aJson.data
+    }
+    if (rJson.data) {
+      usdCny.value = rJson.data.usd_cny
     }
   } catch (e) { console.error(e) }
   loading.value = false
@@ -200,6 +209,13 @@ onMounted(refresh)
 </script>
 
 <style scoped>
+.rate-badge {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-dim, #f5f5f5);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
 .stat-value-wrap {
   white-space: normal;
   word-break: break-all;
