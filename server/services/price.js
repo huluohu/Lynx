@@ -5,12 +5,11 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
-// 获取实时汇率（缓存1小时）
+// ===== 汇率 (缓存1小时) =====
 async function getUsdCny() {
   const now = Date.now();
   if (now - cachedRate.updated < 3600000) return cachedRate.usd_cny;
 
-  // 尝试免费汇率 API
   try {
     const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
     if (data?.rates?.CNY) {
@@ -21,10 +20,10 @@ async function getUsdCny() {
   } catch (e) {
     log.warn('Failed to fetch USD/CNY rate', { error: e.message });
   }
-
   return cachedRate.usd_cny;
 }
 
+// ===== HTTP 工具 =====
 export function httpGet(url, opts = {}) {
   return new Promise((resolve) => {
     const lib = url.startsWith('https') ? https : http;
@@ -57,8 +56,13 @@ export function httpPost(hostname, port, pathname, body, headers = {}) {
 }
 
 // ===== 金价查询 =====
-export async function fetchGold(assetId, symbol) {
-  // Primary: Auth Gateway proxy
+// Primary: Auth Gateway → 腾讯金融数据中台 neodata (AU9999 + AUUSDO)
+// Fallback: metals.live 国际金价 (XAUUSD, free, no key)
+export async function fetchGold(asset) {
+  const { symbol, currency } = asset;
+  const isLondonGold = symbol?.includes('AUUSDO') || symbol?.includes('XAUUSD') || currency === 'USD';
+
+  // --- Primary: neodata via Auth Gateway ---
   const port = process.env.AUTH_GATEWAY_PORT || 19000;
   try {
     const body = JSON.stringify({
@@ -75,93 +79,96 @@ export async function fetchGold(assetId, symbol) {
     const apiData = data?.data?.apiData?.apiRecall || [];
     for (const item of apiData) {
       for (const d of item.data || []) {
-        if (assetId === 1 && d.symbol?.includes('AU9999')) return parseFloat(d.new);
-        if (assetId === 2 && d.symbol?.includes('AUUSDO')) return parseFloat(d.new);
+        if (!isLondonGold && d.symbol?.includes('AU9999')) {
+          const price = parseFloat(d.new);
+          log.info('Gold price (neodata AU9999)', { price });
+          return { price, currency: 'CNY', source: 'neodata' };
+        }
+        if (isLondonGold && d.symbol?.includes('AUUSDO')) {
+          const price = parseFloat(d.new);
+          log.info('Gold price (neodata AUUSDO)', { price });
+          return { price, currency: 'USD', source: 'neodata' };
+        }
       }
     }
-  } catch {}
+    log.debug('Neodata: no matching gold symbol', { symbol });
+  } catch (e) {
+    log.debug('Neodata gold failed (gateway may be offline)', { error: e?.message });
+  }
 
-  // Fallback: 通过公开 API 获取国际金价
+  // --- Fallback: metals.live (XAUUSD 国际金价) ---
   try {
-    // XAUUSD from metals.live (free, no key)
     const metals = await httpGet('https://api.metals.live/v1/spot', { timeout: 5000 });
     if (Array.isArray(metals)) {
       const gold = metals.find(m => m.gold !== undefined);
       if (gold) {
         const xauUsd = parseFloat(gold.gold);
-        if (assetId === 2) return xauUsd; // 伦敦金 USD
-        if (assetId === 1) {
-          // AU9999 ≈ XAUUSD * 汇率 / 31.1035 (盎司→克)
-          const rate = await getUsdCny();
-          return Math.round(xauUsd * rate / 31.1035 * 100) / 100;
+        if (isLondonGold) {
+          log.info('Gold price (metals.live)', { usd: xauUsd });
+          return { price: xauUsd, currency: 'USD', source: 'metals.live' };
         }
+        // AU9999 ≈ XAUUSD × 汇率 ÷ 31.1035 (盎司→克)
+        const rate = await getUsdCny();
+        const cnPrice = Math.round(xauUsd * rate / 31.1035 * 100) / 100;
+        log.info('Gold price (metals.live→CNY)', { xauUsd, rate, cnPrice });
+        return { price: cnPrice, currency: 'CNY', source: 'metals.live' };
       }
     }
-  } catch {}
+  } catch (e) {
+    log.warn('metals.live gold failed', { error: e?.message });
+  }
 
+  log.warn('All gold sources failed', { symbol });
   return null;
 }
 
 // ===== BTC 查询 =====
+// Primary: CoinGecko (free, no key)
+// Fallback: Binance public ticker
 export async function fetchBTC() {
-  // Primary: CoinGecko
-  log.debug('Fetching BTC price from CoinGecko');
-  const body = await httpGet('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_7d_change=true');
-  const b = body?.bitcoin;
-  if (b) {
-    log.info('BTC price fetched (CoinGecko)', { usd: b.usd });
+  log.debug('Fetching BTC price');
+
+  // --- Primary: CoinGecko ---
+  const cg = await httpGet(
+    'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_7d_change=true',
+    { timeout: 8000 }
+  );
+  if (cg?.bitcoin) {
+    const b = cg.bitcoin;
+    log.info('BTC price (CoinGecko)', { usd: b.usd });
     const rate = await getUsdCny();
-    return {
-      usd: b.usd,
-      cny: Math.round(b.usd * rate),
-      ch24: b.usd_24h_change || 0,
-      ch7d: b.usd_7d_change || 0,
-    };
+    return { usd: b.usd, cny: Math.round(b.usd * rate), ch24: b.usd_24h_change || 0, ch7d: b.usd_7d_change || 0 };
   }
 
-  // Fallback: Binance public API
-  log.info('CoinGecko failed, trying Binance fallback');
+  // --- Fallback: Binance ---
+  log.debug('CoinGecko failed, trying Binance');
   const ticker = await httpGet('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', { timeout: 5000 });
   if (ticker?.lastPrice) {
     const price = parseFloat(ticker.lastPrice);
     const change = parseFloat(ticker.priceChangePercent) || 0;
-    log.info('BTC price fetched (Binance)', { usd: price });
+    log.info('BTC price (Binance)', { usd: price });
     const rate = await getUsdCny();
-    return {
-      usd: price,
-      cny: Math.round(price * rate),
-      ch24: change,
-      ch7d: 0,
-    };
+    return { usd: price, cny: Math.round(price * rate), ch24: change, ch7d: 0 };
   }
 
-  log.warn('All BTC price sources failed');
+  log.warn('All BTC sources failed');
   return null;
 }
 
-// ===== 根据 asset 类型调度 =====
+// ===== 统一调度入口 =====
 export async function fetchPrice(asset) {
   try {
     if (asset.type === 'gold') {
-      const price = await fetchGold(asset.id, asset.symbol);
-      if (price) {
-        // Determine currency from asset
-        const currency = asset.currency || (asset.symbol?.includes('XAUUSD') || asset.symbol?.includes('AUUSDO') ? 'USD' : 'CNY');
-        log.debug('Gold price resolved', { assetId: asset.id, price, currency });
-        return { price, currency, source: 'neodata' };
-      }
-      log.warn('Gold price fetch failed', { assetId: asset.id, symbol: asset.symbol });
-      return null;
+      return await fetchGold(asset);
     }
     if (asset.type === 'crypto') {
       const data = await fetchBTC();
       if (!data) return null;
-      // Use asset's configured currency if available
       const currency = asset.currency || 'USD';
       const price = currency === 'CNY' ? data.cny : data.usd;
       return { price, currency, source: 'coingecko', details: data };
     }
-    log.debug('No price fetcher for asset type', { type: asset.type });
+    log.debug('No fetcher for asset type', { type: asset.type });
     return null;
   } catch (e) {
     log.error('fetchPrice exception', { assetId: asset.id, error: e.message });
