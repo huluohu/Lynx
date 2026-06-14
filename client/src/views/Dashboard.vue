@@ -78,9 +78,9 @@
             </div>
             <div class="progress-bar"><div class="progress-fill green" :style="{width: Math.max(a.weight || 0, 2)+'%'}"></div></div>
             <div class="alloc-footer">
-              <span style="color:var(--text-muted)">市值 ¥{{ fmt(a.market_value) }}</span>
+              <span style="color:var(--text-muted)">投入 {{ cs(a) }}{{ fmt(a.total_invested) }} · 市值 {{ cs(a) }}{{ fmt(a.market_value) }}</span>
               <span :class="a.pl >= 0 ? 'pnl positive' : 'pnl negative'">
-                {{ a.pl >= 0 ? '+' : '' }}¥{{ fmt(Math.abs(a.pl)) }} ({{ a.pl_pct >= 0 ? '+' : '' }}{{ fmtPct(a.pl_pct) }}%)
+                {{ a.pl >= 0 ? '+' : '' }}{{ fmtPl(a.pl) }}
               </span>
             </div>
           </div>
@@ -133,6 +133,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../utils/api.js'
+import { currencySymbol } from '../utils/currency.js'
 
 const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, total_pl_pct: 0 })
 const allocation = ref([])
@@ -176,10 +177,18 @@ function markDone(id) {
 
 function fmt(n) {
   if (!n && n !== 0) return '-'
-  if (Math.abs(n) >= 100000000) return (n / 100000000).toFixed(2) + '亿'
-  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(1) + '万'
+  const abs = Math.abs(n)
+  if (abs >= 100000000) return (n / 100000000).toFixed(2) + '亿'
+  if (abs >= 10000) return (n / 10000).toFixed(1) + '万'
+  if (abs < 1) return n.toFixed(2)
   return Math.round(n).toLocaleString()
 }
+function fmtPl(n) {
+  if (!n || Math.abs(n) < 1) return '±0'
+  const sign = n >= 0 ? '+' : '-'
+  return `${sign}${fmt(Math.abs(n))}`
+}
+function cs(a) { return currencySymbol(a?.currency) }
 function fmtPct(n) {
   if (!n && n !== 0) return '0.0'
   return Number(n).toFixed(1)
