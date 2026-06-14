@@ -44,15 +44,15 @@
     <div class="grid-4" style="margin-bottom:20px">
       <div class="stat-card">
         <div class="stat-label">总投入</div>
-        <div class="stat-value">¥{{ fmt(summary.total_invested) }}</div>
+        <div class="stat-value stat-value-wrap">¥{{ fmt(summary.total_invested) }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">当前市值</div>
-        <div class="stat-value">¥{{ fmt(summary.total_market_value) }}</div>
+        <div class="stat-value stat-value-wrap">¥{{ fmt(summary.total_market_value) }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">总盈亏</div>
-        <div class="stat-value" :class="summary.total_pl >= 0 ? 'pnl positive' : 'pnl negative'">
+        <div class="stat-value stat-value-wrap" :class="summary.total_pl >= 0 ? 'pnl positive' : 'pnl negative'">
           {{ summary.total_pl >= 0 ? '+' : '' }}¥{{ fmt(Math.abs(summary.total_pl)) }}
         </div>
         <div class="stat-sub" :class="summary.total_pl_pct >= 0 ? 'pnl positive' : 'pnl negative'">
@@ -70,21 +70,18 @@
       <!-- Asset allocation -->
       <div class="card">
         <div class="section-title">📊 资产配置</div>
-        <div v-if="allocation.length" style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div v-for="a in allocation" :key="a.asset_id" style="margin-bottom:12px">
-              <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
-                <span>{{ a.icon }} {{ a.name }}</span>
-                <span :class="a.pl >= 0 ? 'pnl positive' : 'pnl negative'">
-                  {{ a.pl >= 0 ? '+' : '' }}¥{{ fmt(Math.abs(a.pl)) }}
-                </span>
-              </div>
-              <div class="progress-bar"><div class="progress-fill green" :style="{width: Math.max(a.weight || 0, 2)+'%'}"></div></div>
+        <div v-if="allocation.length">
+          <div v-for="a in allocation" :key="a.asset_id" class="alloc-item">
+            <div class="alloc-header">
+              <span class="alloc-name">{{ a.icon }} {{ a.name }}</span>
+              <span class="alloc-weight">{{ fmtPct(a.weight) }}%</span>
             </div>
-          </div>
-          <div style="font-size:13px;color:var(--text-dim)">
-            <div v-for="a in allocation" :key="a.asset_id" style="margin-bottom:4px">
-              {{ a.icon }} {{ a.name }}: {{ fmtPct(a.weight) }}%
+            <div class="progress-bar"><div class="progress-fill green" :style="{width: Math.max(a.weight || 0, 2)+'%'}"></div></div>
+            <div class="alloc-footer">
+              <span style="color:var(--text-muted)">市值 ¥{{ fmt(a.market_value) }}</span>
+              <span :class="a.pl >= 0 ? 'pnl positive' : 'pnl negative'">
+                {{ a.pl >= 0 ? '+' : '' }}¥{{ fmt(Math.abs(a.pl)) }} ({{ a.pl_pct >= 0 ? '+' : '' }}{{ fmtPct(a.pl_pct) }}%)
+              </span>
             </div>
           </div>
         </div>
@@ -190,3 +187,41 @@ function fmtPct(n) {
 
 onMounted(refresh)
 </script>
+
+<style scoped>
+.stat-value-wrap {
+  white-space: normal;
+  word-break: break-all;
+  overflow: visible;
+}
+.alloc-item {
+  margin-bottom: 14px;
+}
+.alloc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.alloc-name {
+  font-weight: 500;
+}
+.alloc-weight {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.alloc-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .stat-value-wrap {
+    font-size: 16px;
+  }
+}
+</style>

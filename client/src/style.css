@@ -134,7 +134,7 @@ a:hover { opacity: 0.8; }
   min-width: 0; /* allow shrinking in grid */
 }
 .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-.stat-value { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-value { font-size: 22px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 .stat-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
 .pnl.positive { color: var(--green); }
@@ -349,12 +349,12 @@ tr:hover td { background: var(--bg-hover); }
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
-  .main { margin-left: 0; padding: 16px; padding-top: 56px; padding-bottom: 72px; }
+  .main { margin-left: 0; padding: 16px; padding-top: 14px; padding-bottom: 72px; }
   .grid-2 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
   .mobile-nav { display: block; }
-  .page-header { flex-direction: column; align-items: flex-start; }
-  .page-title { font-size: 20px; }
+  .page-header { flex-direction: row; align-items: center; padding-left: 44px; min-height: 36px; gap: 8px; }
+  .page-title { font-size: 18px; flex: 1; min-width: 0; }
   .form-row { flex-direction: column; }
   table { font-size: 11px; }
   th, td { padding: 8px 6px; }
@@ -366,7 +366,7 @@ tr:hover td { background: var(--bg-hover); }
   .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
 
   /* Stat card on mobile */
-  .stat-value { font-size: 18px; }
+  .stat-value { font-size: 15px; word-break: break-all; }
   .stat-card { padding: 12px 14px; }
 
   /* Form mobile optimization */
