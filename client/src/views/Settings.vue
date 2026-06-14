@@ -7,14 +7,19 @@
     <div class="settings-container">
       <!-- 行情刷新 -->
       <div class="settings-group">
-        <div class="settings-group-title">行情刷新</div>
+        <div class="settings-group-header">
+          <span class="settings-group-title">行情刷新</span>
+          <button class="save-btn" :class="{ changed: dirty.market }" @click="saveGroup('market')">
+            {{ saveState.market === 'saved' ? '✓ 已保存' : '保存' }}
+          </button>
+        </div>
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">刷新间隔</span>
             </div>
             <div class="setting-control">
-              <input class="setting-input" type="number" v-model="form.refresh_interval" @blur="saveKey('refresh_interval', form.refresh_interval)" />
+              <input class="setting-input" type="number" inputmode="numeric" v-model="form.refresh_interval" @input="dirty.market = true" />
               <span class="setting-unit">秒</span>
             </div>
           </div>
@@ -23,7 +28,7 @@
               <span class="setting-label">价格异动阈值</span>
             </div>
             <div class="setting-control">
-              <input class="setting-input" type="number" step="0.1" v-model="form.price_alert_threshold" @blur="saveKey('price_alert_threshold', form.price_alert_threshold)" />
+              <input class="setting-input" type="number" inputmode="decimal" step="0.1" v-model="form.price_alert_threshold" @input="dirty.market = true" />
               <span class="setting-unit">%</span>
             </div>
           </div>
@@ -33,7 +38,7 @@
               <span class="setting-desc">价格距触发线在此范围内时提醒</span>
             </div>
             <div class="setting-control">
-              <input class="setting-input" type="number" v-model="form.plan_approaching_pct" @blur="saveKey('plan_approaching_pct', form.plan_approaching_pct)" />
+              <input class="setting-input" type="number" inputmode="numeric" v-model="form.plan_approaching_pct" @input="dirty.market = true" />
               <span class="setting-unit">%</span>
             </div>
           </div>
@@ -42,7 +47,9 @@
 
       <!-- 通知渠道 -->
       <div class="settings-group">
-        <div class="settings-group-title">通知渠道</div>
+        <div class="settings-group-header">
+          <span class="settings-group-title">通知渠道</span>
+        </div>
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
@@ -63,7 +70,9 @@
 
       <!-- 通知事件 -->
       <div class="settings-group">
-        <div class="settings-group-title">通知事件</div>
+        <div class="settings-group-header">
+          <span class="settings-group-title">通知事件</span>
+        </div>
         <div class="settings-card">
           <div v-for="evt in notifyEvents" :key="evt.key" class="setting-item">
             <div class="setting-info">
@@ -77,21 +86,26 @@
 
       <!-- AI 配置 -->
       <div class="settings-group">
-        <div class="settings-group-title">AI 策略生成</div>
+        <div class="settings-group-header">
+          <span class="settings-group-title">AI 策略生成</span>
+          <button class="save-btn" :class="{ changed: dirty.ai }" @click="saveGroup('ai')">
+            {{ saveState.ai === 'saved' ? '✓ 已保存' : '保存' }}
+          </button>
+        </div>
         <div class="settings-card">
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">API 地址</span>
-            <input class="setting-input-full" type="text" v-model="form.ai_api_url" placeholder="https://api.openai.com/v1/chat/completions" @blur="saveKey('ai_api_url', form.ai_api_url)" />
+            <input class="setting-input-full" type="url" v-model="form.ai_api_url" placeholder="https://api.openai.com/v1/chat/completions" @input="dirty.ai = true" />
           </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">API Key</span>
-            <input class="setting-input-full" type="password" v-model="form.ai_api_key" placeholder="sk-..." @blur="saveKey('ai_api_key', form.ai_api_key)" />
+            <input class="setting-input-full" type="password" v-model="form.ai_api_key" placeholder="sk-..." @input="dirty.ai = true" />
           </div>
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">模型名称</span>
             </div>
-            <input class="setting-input" type="text" v-model="form.ai_model" placeholder="gpt-4o-mini" style="width:160px" @blur="saveKey('ai_model', form.ai_model)" />
+            <input class="setting-input" type="text" v-model="form.ai_model" placeholder="gpt-4o-mini" style="width:160px" @input="dirty.ai = true" />
           </div>
         </div>
         <div class="settings-group-footer">支持 OpenAI 兼容接口。也可通过环境变量 AI_API_URL / AI_API_KEY / AI_MODEL 配置。</div>
@@ -99,7 +113,9 @@
 
       <!-- 账号与安全 -->
       <div class="settings-group">
-        <div class="settings-group-title">账号与安全</div>
+        <div class="settings-group-header">
+          <span class="settings-group-title">账号与安全</span>
+        </div>
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
@@ -114,8 +130,6 @@
         </div>
       </div>
     </div>
-
-    <div v-if="saved" class="save-toast">✅ 已保存</div>
   </div>
 </template>
 
@@ -127,7 +141,6 @@ import { api } from '../utils/api.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const saved = ref(false)
 const form = reactive({
   refresh_interval: '60',
   price_alert_threshold: '2',
@@ -144,6 +157,9 @@ const form = reactive({
   notify_trade_executed: 'false',
 })
 
+const dirty = reactive({ market: false, ai: false })
+const saveState = reactive({ market: '', ai: '' })
+
 const notifyEvents = [
   { key: 'notify_plan_triggered', label: '计划触发', desc: '操盘计划价格条件达成' },
   { key: 'notify_plan_approaching', label: '计划接近', desc: '价格接近触发条件' },
@@ -151,6 +167,11 @@ const notifyEvents = [
   { key: 'notify_price_swing', label: '价格异动', desc: '超过阈值的价格波动' },
   { key: 'notify_trade_executed', label: '交易执行', desc: '交易操作完成通知' },
 ]
+
+const groupKeys = {
+  market: ['refresh_interval', 'price_alert_threshold', 'plan_approaching_pct'],
+  ai: ['ai_api_url', 'ai_api_key', 'ai_model'],
+}
 
 async function load() {
   try {
@@ -160,7 +181,23 @@ async function load() {
     for (const [k, v] of Object.entries(json.data)) {
       if (k in form) form[k] = v
     }
-  } catch (e) { /* ignore */ }
+  } catch {}
+}
+
+async function saveGroup(group) {
+  const keys = groupKeys[group]
+  if (!keys) return
+  try {
+    for (const key of keys) {
+      await api(`/api/settings/${key}`, {
+        method: 'PUT',
+        body: JSON.stringify({ value: form[key] })
+      })
+    }
+    dirty[group] = false
+    saveState[group] = 'saved'
+    setTimeout(() => { saveState[group] = '' }, 2000)
+  } catch {}
 }
 
 async function saveKey(key, value) {
@@ -169,15 +206,7 @@ async function saveKey(key, value) {
       method: 'PUT',
       body: JSON.stringify({ value })
     })
-    showSaved()
-  } catch { /* ignore */ }
-}
-
-let toastTimer
-function showSaved() {
-  saved.value = true
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => saved.value = false, 1500)
+  } catch {}
 }
 
 function doLogout() {
@@ -199,14 +228,42 @@ onMounted(load)
   gap: 32px;
 }
 
+.settings-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  margin-bottom: 8px;
+}
+
 .settings-group-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  padding: 0 16px;
-  margin-bottom: 8px;
+}
+
+.save-btn {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.save-btn.changed {
+  background: var(--blue);
+  color: #fff;
+  animation: pulse-once 0.3s ease;
+}
+@keyframes pulse-once {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
 
 .settings-card {
@@ -263,7 +320,7 @@ onMounted(load)
 
 .setting-input {
   width: 80px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
@@ -278,7 +335,7 @@ onMounted(load)
 
 .setting-input-full {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
@@ -311,23 +368,10 @@ onMounted(load)
 .switch input:checked + .slider { background: var(--green, #34c759); }
 .switch input:checked + .slider::before { transform: translateX(18px); }
 
-.save-toast {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--green, #34c759);
-  color: #fff;
-  padding: 8px 20px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  z-index: 999;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-
 @media (max-width: 768px) {
   .settings-page { max-width: 100%; }
-  .setting-input { width: 70px; }
+  .setting-input { width: 70px; font-size: 16px; }
+  .setting-input-full { font-size: 16px; }
+  .setting-item { padding: 16px; }
 }
 </style>

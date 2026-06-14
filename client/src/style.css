@@ -165,6 +165,7 @@ tr:hover td { background: var(--bg-hover); }
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
   border-radius: 8px;
@@ -175,14 +176,18 @@ tr:hover td { background: var(--bg-hover); }
   cursor: pointer;
   transition: all 0.15s;
   font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
-.btn:hover { background: var(--bg-hover); }
+@media (hover: hover) {
+  .btn:hover { background: var(--bg-hover); }
+  .btn-primary:hover { opacity: 0.9; }
+}
+.btn:active { transform: scale(0.97); }
 .btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; }
-.btn-primary:hover { opacity: 0.9; }
 .btn-success { background: var(--green); border-color: var(--green); color: #fff; }
 .btn-danger { color: var(--red); border-color: var(--red); }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* ===== Form ===== */
 .form-group { margin-bottom: 16px; }
@@ -347,11 +352,46 @@ tr:hover td { background: var(--bg-hover); }
   .grid-4 { grid-template-columns: 1fr; }
   .mobile-nav { display: block; }
   .page-header { flex-direction: column; align-items: flex-start; }
+  .page-title { font-size: 20px; }
   .form-row { flex-direction: column; }
   table { font-size: 11px; }
   th, td { padding: 8px 6px; }
   .asset-card-price { font-size: 24px; }
   .card { overflow-x: auto; }
+
+  /* Mobile button sizing (44px min touch target) */
+  .btn { padding: 12px 18px; font-size: 14px; min-height: 44px; border-radius: 10px; }
+  .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+
+  /* Form mobile optimization */
+  .form-input, .form-select, .form-textarea {
+    padding: 12px 14px;
+    font-size: 16px; /* Prevents iOS zoom on focus */
+    border-radius: 10px;
+  }
+  .form-group { margin-bottom: 20px; }
+}
+
+/* Limit hover styles to non-touch devices */
+@media (hover: hover) {
+  .nav-item:hover { background: var(--bg-hover); color: var(--text); }
+  tr:hover td { background: var(--bg-hover); }
+  a:hover { opacity: 0.8; }
+}
+@media (hover: none) {
+  .nav-item:hover { background: inherit; color: inherit; }
+  tr:hover td { background: inherit; }
+  a:hover { opacity: 1; }
+}
+
+/* Touch feedback */
+.asset-card:active,
+.strategy-card:active,
+.history-card:active,
+.plan-card:active,
+.holding-card:active {
+  transform: scale(0.98);
+  background: var(--bg-hover);
 }
 
 /* Hamburger for mobile */
