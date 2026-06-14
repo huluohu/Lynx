@@ -42,6 +42,8 @@
             <option value="recovery">💉 扭亏为盈</option>
             <option value="growth">📈 稳定增长</option>
             <option value="balanced">⚖️ 平衡网格</option>
+            <option value="trend">📊 趋势跟踪</option>
+            <option value="rebalance">⚖️ 组合再平衡</option>
           </select>
         </div>
         <div class="form-group">
@@ -403,7 +405,7 @@ async function confirmSave() {
   saving.value = false
 }
 
-function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏' }[t] || t }
+function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t }
 function triggerLabel(t) { return { price_above:'价格 ≥', price_below:'价格 ≤', time:'时间' }[t] || t }
 function fmt(n) { return n ? Math.round(n).toLocaleString() : '0' }
 

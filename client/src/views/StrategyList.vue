@@ -108,7 +108,7 @@ async function openDetail(s) {
 }
 
 function onAIDone() { showAI.value = false; loadData() }
-function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏' }[t] || t }
+function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t }
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
 function triggerLabel(t) { return { price_above:'≥', price_below:'≤', time:'时间' }[t] || t }

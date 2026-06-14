@@ -23,6 +23,8 @@
               <option value="grid">📐 网格交易</option>
               <option value="value_avg">📈 价值平均</option>
               <option value="recovery">💉 扭亏/补仓</option>
+              <option value="trend">📊 趋势跟踪</option>
+              <option value="rebalance">⚖️ 组合再平衡</option>
             </select>
           </div>
         </div>
