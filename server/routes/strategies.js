@@ -125,7 +125,7 @@ router.post('/:id/generate-plan', (req, res) => {
 
     const insertMany = db.transaction((items) => {
       for (const p of items)
-        insert.run(strategy.id, strategy.asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
+        insert.run(strategy.id, p.asset_id || strategy.asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
     });
 

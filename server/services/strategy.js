@@ -10,8 +10,8 @@
 export function generateRecovery(holding, params = {}) {
   const {
     budget = 20000,
-    buy_lines = [],     // [{price, amount, ratio}]
-    sell_lines = [],    // [{price, amount}]
+    buy_lines = [],     // [{price, amount, ratio, asset_id}]
+    sell_lines = [],    // [{price, amount, asset_id}]
   } = params;
 
   const plans = [];
@@ -26,6 +26,7 @@ export function generateRecovery(holding, params = {}) {
       const newAvg = (holding.total_invested + amt) / newQty;
       plans.push({
         seq: plans.length + 1,
+        asset_id: bl.asset_id || null,
         trigger_type: 'price_below',
         trigger_value: bl.price,
         action: 'buy',
@@ -42,6 +43,7 @@ export function generateRecovery(holding, params = {}) {
   for (const sl of sell_lines) {
     plans.push({
       seq: plans.length + 1,
+      asset_id: sl.asset_id || null,
       trigger_type: 'price_above',
       trigger_value: sl.price,
       action: 'sell',
