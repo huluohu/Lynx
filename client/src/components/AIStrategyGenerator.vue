@@ -55,18 +55,71 @@
       </div>
 
       <button class="btn btn-primary" style="width:100%;margin-top:12px" @click="generate" :disabled="generating || selectedAssetIds.length === 0">
-        {{ generating ? '🤖 AI 分析中...' : '🤖 生成策略' }}
+        {{ generating ? '🤖 Agent 工作中...' : '🤖 智能生成策略' }}
       </button>
 
-      <div v-if="generating" class="generating-hint">
-        <span class="spinner"></span> 正在分析{{ selectedAssetIds.length > 1 ? '组合' : '' }}持仓数据并生成策略，请稍候...
+      <!-- Agent Progress -->
+      <div v-if="generating" class="agent-progress">
+        <div class="progress-title">🧠 策略 Agent 工作中</div>
+        <div class="progress-steps">
+          <div v-for="s in agentSteps" :key="s.id" class="progress-step" :class="s.status">
+            <span class="step-icon">{{ s.status === 'done' ? '✅' : s.status === 'active' ? '⏳' : '⬜' }}</span>
+            <span class="step-label">{{ s.label }}</span>
+            <span v-if="s.detail" class="step-detail">{{ s.detail }}</span>
+          </div>
+        </div>
       </div>
 
       <div v-if="error" class="gen-error">{{ error }}</div>
     </div>
 
-    <!-- Step 2: 预览 -->
+    <!-- Step 2: 预览结果 -->
     <div v-if="step === 'preview'">
+      <!-- 分析报告（可折叠） -->
+      <div v-if="result.analysis" class="preview-section analysis-section">
+        <div class="section-title clickable" @click="showAnalysis = !showAnalysis">
+          📊 市场分析报告 
+          <span class="toggle-icon">{{ showAnalysis ? '▼' : '▶' }}</span>
+          <span v-if="result.analysis.confidence_level" class="confidence-badge">
+            置信度 {{ Math.round(result.analysis.confidence_level * 100) }}%
+          </span>
+        </div>
+        <div v-if="showAnalysis" class="analysis-content">
+          <div class="analysis-item">
+            <div class="analysis-label">市场评估</div>
+            <p>{{ result.analysis.market_assessment }}</p>
+          </div>
+          <div v-if="result.analysis.macro_outlook" class="analysis-item">
+            <div class="analysis-label">宏观展望</div>
+            <p>{{ result.analysis.macro_outlook }}</p>
+          </div>
+          <div v-if="result.analysis.portfolio_diagnosis" class="analysis-item">
+            <div class="analysis-label">组合诊断</div>
+            <p>{{ result.analysis.portfolio_diagnosis }}</p>
+          </div>
+          <div v-for="aa in (result.analysis.asset_analyses || [])" :key="aa.asset_name" class="analysis-item">
+            <div class="analysis-label">{{ aa.asset_name }}</div>
+            <div class="analysis-trend">
+              <div v-if="aa.trend?.short_term"><b>短期:</b> {{ aa.trend.short_term }}</div>
+              <div v-if="aa.trend?.medium_term"><b>中期:</b> {{ aa.trend.medium_term }}</div>
+              <div v-if="aa.trend?.key_support_levels?.length"><b>支撑位:</b> {{ aa.trend.key_support_levels.join(', ') }}</div>
+              <div v-if="aa.trend?.key_resistance_levels?.length"><b>阻力位:</b> {{ aa.trend.key_resistance_levels.join(', ') }}</div>
+            </div>
+            <div v-if="aa.risk_factors?.length" class="analysis-list">
+              <span class="list-label">⚠️ 风险:</span> {{ aa.risk_factors.join('；') }}
+            </div>
+            <div v-if="aa.opportunities?.length" class="analysis-list">
+              <span class="list-label">💡 机会:</span> {{ aa.opportunities.join('；') }}
+            </div>
+          </div>
+          <div v-if="result.analysis.data_limitations" class="analysis-item disclaimer">
+            <div class="analysis-label">⚠️ 数据局限性</div>
+            <p>{{ result.analysis.data_limitations }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 策略建议 -->
       <div class="preview-section">
         <div class="section-title">🎯 策略建议</div>
         <div class="info-list">
@@ -77,11 +130,32 @@
         </div>
       </div>
 
+      <!-- 决策逻辑 -->
       <div v-if="result.reasoning" class="preview-section">
-        <div class="section-title">💡 策略逻辑</div>
+        <div class="section-title">💡 决策逻辑</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.6">{{ result.reasoning }}</p>
       </div>
 
+      <!-- 风险管理 -->
+      <div v-if="result.risk_management" class="preview-section">
+        <div class="section-title">🛡️ 风险管理</div>
+        <div class="risk-info">
+          <div v-if="result.risk_management.max_loss_tolerance"><b>最大容忍亏损:</b> {{ result.risk_management.max_loss_tolerance }}</div>
+          <div v-if="result.risk_management.position_sizing_logic"><b>仓位逻辑:</b> {{ result.risk_management.position_sizing_logic }}</div>
+          <div v-if="result.risk_management.stop_loss_triggers?.length">
+            <b>止损条件:</b>
+            <ul><li v-for="(t, i) in result.risk_management.stop_loss_triggers" :key="i">{{ t }}</li></ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 执行建议 -->
+      <div v-if="result.execution_notes" class="preview-section">
+        <div class="section-title">📝 执行建议</div>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.6">{{ result.execution_notes }}</p>
+      </div>
+
+      <!-- 操盘计划 -->
       <div class="preview-section">
         <div class="section-title">📋 操盘计划 ({{ result.plans.length }} 步)</div>
         <div class="plan-preview-list">
@@ -93,10 +167,11 @@
             </div>
             <div class="plan-preview-meta">
               <span v-if="p.amount">¥{{ Math.round(p.amount) }}</span>
-              <span v-if="p.quantity">{{ p.quantity.toFixed?.(4) || p.quantity }}</span>
+              <span v-if="p.quantity">{{ typeof p.quantity === 'number' ? p.quantity.toFixed(4) : p.quantity }}</span>
               <span v-if="p.new_avg_cost">均价→¥{{ p.new_avg_cost }}</span>
             </div>
-            <div v-if="p.notes" style="font-size:11px;color:var(--text-muted);margin-top:2px">{{ p.notes }}</div>
+            <div v-if="p.rationale" class="plan-rationale">📌 {{ p.rationale }}</div>
+            <div v-else-if="p.notes" style="font-size:11px;color:var(--text-muted);margin-top:2px">{{ p.notes }}</div>
           </div>
         </div>
       </div>
@@ -113,7 +188,6 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 
@@ -122,7 +196,6 @@ const props = defineProps({
 })
 const emit = defineEmits(['done'])
 
-const router = useRouter()
 const toast = useToast()
 const assets = ref([])
 const holdingSummaries = ref([])
@@ -132,11 +205,19 @@ const generating = ref(false)
 const saving = ref(false)
 const error = ref('')
 const result = ref(null)
+const showAnalysis = ref(false)
 const form = reactive({
   budget: 20000,
   goal: 'recovery',
   risk_level: 'medium',
 })
+
+// Agent progress tracking
+const agentSteps = ref([
+  { id: 'collecting', label: '收集数据', status: 'pending', detail: '' },
+  { id: 'analyzing', label: '市场研判', status: 'pending', detail: '' },
+  { id: 'generating', label: '生成策略', status: 'pending', detail: '' },
+])
 
 const selectedAssetNames = computed(() => {
   return selectedAssetIds.value
@@ -148,11 +229,8 @@ const selectedAssetNames = computed(() => {
 
 function toggleAsset(id) {
   const idx = selectedAssetIds.value.indexOf(id)
-  if (idx >= 0) {
-    selectedAssetIds.value.splice(idx, 1)
-  } else {
-    selectedAssetIds.value.push(id)
-  }
+  if (idx >= 0) selectedAssetIds.value.splice(idx, 1)
+  else selectedAssetIds.value.push(id)
   loadAssetInfo()
 }
 
@@ -170,7 +248,6 @@ async function loadAssets() {
 async function loadAssetInfo() {
   holdingSummaries.value = []
   if (selectedAssetIds.value.length === 0) return
-  
   const summaries = []
   for (const assetId of selectedAssetIds.value) {
     try {
@@ -197,12 +274,31 @@ async function loadAssetInfo() {
   holdingSummaries.value = summaries
 }
 
+function updateAgentStep(stepId, status, detail) {
+  const s = agentSteps.value.find(x => x.id === stepId)
+  if (s) {
+    s.status = status
+    if (detail) s.detail = detail
+  }
+}
+
 async function generate() {
   error.value = ''
   generating.value = true
+  result.value = null
+
+  // Reset progress
+  agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = ''; })
+
   try {
-    const res = await api('/api/strategies/ai-generate', {
+    const token = localStorage.getItem('token')
+    const baseUrl = import.meta.env.VITE_API_BASE || ''
+    const response = await fetch(`${baseUrl}/api/strategies/ai-agent-generate`, {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({
         asset_ids: selectedAssetIds.value,
         budget: form.budget,
@@ -210,14 +306,80 @@ async function generate() {
         risk_level: form.risk_level,
       }),
     })
-    const json = await res.json()
-    if (!json.success) throw new Error(json.error)
-    result.value = json.data
-    step.value = 'preview'
+
+    if (!response.ok) {
+      const text = await response.text()
+      try {
+        const json = JSON.parse(text)
+        throw new Error(json.error || `HTTP ${response.status}`)
+      } catch (e) {
+        if (e.message.startsWith('HTTP')) throw e
+        throw new Error(`请求失败: ${response.status}`)
+      }
+    }
+
+    // Parse SSE stream
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      let eventType = ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ') && eventType) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            handleSSEEvent(eventType, data)
+          } catch {}
+          eventType = ''
+        }
+      }
+    }
   } catch (e) {
     error.value = e.message
   }
   generating.value = false
+}
+
+function handleSSEEvent(event, data) {
+  if (event === 'progress') {
+    const { step: stepName, message } = data
+    // Map step names to progress indicators
+    if (stepName === 'collecting') {
+      updateAgentStep('collecting', 'active', message)
+    } else if (stepName === 'collecting_done') {
+      updateAgentStep('collecting', 'done', message)
+      updateAgentStep('analyzing', 'active', '')
+    } else if (stepName === 'analyzing') {
+      updateAgentStep('analyzing', 'active', message)
+    } else if (stepName === 'analyzing_done') {
+      updateAgentStep('analyzing', 'done', message)
+      updateAgentStep('generating', 'active', '')
+    } else if (stepName === 'generating') {
+      updateAgentStep('generating', 'active', message)
+    } else if (stepName === 'done') {
+      updateAgentStep('generating', 'done', message)
+    }
+  } else if (event === 'result') {
+    if (data.success && data.data) {
+      result.value = data.data
+      step.value = 'preview'
+      showAnalysis.value = true
+    } else {
+      error.value = data.error || '生成失败'
+    }
+  } else if (event === 'error') {
+    error.value = data.error || '生成失败'
+  }
 }
 
 async function confirmSave() {
@@ -308,14 +470,39 @@ onMounted(() => {
 }
 .summary-row span:first-child { color: var(--text-dim); }
 
-.generating-hint {
+/* Agent Progress */
+.agent-progress {
+  margin-top: 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.progress-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.progress-step {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 8px;
   font-size: 13px;
-  color: var(--text-dim);
+  transition: opacity 0.3s;
 }
+.progress-step.pending { opacity: 0.4; }
+.progress-step.active { opacity: 1; }
+.progress-step.done { opacity: 0.8; }
+.step-icon { font-size: 16px; }
+.step-label { font-weight: 500; }
+.step-detail { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+.progress-step.active .step-icon { animation: pulse 1.2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
 .gen-error {
   margin-top: 12px;
@@ -327,13 +514,91 @@ onMounted(() => {
   font-size: 13px;
 }
 
+/* Analysis Report */
+.analysis-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.section-title.clickable {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.toggle-icon { font-size: 10px; color: var(--text-dim); }
+.confidence-badge {
+  margin-left: auto;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(34,197,94,0.15);
+  color: var(--green);
+  font-weight: 500;
+}
+.analysis-content {
+  margin-top: 12px;
+}
+.analysis-item {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.analysis-item:last-child { border-bottom: none; margin-bottom: 0; }
+.analysis-item.disclaimer {
+  background: rgba(239,68,68,0.05);
+  border-radius: 6px;
+  padding: 10px;
+  border-bottom: none;
+}
+.analysis-label {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.analysis-item p {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0;
+}
+.analysis-trend {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+.analysis-trend b { color: var(--text-muted); }
+.analysis-list {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.list-label { font-weight: 600; }
+
+/* Preview */
 .preview-section {
   margin-bottom: 16px;
+}
+.section-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 .info-list { font-size: 14px; }
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .info-row:last-child { border-bottom: none; }
 .info-label { color: var(--text-dim); font-size: 13px; }
+
+.risk-info {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.8;
+}
+.risk-info b { color: var(--text-muted); }
+.risk-info ul { margin: 4px 0 4px 16px; padding: 0; }
+.risk-info li { margin-bottom: 2px; }
 
 .plan-preview-list { display: flex; flex-direction: column; gap: 8px; }
 .plan-preview-item {
@@ -343,6 +608,15 @@ onMounted(() => {
 }
 .plan-preview-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
 .plan-preview-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-dim); }
+.plan-rationale {
+  font-size: 11px;
+  color: var(--primary);
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(59,130,246,0.06);
+  border-radius: 4px;
+  line-height: 1.5;
+}
 .plan-asset-tag {
   font-size: 11px;
   padding: 2px 6px;

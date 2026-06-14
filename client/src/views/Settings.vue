@@ -107,8 +107,23 @@
             </div>
             <input class="setting-input" type="text" v-model="form.ai_model" placeholder="gpt-4o-mini" style="width:160px" @input="dirty.ai = true" />
           </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">分析模型</span>
+              <span class="setting-desc">Agent 研判用的模型（可选更强的模型）</span>
+            </div>
+            <input class="setting-input" type="text" v-model="form.agent_analysis_model" placeholder="同上" style="width:160px" @input="dirty.ai = true" />
+          </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">搜索 API 地址 <span class="setting-desc">(可选，增强市场资讯获取)</span></span>
+            <input class="setting-input-full" type="url" v-model="form.agent_search_api_url" placeholder="https://api.search.example/v1/search" @input="dirty.ai = true" />
+          </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">搜索 API Key</span>
+            <input class="setting-input-full" type="password" v-model="form.agent_search_api_key" placeholder="可选" @input="dirty.ai = true" />
+          </div>
         </div>
-        <div class="settings-group-footer">支持 OpenAI 兼容接口。也可通过环境变量 AI_API_URL / AI_API_KEY / AI_MODEL 配置。</div>
+        <div class="settings-group-footer">支持 OpenAI 兼容接口。策略 Agent 会先进行市场研判再生成操盘计划。搜索 API 可增强外部数据能力（可选）。</div>
       </div>
 
       <!-- 账号与安全 -->
@@ -148,6 +163,9 @@ const form = reactive({
   ai_api_url: '',
   ai_api_key: '',
   ai_model: '',
+  agent_analysis_model: '',
+  agent_search_api_url: '',
+  agent_search_api_key: '',
   wechat_notify: 'true',
   webpush_notify: 'true',
   notify_plan_triggered: 'true',
@@ -170,7 +188,7 @@ const notifyEvents = [
 
 const groupKeys = {
   market: ['refresh_interval', 'price_alert_threshold', 'plan_approaching_pct'],
-  ai: ['ai_api_url', 'ai_api_key', 'ai_model'],
+  ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_search_api_url', 'agent_search_api_key'],
 }
 
 async function load() {

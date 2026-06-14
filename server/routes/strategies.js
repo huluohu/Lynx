@@ -161,6 +161,47 @@ router.post('/ai-generate', async (req, res) => {
   }
 });
 
+// POST AI Agent 智能生成策略 (SSE 流式)
+router.post('/ai-agent-generate', async (req, res) => {
+  const { asset_id, asset_ids, budget, goal, risk_level } = req.body;
+  const ids = asset_ids && asset_ids.length > 0 ? asset_ids : (asset_id ? [asset_id] : []);
+  if (ids.length === 0) return res.status(400).json({ success: false, error: '请选择资产' });
+
+  // SSE setup
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  log.info('Agent generate request (SSE)', { asset_ids: ids, budget, goal, risk_level });
+
+  try {
+    const { runStrategyAgent } = await import('../services/strategy-agent.js');
+    const result = await runStrategyAgent(getDb(), {
+      assetIds: ids,
+      budget: Number(budget) || 20000,
+      goal: goal || 'recovery',
+      riskLevel: risk_level || 'medium',
+    }, (step, message) => {
+      sendEvent('progress', { step, message });
+    });
+
+    sendEvent('result', { success: true, data: result });
+    log.info('Agent generate success', { asset_ids: ids, strategy: result.strategy?.name });
+  } catch (e) {
+    log.error('Agent generate failed', { asset_ids: ids, error: e.message });
+    sendEvent('error', { success: false, error: e.message });
+  }
+
+  res.end();
+});
+
 // POST AI 生成后确认保存
 router.post('/ai-confirm', (req, res) => {
   const { asset_id, asset_ids, strategy, plans } = req.body;
