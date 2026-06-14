@@ -73,7 +73,7 @@
           <div class="history-card-body">
             <span>{{ h.quantity }} × ¥{{ h.price }}</span>
             <span>= ¥{{ fmt(h.total) }}</span>
-            <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':''}}\¥{{ fmt(Math.abs(h.pnl)) }}</span>
+            <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':''}}¥{{ fmt(Math.abs(h.pnl)) }}</span>
           </div>
           <div v-if="h.reason" class="history-card-reason">{{ h.reason }}</div>
         </div>
@@ -112,11 +112,13 @@ async function addRecord() {
       pnl: form.pnl ? Number(form.pnl) : null,
       pnl_pct: form.pnl_pct ? Number(form.pnl_pct) : null,
     }
-    await api('/api/history', { method:'POST', body:JSON.stringify(body) })
+    const res = await api('/api/history', { method:'POST', body:JSON.stringify(body) })
+    const json = await res.json()
+    if (!json.success) { alert('保存失败: ' + (json.error || '未知错误')); return }
     showForm.value = false
     loadData()
-  } catch (e) { alert('保存失败') }
-  submitting.value = false
+  } catch (e) { alert('保存失败: ' + e.message) }
+  finally { submitting.value = false }
 }
 function fmt(n) {
   if (!n && n!==0) return '0'

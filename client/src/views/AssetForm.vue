@@ -92,11 +92,11 @@ async function submit() {
       body: JSON.stringify(form)
     })
     const json = await res.json()
-    if (!json.success) return alert('创建失败: ' + json.error)
+    if (!json.success) { alert('创建失败: ' + json.error); return }
 
     // Create holding if provided
     if (holding.quantity && holding.avg_cost) {
-      await api('/api/holdings', {
+      const hRes = await api('/api/holdings', {
         method: 'POST',
         body: JSON.stringify({
           asset_id: json.data.id,
@@ -104,11 +104,14 @@ async function submit() {
           avg_cost: Number(holding.avg_cost),
         })
       })
+      const hJson = await hRes.json()
+      if (!hJson.success) { alert('资产已创建，但持仓初始化失败: ' + hJson.error); }
     }
     router.push('/assets')
   } catch (e) {
     alert('创建失败: ' + e.message)
+  } finally {
+    submitting.value = false
   }
-  submitting.value = false
 }
 </script>

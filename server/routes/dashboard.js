@@ -8,7 +8,7 @@ router.get('/summary', (req, res) => {
   const db = getDb();
 
   // 持仓汇总
-  const holdings = db.prepare(`SELECT h.*, a.name, a.symbol, a.type, a.icon
+  const holdings = db.prepare(`SELECT h.*, a.name, a.symbol, a.type, a.icon, a.currency
     FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'`).all();
 
   // 最新价格
@@ -34,6 +34,7 @@ router.get('/summary', (req, res) => {
       symbol: h.symbol,
       type: h.type,
       icon: h.icon,
+      currency: h.currency || 'CNY',
       quantity: h.quantity,
       avg_cost: h.avg_cost,
       price,
@@ -162,7 +163,7 @@ router.get('/alerts', (req, res) => {
         symbol: h.symbol,
         message: diffPct <= 0
           ? `🚨 ${h.name} 触发止损线 ${stopLoss}！`
-          : `⚠️ ${h.name} 距止损线 ${stopLoss} 仅 ${diffPct.toFixed(1)}%（当前 ¥${price}）`,
+          : `⚠️ ${h.name} 距止损线 ${stopLoss} 仅 ${diffPct.toFixed(1)}%（当前 ${priceData.currency === 'USD' ? '$' : '¥'}${price}）`,
         current_price: price,
         stop_loss: stopLoss,
         diff_pct: diffPct,

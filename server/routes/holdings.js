@@ -25,6 +25,12 @@ router.post('/', (req, res) => {
   const { asset_id, quantity, avg_cost, total_invested, target_price, stop_loss, notes } = req.body;
   if (!asset_id || !quantity || !avg_cost) return res.status(400).json({ success: false, error: 'asset_id/quantity/avg_cost required' });
 
+  // Prevent duplicate active holdings for the same asset
+  const existing = db.prepare("SELECT id FROM holdings WHERE asset_id = ? AND status = 'active'").get(asset_id);
+  if (existing) {
+    return res.status(400).json({ success: false, error: '该资产已存在活跃持仓，请直接编辑现有持仓' });
+  }
+
   const total = total_invested || (quantity * avg_cost);
   const info = db.prepare(`INSERT INTO holdings (asset_id, quantity, avg_cost, total_invested, target_price, stop_loss, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?)`).run(asset_id, quantity, avg_cost, total, target_price || null, stop_loss || null, notes || null);

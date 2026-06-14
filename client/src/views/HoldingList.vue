@@ -12,10 +12,10 @@
           <tr v-for="h in holdings" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
             <td>{{ h.icon }} {{ h.name }} <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
             <td style="font-weight:600">{{ h.quantity }}</td>
-            <td>¥{{ fmt(h.avg_cost) }}</td>
-            <td>¥{{ fmt(h.total_invested) }}</td>
-            <td>{{ h.target_price ? '¥'+h.target_price : '-' }}</td>
-            <td style="color:var(--red)">{{ h.stop_loss ? '¥'+h.stop_loss : '-' }}</td>
+            <td>{{ cs(h) }}{{ fmt(h.avg_cost) }}</td>
+            <td>{{ cs(h) }}{{ fmt(h.total_invested) }}</td>
+            <td>{{ h.target_price ? cs(h)+h.target_price : '-' }}</td>
+            <td style="color:var(--red)">{{ h.stop_loss ? cs(h)+h.stop_loss : '-' }}</td>
             <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span></td>
             <td @click.stop>
               <div style="display:flex;gap:6px">
@@ -36,25 +36,26 @@
           </div>
           <div class="holding-card-body">
             <div><span class="meta-label">数量</span> {{ h.quantity }}</div>
-            <div><span class="meta-label">成本</span> ¥{{ fmt(h.avg_cost) }}</div>
-            <div><span class="meta-label">投入</span> ¥{{ fmt(h.total_invested) }}</div>
+            <div><span class="meta-label">成本</span> {{ cs(h) }}{{ fmt(h.avg_cost) }}</div>
+            <div><span class="meta-label">投入</span> {{ cs(h) }}{{ fmt(h.total_invested) }}</div>
           </div>
         </div>
       </div>
     </div>
-    <div v-else class="card empty">
+    <div v-else-if="!loading" class="card empty">
       <div class="empty-icon">📦</div><p>暂无持仓</p>
     </div>
+    <div v-else class="card empty"><span class="spinner"></span></div>
 
     <!-- Detail Drawer -->
     <AppDrawer v-model="showDetail" :title="currentHolding?.name || '持仓详情'">
       <div v-if="currentHolding" class="info-list">
         <div class="info-row"><span class="info-label">资产</span><span>{{ currentHolding.icon }} {{ currentHolding.name }}</span></div>
         <div class="info-row"><span class="info-label">数量</span><span style="font-weight:600">{{ currentHolding.quantity }}</span></div>
-        <div class="info-row"><span class="info-label">成本价</span><span>¥{{ fmt(currentHolding.avg_cost) }}</span></div>
-        <div class="info-row"><span class="info-label">总投入</span><span>¥{{ fmt(currentHolding.total_invested) }}</span></div>
-        <div class="info-row"><span class="info-label">目标价</span><span>{{ currentHolding.target_price ? '¥'+currentHolding.target_price : '-' }}</span></div>
-        <div class="info-row"><span class="info-label">止损线</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? '¥'+currentHolding.stop_loss : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">成本价</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.avg_cost) }}</span></div>
+        <div class="info-row"><span class="info-label">总投入</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.total_invested) }}</span></div>
+        <div class="info-row"><span class="info-label">目标价</span><span>{{ currentHolding.target_price ? cs(currentHolding)+currentHolding.target_price : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">止损线</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? cs(currentHolding)+currentHolding.stop_loss : '-' }}</span></div>
       </div>
 
       <div style="margin-top:20px">
@@ -85,11 +86,13 @@
 import { ref, reactive, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { currencySymbol } from '../utils/currency.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 
 const toast = useToast()
 const holdings = ref([])
+const loading = ref(true)
 const showDetail = ref(false)
 const showTxDrawer = ref(false)
 const currentHolding = ref(null)
@@ -98,9 +101,11 @@ const editHolding = reactive({ target_price: '', stop_loss: '' })
 const savingHolding = ref(false)
 
 async function loadData() {
-  const res = await api('/api/holdings')
-  const json = await res.json()
-  holdings.value = json.data || []
+  try {
+    const res = await api('/api/holdings')
+    const json = await res.json()
+    holdings.value = json.data || []
+  } finally { loading.value = false }
 }
 
 function openDetail(h) {
@@ -136,6 +141,7 @@ function onTxSuccess() {
   loadData()
 }
 
+function cs(h) { return currencySymbol(h?.currency) }
 function fmt(n) {
   if (!n && n !== 0) return '0'
   return Math.round(n).toLocaleString()

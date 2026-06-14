@@ -101,9 +101,37 @@ ${isMulti ? `- 每条操盘计划的 asset_id 必须是以下之一: ${assetList
 }
 
 /**
- * 调用 OpenAI 兼容 API
+ * 调用 OpenAI 兼容 API（带重试和状态码检查）
  */
-function callLLM(apiUrl, apiKey, model, prompt) {
+function callLLM(apiUrl, apiKey, model, prompt, retries = 2) {
+  return new Promise(async (resolve) => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const result = await _doLLMRequest(apiUrl, apiKey, model, prompt);
+      if (result) {
+        // Check for API-level errors
+        if (result.error) {
+          log.warn('LLM API error', { error: result.error.message, attempt });
+          if (attempt < retries) {
+            await sleep(1000 * (attempt + 1)); // backoff
+            continue;
+          }
+        }
+        resolve(result);
+        return;
+      }
+      // null result = network/timeout error
+      if (attempt < retries) {
+        log.warn('LLM request failed, retrying', { attempt: attempt + 1 });
+        await sleep(1000 * (attempt + 1));
+      }
+    }
+    resolve(null);
+  });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function _doLLMRequest(apiUrl, apiKey, model, prompt) {
   return new Promise((resolve) => {
     const url = new URL(apiUrl.endsWith('/chat/completions') ? apiUrl : `${apiUrl}/chat/completions`);
     const isHttps = url.protocol === 'https:';
@@ -135,6 +163,11 @@ function callLLM(apiUrl, apiKey, model, prompt) {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
+        if (res.statusCode >= 500 || res.statusCode === 429) {
+          log.warn('LLM HTTP error', { status: res.statusCode });
+          resolve(null); // trigger retry
+          return;
+        }
         try { resolve(JSON.parse(data)); } catch { resolve(null); }
       });
     });

@@ -34,8 +34,12 @@ export function runMigrations() {
     if (exists) continue;
 
     const sql = readFileSync(join(migDir, f), 'utf8');
-    d.exec(sql);
-    d.prepare('INSERT INTO _migrations (name) VALUES (?)').run(f);
+    // Apply migration and record it atomically
+    const applyMigration = d.transaction(() => {
+      d.exec(sql);
+      d.prepare('INSERT INTO _migrations (name) VALUES (?)').run(f);
+    });
+    applyMigration();
     log.info('Migration applied', { file: f });
     applied++;
   }

@@ -145,8 +145,10 @@ export async function fetchPrice(asset) {
     if (asset.type === 'gold') {
       const price = await fetchGold(asset.id, asset.symbol);
       if (price) {
-        log.debug('Gold price resolved', { assetId: asset.id, price });
-        return { price, currency: 'CNY', source: 'neodata' };
+        // Determine currency from asset
+        const currency = asset.currency || (asset.symbol?.includes('XAUUSD') || asset.symbol?.includes('AUUSDO') ? 'USD' : 'CNY');
+        log.debug('Gold price resolved', { assetId: asset.id, price, currency });
+        return { price, currency, source: 'neodata' };
       }
       log.warn('Gold price fetch failed', { assetId: asset.id, symbol: asset.symbol });
       return null;
@@ -154,7 +156,10 @@ export async function fetchPrice(asset) {
     if (asset.type === 'crypto') {
       const data = await fetchBTC();
       if (!data) return null;
-      return { price: data.usd, currency: 'USD', source: 'coingecko', details: data };
+      // Use asset's configured currency if available
+      const currency = asset.currency || 'USD';
+      const price = currency === 'CNY' ? data.cny : data.usd;
+      return { price, currency, source: 'coingecko', details: data };
     }
     log.debug('No price fetcher for asset type', { type: asset.type });
     return null;

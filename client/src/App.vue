@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout">
+  <div class="app-layout" v-if="authStore.isLoggedIn">
     <AppToast />
     <!-- Menu toggle (mobile) -->
     <button class="menu-toggle" @click="sidebarOpen = !sidebarOpen">☰</button>
@@ -73,10 +73,14 @@
       </div>
     </nav>
   </div>
+  <div v-else>
+    <AppToast />
+    <router-view />
+  </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth.js'
 import { api } from './utils/api.js'
@@ -89,6 +93,7 @@ const unreadCount = ref(0)
 let pollTimer
 
 async function fetchUnread() {
+  if (!authStore.isLoggedIn) return
   try {
     const res = await api('/api/notifications/unread-count')
     const json = await res.json()
@@ -101,13 +106,26 @@ function doLogout() {
   router.push('/login')
 }
 
-onMounted(() => {
+function startPolling() {
   fetchUnread()
   pollTimer = setInterval(fetchUnread, 30000)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+watch(() => authStore.isLoggedIn, (loggedIn) => {
+  if (loggedIn) startPolling()
+  else { stopPolling(); unreadCount.value = 0 }
+})
+
+onMounted(() => {
+  if (authStore.isLoggedIn) startPolling()
 })
 
 onUnmounted(() => {
-  clearInterval(pollTimer)
+  stopPolling()
 })
 </script>
 

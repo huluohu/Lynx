@@ -3,11 +3,22 @@ import { getDb } from '../db/database.js';
 
 const router = Router();
 
+// Keys that should be masked when reading
+const SECRET_KEYS = ['ai_api_key', 'agent_search_api_key'];
+
+function maskValue(key, value) {
+  if (SECRET_KEYS.includes(key) && value) {
+    // Show only last 4 chars
+    return value.length > 4 ? '****' + value.slice(-4) : '****';
+  }
+  return value;
+}
+
 // GET 所有设置
 router.get('/', (req, res) => {
   const rows = getDb().prepare('SELECT key, value FROM settings ORDER BY key').all();
   const settings = {};
-  for (const r of rows) settings[r.key] = r.value;
+  for (const r of rows) settings[r.key] = maskValue(r.key, r.value);
   res.json({ success: true, data: settings });
 });
 
@@ -15,15 +26,19 @@ router.get('/', (req, res) => {
 router.get('/:key', (req, res) => {
   const row = getDb().prepare('SELECT key, value FROM settings WHERE key = ?').get(req.params.key);
   if (!row) return res.status(404).json({ success: false, error: '设置不存在' });
-  res.json({ success: true, data: { [row.key]: row.value } });
+  res.json({ success: true, data: { [row.key]: maskValue(row.key, row.value) } });
 });
 
 // PUT 更新设置
 router.put('/:key', (req, res) => {
   const { value } = req.body;
   if (value === undefined) return res.status(400).json({ success: false, error: 'value 不能为空' });
+  // Don't save masked values back
+  if (SECRET_KEYS.includes(req.params.key) && String(value).startsWith('****')) {
+    return res.json({ success: true, data: { [req.params.key]: String(value) } });
+  }
   getDb().prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime(\'now\')').run(req.params.key, String(value));
-  res.json({ success: true, data: { [req.params.key]: String(value) } });
+  res.json({ success: true, data: { [req.params.key]: maskValue(req.params.key, String(value)) } });
 });
 
 // PUT 批量更新

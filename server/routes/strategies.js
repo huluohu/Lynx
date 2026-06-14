@@ -117,19 +117,17 @@ router.post('/:id/generate-plan', (req, res) => {
   try {
     const plans = generatePlan(holding, strategy.type, params);
 
-    // 删除旧计划，写入新计划
-    db.prepare('DELETE FROM trading_plans WHERE strategy_id = ?').run(strategy.id);
-
-    const insert = db.prepare(`INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-
-    const insertMany = db.transaction((items) => {
+    // Delete old plans and insert new ones in a single transaction
+    const regenerate = db.transaction((items) => {
+      db.prepare('DELETE FROM trading_plans WHERE strategy_id = ?').run(strategy.id);
+      const insert = db.prepare(`INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const p of items)
         insert.run(strategy.id, p.asset_id || strategy.asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
     });
 
-    insertMany(plans);
+    regenerate(plans);
 
     const result = db.prepare('SELECT * FROM trading_plans WHERE strategy_id = ? ORDER BY seq').all(strategy.id);
     res.json({ success: true, data: result, count: result.length });
@@ -213,26 +211,27 @@ router.post('/ai-confirm', (req, res) => {
   const assetIdsJson = ids.length > 1 ? JSON.stringify(ids) : null;
 
   try {
-    // 保存策略
-    const params = typeof strategy.parameters === 'string' ? strategy.parameters : JSON.stringify(strategy.parameters);
-    const sResult = db.prepare(
-      'INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, 'active');
-    const strategyId = sResult.lastInsertRowid;
+    // Save strategy + plans in one transaction for atomicity
+    const saveAll = db.transaction(() => {
+      const params = typeof strategy.parameters === 'string' ? strategy.parameters : JSON.stringify(strategy.parameters);
+      const sResult = db.prepare(
+        'INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, 'active');
+      const strategyId = sResult.lastInsertRowid;
 
-    // 保存操盘计划
-    const insert = db.prepare(
-      'INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    const insertMany = db.transaction((items) => {
-      for (const p of items) {
+      const insert = db.prepare(
+        'INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      );
+      for (const p of plans) {
         const planAssetId = p.asset_id || primaryAssetId;
         insert.run(strategyId, planAssetId, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
       }
-    });
-    insertMany(plans);
 
+      return strategyId;
+    });
+
+    const strategyId = saveAll();
     res.json({ success: true, data: { strategyId } });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });

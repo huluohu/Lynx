@@ -332,6 +332,56 @@ function buildParameters() {
 }
 
 async function submit() {
+  // Validate required fields
+  if (!form.name || !form.type) {
+    toast.error('请填写策略名称和类型')
+    return
+  }
+  if (selectedAssetIds.value.length === 0) {
+    toast.error('请选择至少一个关联资产')
+    return
+  }
+
+  // Validate parameters per type
+  if (form.type === 'recovery') {
+    if (!globalBudget.value || Number(globalBudget.value) <= 0) {
+      toast.error('请设置有效的预算金额')
+      return
+    }
+  } else if (form.type === 'grid') {
+    for (const id of selectedAssetIds.value) {
+      const g = getAssetGrid(id)
+      if (!g.low || !g.high || Number(g.low) <= 0 || Number(g.high) <= 0) {
+        toast.error(`请为 ${getAsset(id)?.name || '资产'} 设置有效的网格高低价`)
+        return
+      }
+      if (Number(g.low) >= Number(g.high)) {
+        toast.error(`${getAsset(id)?.name || '资产'} 的网格低价必须小于高价`)
+        return
+      }
+      if (!g.grids || Number(g.grids) < 2) {
+        toast.error(`${getAsset(id)?.name || '资产'} 的网格数必须大于1`)
+        return
+      }
+    }
+  } else if (form.type === 'dca') {
+    for (const id of selectedAssetIds.value) {
+      const d = getAssetDCA(id)
+      if (!d.amount_per || Number(d.amount_per) <= 0) {
+        toast.error(`请为 ${getAsset(id)?.name || '资产'} 设置有效的定投金额`)
+        return
+      }
+    }
+  } else if (form.type === 'value_avg') {
+    for (const id of selectedAssetIds.value) {
+      const v = getAssetValueAvg(id)
+      if (!v.target_value || Number(v.target_value) <= 0) {
+        toast.error(`请为 ${getAsset(id)?.name || '资产'} 设置有效的目标市值`)
+        return
+      }
+    }
+  }
+
   submitting.value = true
   try {
     const p = buildParameters()
@@ -350,7 +400,7 @@ async function submit() {
     toast.success(isEdit.value ? '策略已更新' : '策略已创建')
     router.push(isEdit.value ? `/strategies/${strategyId.value}` : '/strategies')
   } catch (e) { toast.error(e.message) }
-  submitting.value = false
+  finally { submitting.value = false }
 }
 
 onMounted(async () => {

@@ -36,37 +36,41 @@ router.put('/read-all', (req, res) => {
   res.json({ success: true });
 });
 
-// GET 待推送微信通知（标记为 sent 后返回）
-router.get('/send-wechat', (req, res) => {
+// POST 推送微信通知（原子操作：获取 → 标记 → 返回）
+router.post('/send-wechat', (req, res) => {
   const db = getDb();
-  // 获取所有 wechat/all 通道的 pending 通知
-  const rows = db.prepare(`SELECT * FROM notifications
-    WHERE status = 'pending' AND channel IN ('wechat', 'all')
-    ORDER BY created_at ASC`).all();
 
-  if (rows.length === 0) {
-    return res.json({ success: true, data: [], message: '' });
-  }
+  // Atomically select and mark notifications as sent
+  const sendBatch = db.transaction(() => {
+    const rows = db.prepare(`SELECT * FROM notifications
+      WHERE status = 'pending' AND channel IN ('wechat', 'all')
+      ORDER BY created_at ASC`).all();
 
-  // 标记为 sent
-  const ids = rows.map(r => r.id);
-  const placeholders = ids.map(() => '?').join(',');
-  db.prepare(`UPDATE notifications SET status = 'sent', sent_at = datetime('now') WHERE id IN (${placeholders})`).run(...ids);
+    if (rows.length === 0) return { rows: [], message: '' };
 
-  // 格式化消息
-  const lines = ['📊 **投资提醒**'];
-  for (const n of rows) {
-    const icons = {
-      plan_triggered: '📌',
-      plan_approaching: '⏳',
-      stop_loss: '🛑',
-      price_swing: '📊',
-      trade_executed: '💱',
-    };
-    lines.push(`${icons[n.type] || '🔔'} ${n.title}: ${n.message}`);
-  }
+    // Mark as sent
+    const ids = rows.map(r => r.id);
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`UPDATE notifications SET status = 'sent', sent_at = datetime('now') WHERE id IN (${placeholders})`).run(...ids);
 
-  res.json({ success: true, data: rows, message: lines.join('\n') });
+    // Format message
+    const lines = ['📊 **投资提醒**'];
+    for (const n of rows) {
+      const icons = {
+        plan_triggered: '📌',
+        plan_approaching: '⏳',
+        stop_loss: '🛑',
+        price_swing: '📊',
+        trade_executed: '💱',
+      };
+      lines.push(`${icons[n.type] || '🔔'} ${n.title}: ${n.message}`);
+    }
+
+    return { rows, message: lines.join('\n') };
+  });
+
+  const result = sendBatch();
+  res.json({ success: true, data: result.rows, message: result.message });
 });
 
 // 插入通知（被其他模块调用）

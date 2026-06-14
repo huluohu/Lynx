@@ -42,12 +42,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// ===== 全局错误处理 =====
-app.use((err, req, res, next) => {
-  log.error('Unhandled error', { path: req.url, error: err.message, stack: err.stack?.split('\n')[1]?.trim() });
-  res.status(500).json({ success: false, error: '服务器内部错误' });
-});
-
 // ===== Health（无需认证） =====
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
@@ -71,6 +65,12 @@ app.use('/api/history', historyRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/notifications', notificationsRouter);
+
+// ===== 全局错误处理（必须在所有路由之后） =====
+app.use((err, req, res, next) => {
+  log.error('Unhandled error', { path: req.url, error: err.message, stack: err.stack?.split('\n')[1]?.trim() });
+  res.status(500).json({ success: false, error: '服务器内部错误' });
+});
 
 // ===== 静态文件（生产环境） =====
 const distDir = join(__dirname, '..', 'client', 'dist');

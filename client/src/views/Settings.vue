@@ -197,7 +197,14 @@ async function load() {
     const json = await res.json()
     if (!json.success) return
     for (const [k, v] of Object.entries(json.data)) {
-      if (k in form) form[k] = v
+      if (k in form) {
+        // Don't overwrite password fields with masked values
+        if ((k === 'ai_api_key' || k === 'agent_search_api_key') && v && v.startsWith('****')) {
+          form[k] = v // show masked placeholder
+        } else {
+          form[k] = v
+        }
+      }
     }
   } catch {}
 }
@@ -207,24 +214,28 @@ async function saveGroup(group) {
   if (!keys) return
   try {
     for (const key of keys) {
-      await api(`/api/settings/${key}`, {
+      const res = await api(`/api/settings/${key}`, {
         method: 'PUT',
         body: JSON.stringify({ value: form[key] })
       })
+      const json = await res.json()
+      if (!json.success) { alert(`保存失败 (${key}): ` + (json.error || '未知错误')); return }
     }
     dirty[group] = false
     saveState[group] = 'saved'
     setTimeout(() => { saveState[group] = '' }, 2000)
-  } catch {}
+  } catch (e) { alert('保存失败: ' + e.message) }
 }
 
 async function saveKey(key, value) {
   try {
-    await api(`/api/settings/${key}`, {
+    const res = await api(`/api/settings/${key}`, {
       method: 'PUT',
       body: JSON.stringify({ value })
     })
-  } catch {}
+    const json = await res.json()
+    if (!json.success) { alert(`保存失败: ` + (json.error || '未知错误')) }
+  } catch (e) { alert('保存失败: ' + e.message) }
 }
 
 function doLogout() {

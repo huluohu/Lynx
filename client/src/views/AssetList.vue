@@ -18,8 +18,8 @@
             <td style="color:var(--text-dim)">{{ a.symbol }}</td>
             <td><span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span></td>
             <td>{{ a.quantity ? a.quantity.toFixed(4) : '-' }}</td>
-            <td>¥{{ fmt(a.avg_cost) }}</td>
-            <td>¥{{ fmt(a.total_invested) }}</td>
+            <td>{{ cs(a) }}{{ fmt(a.avg_cost) }}</td>
+            <td>{{ cs(a) }}{{ fmt(a.total_invested) }}</td>
             <td>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-sm" @click.prevent="openTx(a)">+ 交易</button>
@@ -41,15 +41,16 @@
           <div style="font-size:12px;color:var(--text-dim)">{{ a.symbol }}</div>
           <div class="asset-card-meta">
             <span v-if="a.quantity">{{ a.quantity.toFixed(4) }}</span>
-            <span v-if="a.total_invested">¥{{ fmt(a.total_invested) }}</span>
+            <span v-if="a.total_invested">{{ cs(a) }}{{ fmt(a.total_invested) }}</span>
           </div>
         </div>
       </div>
     </div>
-    <div v-else class="card empty">
+    <div v-else-if="!loading" class="card empty">
       <div class="empty-icon">📭</div>
       <p>还没有资产，<router-link to="/assets/add">添加一个</router-link></p>
     </div>
+    <div v-else class="card empty"><span class="spinner"></span></div>
 
     <!-- Transaction Drawer -->
     <AppDrawer v-model="showTxDrawer" :title="`记录交易 - ${txAsset?.name || ''}`">
@@ -68,8 +69,8 @@
         <div v-if="detailAsset.quantity" class="detail-section">
           <div class="detail-section-title">持仓信息</div>
           <div class="detail-row"><span>数量</span><b>{{ detailAsset.quantity?.toFixed(4) }}</b></div>
-          <div class="detail-row"><span>成本价</span><span>¥{{ fmt(detailAsset.avg_cost) }}</span></div>
-          <div class="detail-row"><span>总投入</span><span>¥{{ fmt(detailAsset.total_invested) }}</span></div>
+          <div class="detail-row"><span>成本价</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.avg_cost) }}</span></div>
+          <div class="detail-row"><span>总投入</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.total_invested) }}</span></div>
         </div>
 
         <div class="detail-actions">
@@ -85,20 +86,24 @@
 import { ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { currencySymbol } from '../utils/currency.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 
 const toast = useToast()
 const assets = ref([])
+const loading = ref(true)
 const showTxDrawer = ref(false)
 const txAsset = ref(null)
 const showDetailDrawer = ref(false)
 const detailAsset = ref(null)
 
 async function loadData() {
-  const res = await api('/api/assets')
-  const json = await res.json()
-  assets.value = json.data || []
+  try {
+    const res = await api('/api/assets')
+    const json = await res.json()
+    assets.value = json.data || []
+  } finally { loading.value = false }
 }
 
 function openDetail(a) {
@@ -126,6 +131,7 @@ function onTxSuccess() {
 function typeBadge(type) {
   return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
+function cs(a) { return currencySymbol(a?.currency) }
 function fmt(n) {
   if (!n && n !== 0) return '-'
   return Math.round(n).toLocaleString()
