@@ -26,11 +26,15 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">关联资产</label>
-            <select class="form-select" v-model="form.asset_id">
-              <option :value="null">不关联</option>
-              <option v-for="a in assets" :key="a.id" :value="a.id">{{ a.icon }} {{ a.name }}</option>
-            </select>
+            <label class="form-label">关联资产（可多选）</label>
+            <div class="asset-multi-select">
+              <div v-for="a in assets" :key="a.id" class="asset-chip"
+                   :class="{ selected: selectedAssetIds.includes(a.id) }"
+                   @click="toggleAsset(a.id)">
+                {{ a.icon }} {{ a.name }}
+              </div>
+            </div>
+            <div v-if="selectedAssetIds.length > 0" class="selected-hint">已选 {{ selectedAssetIds.length }} 个资产</div>
           </div>
         </div>
 
@@ -112,10 +116,17 @@ const submitting = ref(false)
 const assets = ref([])
 const isEdit = ref(false)
 const strategyId = ref(null)
-const form = reactive({ name: '', description: '', type: '', asset_id: null })
+const selectedAssetIds = ref([])
+const form = reactive({ name: '', description: '', type: '' })
 const params = reactive({ amount_per: 1000, periods: 10, frequency: 'weekly', low: 800, high: 1200, grids: 5, target_value: 50000, growth_rate_val: 2, budget: 20000 })
 const buyLines = reactive([])
 const sellLines = reactive([])
+
+function toggleAsset(id) {
+  const idx = selectedAssetIds.value.indexOf(id)
+  if (idx >= 0) selectedAssetIds.value.splice(idx, 1)
+  else selectedAssetIds.value.push(id)
+}
 
 function onTypeChange() {
   // reset defaults
@@ -136,9 +147,14 @@ async function submit() {
 
     const url = isEdit.value ? `/api/strategies/${strategyId.value}` : '/api/strategies'
     const method = isEdit.value ? 'PUT' : 'POST'
+    const body = {
+      name: form.name, description: form.description, type: form.type, parameters: p,
+      asset_id: selectedAssetIds.value[0] || null,
+      asset_ids: selectedAssetIds.value.length > 0 ? selectedAssetIds.value : undefined,
+    }
     const res = await api(url, {
       method,
-      body: JSON.stringify({ name: form.name, description: form.description, type: form.type, asset_id: form.asset_id, parameters: p })
+      body: JSON.stringify(body)
     })
     const json = await res.json()
     if (!json.success) return toast.error(json.error || '保存失败')
@@ -165,7 +181,11 @@ onMounted(async () => {
       form.name = s.name
       form.description = s.description || ''
       form.type = s.type
-      form.asset_id = s.asset_id
+      if (s.asset_ids) {
+        try { selectedAssetIds.value = JSON.parse(s.asset_ids) } catch { selectedAssetIds.value = s.asset_id ? [s.asset_id] : [] }
+      } else if (s.asset_id) {
+        selectedAssetIds.value = [s.asset_id]
+      }
       try {
         const p = JSON.parse(s.parameters || '{}')
         if (s.type === 'dca') { params.amount_per = p.amount_per; params.periods = p.periods; params.frequency = p.frequency }
@@ -183,6 +203,32 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.asset-multi-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.asset-chip {
+  padding: 8px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+.asset-chip:hover { border-color: var(--primary); }
+.asset-chip.selected {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.selected-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
 .lines-editor {
   display: flex;
   flex-direction: column;

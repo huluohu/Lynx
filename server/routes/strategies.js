@@ -11,6 +11,18 @@ router.get('/', (req, res) => {
   const db = getDb();
   const rows = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol
     FROM strategies s LEFT JOIN assets a ON s.asset_id = a.id ORDER BY s.created_at DESC`).all();
+  // Enrich multi-asset strategies with asset names
+  for (const row of rows) {
+    if (row.asset_ids) {
+      try {
+        const ids = JSON.parse(row.asset_ids);
+        if (ids.length > 0) {
+          const placeholders = ids.map(() => '?').join(',');
+          row.assets = db.prepare(`SELECT id, name, symbol, icon FROM assets WHERE id IN (${placeholders})`).all(...ids);
+        }
+      } catch {}
+    }
+  }
   res.json({ success: true, data: rows });
 });
 
@@ -20,18 +32,32 @@ router.get('/:id', (req, res) => {
   const row = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol
     FROM strategies s LEFT JOIN assets a ON s.asset_id = a.id WHERE s.id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+  // Enrich multi-asset
+  if (row.asset_ids) {
+    try {
+      const ids = JSON.parse(row.asset_ids);
+      if (ids.length > 0) {
+        const placeholders = ids.map(() => '?').join(',');
+        row.assets = db.prepare(`SELECT id, name, symbol, icon FROM assets WHERE id IN (${placeholders})`).all(...ids);
+      }
+    } catch {}
+  }
   res.json({ success: true, data: row });
 });
 
 // POST 创建
 router.post('/', (req, res) => {
   const db = getDb();
-  const { name, description, type, asset_id, parameters } = req.body;
+  const { name, description, type, asset_id, asset_ids, parameters } = req.body;
   if (!name || !type) return res.status(400).json({ success: false, error: 'name/type required' });
 
   const params = JSON.stringify(parameters || {});
-  const info = db.prepare(`INSERT INTO strategies (name, description, type, asset_id, parameters)
-    VALUES (?, ?, ?, ?, ?)`).run(name, description || null, type, asset_id || null, params);
+  const assetIdsJson = asset_ids ? JSON.stringify(asset_ids) : null;
+  // Use first asset_id from array if no single asset_id given
+  const primaryAssetId = asset_id || (asset_ids && asset_ids[0]) || null;
+
+  const info = db.prepare(`INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters)
+    VALUES (?, ?, ?, ?, ?, ?)`).run(name, description || null, type, primaryAssetId, assetIdsJson, params);
 
   const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ success: true, data: row });
@@ -43,11 +69,15 @@ router.put('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM strategies WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
 
-  const { name, description, type, asset_id, parameters, status } = req.body;
-  db.prepare(`UPDATE strategies SET name=?, description=?, type=?, asset_id=?, parameters=?,
+  const { name, description, type, asset_id, asset_ids, parameters, status } = req.body;
+  const assetIdsJson = asset_ids ? JSON.stringify(asset_ids) : existing.asset_ids;
+  const primaryAssetId = asset_id ?? (asset_ids ? asset_ids[0] : existing.asset_id);
+
+  db.prepare(`UPDATE strategies SET name=?, description=?, type=?, asset_id=?, asset_ids=?, parameters=?,
     status=?, updated_at=datetime('now') WHERE id=?`).run(
     name ?? existing.name, description ?? existing.description, type ?? existing.type,
-    asset_id ?? existing.asset_id, parameters ? JSON.stringify(parameters) : existing.parameters,
+    primaryAssetId, assetIdsJson,
+    parameters ? JSON.stringify(parameters) : existing.parameters,
     status ?? existing.status, req.params.id
   );
 
@@ -110,38 +140,43 @@ router.post('/:id/generate-plan', (req, res) => {
 
 // POST AI 智能生成策略
 router.post('/ai-generate', async (req, res) => {
-  const { asset_id, budget, goal, risk_level } = req.body;
-  if (!asset_id) return res.status(400).json({ success: false, error: '请选择资产' });
+  const { asset_id, asset_ids, budget, goal, risk_level } = req.body;
+  const ids = asset_ids && asset_ids.length > 0 ? asset_ids : (asset_id ? [asset_id] : []);
+  if (ids.length === 0) return res.status(400).json({ success: false, error: '请选择资产' });
 
-  log.info('AI generate request', { asset_id, budget, goal, risk_level });
+  log.info('AI generate request', { asset_ids: ids, budget, goal, risk_level });
   try {
     const { aiGenerateStrategy } = await import('../services/ai.js');
     const result = await aiGenerateStrategy(getDb(), {
-      assetId: asset_id,
+      assetIds: ids,
       budget: Number(budget) || 20000,
       goal: goal || 'recovery',
       riskLevel: risk_level || 'medium',
     });
-    log.info('AI generate success', { asset_id, strategyName: result.strategy?.name });
+    log.info('AI generate success', { asset_ids: ids, strategyName: result.strategy?.name });
     res.json({ success: true, data: result });
   } catch (e) {
-    log.error('AI generate failed', { asset_id, error: e.message });
+    log.error('AI generate failed', { asset_ids: ids, error: e.message });
     res.status(400).json({ success: false, error: e.message });
   }
 });
 
 // POST AI 生成后确认保存
 router.post('/ai-confirm', (req, res) => {
-  const { asset_id, strategy, plans } = req.body;
+  const { asset_id, asset_ids, strategy, plans } = req.body;
   if (!strategy || !plans) return res.status(400).json({ success: false, error: '缺少策略数据' });
 
   const db = getDb();
+  const ids = asset_ids && asset_ids.length > 0 ? asset_ids : (asset_id ? [asset_id] : []);
+  const primaryAssetId = ids[0] || null;
+  const assetIdsJson = ids.length > 1 ? JSON.stringify(ids) : null;
+
   try {
     // 保存策略
     const params = typeof strategy.parameters === 'string' ? strategy.parameters : JSON.stringify(strategy.parameters);
     const sResult = db.prepare(
-      'INSERT INTO strategies (name, description, type, asset_id, parameters, status) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(strategy.name, strategy.description || '', strategy.type, asset_id, params, 'active');
+      'INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, 'active');
     const strategyId = sResult.lastInsertRowid;
 
     // 保存操盘计划
@@ -150,7 +185,8 @@ router.post('/ai-confirm', (req, res) => {
     );
     const insertMany = db.transaction((items) => {
       for (const p of items) {
-        insert.run(strategyId, asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
+        const planAssetId = p.asset_id || primaryAssetId;
+        insert.run(strategyId, planAssetId, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
       }
     });

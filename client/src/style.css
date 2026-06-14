@@ -130,9 +130,10 @@ a:hover { opacity: 0.8; }
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px 20px;
+  min-width: 0; /* allow shrinking in grid */
 }
 .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-.stat-value { font-size: 22px; font-weight: 700; }
+.stat-value { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 
 .pnl.positive { color: var(--green); }
@@ -347,9 +348,9 @@ tr:hover td { background: var(--bg-hover); }
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
-  .main { margin-left: 0; padding: 16px; padding-bottom: 72px; }
+  .main { margin-left: 0; padding: 16px; padding-top: 56px; padding-bottom: 72px; }
   .grid-2 { grid-template-columns: 1fr; }
-  .grid-4 { grid-template-columns: 1fr; }
+  .grid-4 { grid-template-columns: 1fr 1fr; }
   .mobile-nav { display: block; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .page-title { font-size: 20px; }
@@ -362,6 +363,10 @@ tr:hover td { background: var(--bg-hover); }
   /* Mobile button sizing (44px min touch target) */
   .btn { padding: 12px 18px; font-size: 14px; min-height: 44px; border-radius: 10px; }
   .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+
+  /* Stat card on mobile */
+  .stat-value { font-size: 18px; }
+  .stat-card { padding: 12px 14px; }
 
   /* Form mobile optimization */
   .form-input, .form-select, .form-textarea {

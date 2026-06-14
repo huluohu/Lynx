@@ -24,39 +24,40 @@ function getAIConfig(db) {
 }
 
 /**
- * 构建 Prompt
+ * 构建 Prompt（支持多资产组合）
  */
 function buildPrompt(context) {
-  const { asset, holding, currentPrice, recentTrades, budget, goal, riskLevel } = context;
+  const { assets: assetList, budget, goal, riskLevel } = context;
 
-  const holdingInfo = holding
-    ? `持仓数量: ${holding.quantity}, 成本价: ${holding.avg_cost}, 总投入: ${holding.total_invested}, 当前市价: ${currentPrice || '未知'}, 浮动盈亏: ${currentPrice ? ((currentPrice - holding.avg_cost) / holding.avg_cost * 100).toFixed(2) + '%' : '未知'}`
-    : '暂无持仓';
+  const assetsInfo = assetList.map(a => {
+    const holdingInfo = a.holding
+      ? `持仓数量: ${a.holding.quantity}, 成本价: ${a.holding.avg_cost}, 总投入: ${a.holding.total_invested}, 当前市价: ${a.currentPrice || '未知'}, 浮动盈亏: ${a.currentPrice ? ((a.currentPrice - a.holding.avg_cost) / a.holding.avg_cost * 100).toFixed(2) + '%' : '未知'}`
+      : '暂无持仓';
 
-  const tradesInfo = recentTrades.length
-    ? recentTrades.map(t => `${t.executed_at?.slice(0,10)} ${t.type} ${t.quantity}@${t.price}`).join('\n')
-    : '暂无交易记录';
+    const tradesInfo = a.recentTrades.length
+      ? a.recentTrades.map(t => `${t.executed_at?.slice(0,10)} ${t.type} ${t.quantity}@${t.price}`).join('\n')
+      : '暂无交易记录';
+
+    return `### ${a.asset.name} (${a.asset.symbol})
+- 类型: ${a.asset.type}, 币种: ${a.asset.currency}
+- 持仓: ${holdingInfo}
+- 近期交易:\n${tradesInfo}`;
+  }).join('\n\n');
 
   const goalMap = { recovery: '扭亏为盈，降低成本', growth: '稳定增长，定期加仓', balanced: '平衡风险，网格交易' };
   const riskMap = { low: '保守（小仓位、宽间距）', medium: '适中', high: '激进（大仓位、密间距）' };
+  const isMulti = assetList.length > 1;
 
-  return `你是一位专业的量化交易策略师。请根据以下持仓情况，生成一个完整的交易策略和操盘计划。
+  return `你是一位专业的量化交易策略师。请根据以下${isMulti ? '投资组合' : '持仓'}情况，生成一个完整的交易策略和操盘计划。
 
-## 资产信息
-- 名称: ${asset.name} (${asset.symbol})
-- 类型: ${asset.type}
-- 币种: ${asset.currency}
-
-## 持仓状况
-${holdingInfo}
-
-## 最近交易记录
-${tradesInfo}
+## 资产信息（共 ${assetList.length} 个）
+${assetsInfo}
 
 ## 用户需求
 - 目标: ${goalMap[goal] || goal}
 - 可用预算: ¥${budget}
 - 风险偏好: ${riskMap[riskLevel] || riskLevel}
+${isMulti ? '- 组合要求: 请综合考虑各资产的相关性和风险分散，合理分配预算' : ''}
 
 ## 输出要求
 请返回严格的 JSON 格式（不要包含 markdown 代码块标记），结构如下:
@@ -67,8 +68,8 @@ ${tradesInfo}
     "description": "策略描述（1-2句话）",
     "parameters": {
       "budget": ${budget},
-      ${goal === 'recovery' ? `"buy_lines": [{"price": 数字, "amount": 数字}],  // 3-5条补仓线，价格从高到低
-      "sell_lines": [{"price": 数字, "amount": 数字}]  // 2-3条减仓线，价格从低到高` :
+      ${goal === 'recovery' ? `"buy_lines": [{"price": 数字, "amount": 数字, "asset_symbol": "资产代号"}],
+      "sell_lines": [{"price": 数字, "amount": 数字, "asset_symbol": "资产代号"}]` :
         goal === 'growth' ? `"amount_per": 数字, "periods": 数字, "frequency": "weekly或monthly"` :
         `"low": 数字, "high": 数字, "grids": 数字`}
     }
@@ -76,13 +77,14 @@ ${tradesInfo}
   "plans": [
     {
       "seq": 1,
+      "asset_id": ${assetList[0].asset.id},
       "trigger_type": "price_below 或 price_above 或 time",
       "trigger_value": 数字,
       "action": "buy 或 sell",
       "quantity": 数字或null,
       "amount": 数字或null,
       "new_avg_cost": 数字或null,
-      "notes": "简要说明"
+      "notes": "简要说明（含资产名称）"
     }
   ],
   "reasoning": "简要解释策略逻辑（2-3句话）"
@@ -93,7 +95,9 @@ ${tradesInfo}
 - 减仓线价格必须高于成本价
 - 金额总和不能超过预算
 - 操盘计划按 seq 从1开始编号
-- 所有价格保留2位小数`;
+- 所有价格保留2位小数
+${isMulti ? `- 每条操盘计划的 asset_id 必须是以下之一: ${assetList.map(a => `${a.asset.id}(${a.asset.symbol})`).join(', ')}
+- 合理分配预算到各资产` : `- 操盘计划的 asset_id 使用 ${assetList[0].asset.id}`}`;
 }
 
 /**
@@ -165,35 +169,41 @@ function extractJSON(text) {
 }
 
 /**
- * AI 生成策略主入口
+ * AI 生成策略主入口（支持多资产）
  */
-export async function aiGenerateStrategy(db, { assetId, budget, goal, riskLevel }) {
+export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, riskLevel }) {
   const config = getAIConfig(db);
   if (!config.apiUrl || !config.apiKey) {
     throw new Error('请先在设置中配置 AI API 地址和密钥');
   }
 
-  log.info('AI strategy generation started', { assetId, budget, goal, riskLevel, model: config.model });
+  // Normalize to array
+  const ids = assetIds || (assetId ? [assetId] : []);
+  if (ids.length === 0) throw new Error('请选择资产');
 
-  // 收集上下文
-  const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
-  if (!asset) throw new Error('资产不存在');
+  log.info('AI strategy generation started', { assetIds: ids, budget, goal, riskLevel, model: config.model });
 
-  const holding = db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(assetId);
+  // 收集每个资产的上下文
+  const assetList = [];
+  for (const id of ids) {
+    const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
+    if (!asset) throw new Error(`资产 ID ${id} 不存在`);
 
-  // 获取最新价格
-  let currentPrice = null;
-  const priceRow = db.prepare('SELECT price FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(assetId);
-  if (priceRow) currentPrice = priceRow.price;
+    const holding = db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(id);
+    let currentPrice = null;
+    const priceRow = db.prepare('SELECT price FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(id);
+    if (priceRow) currentPrice = priceRow.price;
 
-  // 最近交易
-  const recentTrades = db.prepare('SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 10').all(assetId);
+    const recentTrades = db.prepare('SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 10').all(id);
 
-  log.debug('AI context collected', { asset: asset.name, hasHolding: !!holding, currentPrice, trades: recentTrades.length });
+    assetList.push({ asset, holding, currentPrice, recentTrades });
+  }
+
+  log.debug('AI context collected', { assets: assetList.map(a => a.asset.name), count: assetList.length });
 
   // 构建 prompt
   const prompt = buildPrompt({
-    asset, holding, currentPrice, recentTrades,
+    assets: assetList,
     budget: budget || 20000,
     goal: goal || 'recovery',
     riskLevel: riskLevel || 'medium',

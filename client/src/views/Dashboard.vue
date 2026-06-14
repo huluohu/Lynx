@@ -179,7 +179,8 @@ function markDone(id) {
 
 function fmt(n) {
   if (!n && n !== 0) return '-'
-  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(2) + '万'
+  if (Math.abs(n) >= 100000000) return (n / 100000000).toFixed(2) + '亿'
+  if (Math.abs(n) >= 10000) return (n / 10000).toFixed(1) + '万'
   return Math.round(n).toLocaleString()
 }
 function fmtPct(n) {

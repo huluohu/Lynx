@@ -14,7 +14,7 @@
         <tbody>
           <tr v-for="s in strategies" :key="s.id">
             <td style="font-weight:600">{{ s.name }}</td>
-            <td>{{ s.asset_name || '-' }} <span style="font-size:11px;color:var(--text-muted)">{{ s.symbol }}</span></td>
+            <td>{{ assetDisplay(s) }}</td>
             <td><span class="badge badge-buy">{{ typeLabel(s.type) }}</span></td>
             <td><span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span></td>
             <td style="color:var(--text-muted)">{{ s.created_at?.slice(0,10) }}</td>
@@ -33,7 +33,7 @@
             <span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span>
           </div>
           <div class="strategy-card-body">
-            <span>{{ s.asset_name || '-' }}</span>
+            <span>{{ assetDisplay(s) }}</span>
             <span class="badge badge-buy">{{ typeLabel(s.type) }}</span>
             <span style="color:var(--text-muted);font-size:12px">{{ s.created_at?.slice(0,10) }}</span>
           </div>
@@ -54,7 +54,7 @@
       <div v-if="detailStrategy" class="detail-drawer-content">
         <div class="detail-section">
           <div class="detail-row"><span>类型</span><span class="badge badge-buy">{{ typeLabel(detailStrategy.type) }}</span></div>
-          <div class="detail-row"><span>关联资产</span><span>{{ detailStrategy.asset_name || '-' }}</span></div>
+          <div class="detail-row"><span>关联资产</span><span>{{ assetDisplay(detailStrategy) }}</span></div>
           <div class="detail-row"><span>状态</span><span class="badge" :class="statusBadge(detailStrategy.status)">{{ statusLabel(detailStrategy.status) }}</span></div>
           <div class="detail-row"><span>创建时间</span><span style="color:var(--text-dim)">{{ detailStrategy.created_at?.slice(0,10) }}</span></div>
         </div>
@@ -112,6 +112,12 @@ function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值�
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
 function triggerLabel(t) { return { price_above:'≥', price_below:'≤', time:'时间' }[t] || t }
+function assetDisplay(s) {
+  if (s.assets && s.assets.length > 1) {
+    return s.assets.map(a => a.name).join('、')
+  }
+  return s.asset_name || '-'
+}
 onMounted(loadData)
 </script>
 
