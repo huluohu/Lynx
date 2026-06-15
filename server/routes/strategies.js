@@ -4,6 +4,7 @@ import { generatePlan } from '../services/strategy.js';
 import { runBacktest } from '../services/backtest.js';
 import { runStressTest } from '../services/stress-test.js';
 import { generateStrategyReview } from '../services/ai-review.js';
+import { processStrategyChat, applyStrategyChanges } from '../services/strategy-chat.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('strategies');
@@ -176,6 +177,30 @@ router.post('/ai-compare', async (req, res) => {
       },
     });
   } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// POST /api/strategies/:id/chat — get proposed changes
+router.post('/:id/chat', async (req, res) => {
+  try {
+    const { message } = req.body || {};
+    const result = await processStrategyChat(Number(req.params.id), message);
+    res.json({ success: true, data: result });
+  } catch (e) {
+    log.warn('Strategy chat failed', { strategyId: req.params.id, error: e.message });
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// POST /api/strategies/:id/chat/apply — apply confirmed changes
+router.post('/:id/chat/apply', (req, res) => {
+  try {
+    const { changes } = req.body || {};
+    const result = applyStrategyChanges(Number(req.params.id), changes);
+    res.json({ success: true, data: result });
+  } catch (e) {
+    log.warn('Apply strategy chat failed', { strategyId: req.params.id, error: e.message });
     res.status(400).json({ success: false, error: e.message });
   }
 });

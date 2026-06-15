@@ -9,6 +9,7 @@
           {{ stressTesting ? '测试中...' : '压力测试' }}
         </button>
         <button class="btn" @click="runReviewAction" :disabled="reviewing">{{ reviewing ? '复盘中...' : '📝 AI 复盘' }}</button>
+        <button class="btn" @click="showChatDrawer = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> AI 调整</button>
         <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? '生成中...' : '生成计划' }}</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">编辑</router-link>
@@ -42,6 +43,10 @@
           <div class="action-sheet-item" @click="runReviewAction(); showActions = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
             {{ reviewing ? 'AI 复盘中...' : 'AI 复盘' }}
+          </div>
+          <div class="action-sheet-item" @click="showChatDrawer = true; showActions = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            AI 调整
           </div>
           <div class="action-sheet-item" @click="showAIRegenerate = true; showActions = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
@@ -300,6 +305,55 @@
       @confirm="doDelete"
     />
 
+    <AppDrawer v-model="showChatDrawer" title="AI 调整策略" width="500px">
+      <div class="chat-panel">
+        <div ref="chatScrollRef" class="chat-messages">
+          <div v-if="!chatMessages.length" class="chat-empty">
+            <p>试试这样说：</p>
+            <p>“把预算增加到5万”、“删掉第3步计划”、“把所有买入金额翻倍”</p>
+          </div>
+
+          <div v-for="msg in chatMessages" :key="msg.id" class="chat-msg" :class="msg.role">
+            <div class="chat-bubble">{{ msg.text }}</div>
+
+            <div v-if="msg.proposal" class="changes-card">
+              <div class="changes-summary">{{ msg.proposal.summary }}</div>
+              <div v-if="msg.proposal.interpretation && msg.proposal.interpretation !== msg.text" class="changes-interpretation">{{ msg.proposal.interpretation }}</div>
+
+              <div v-if="proposalChangeItems(msg.proposal).length" class="changes-list">
+                <div v-for="(item, index) in proposalChangeItems(msg.proposal)" :key="`${msg.id}-${index}`" class="change-item">
+                  <span class="change-indicator" :class="item.type">{{ item.type === 'add' ? '+' : (item.type === 'delete' ? '-' : '~') }}</span>
+                  <span>{{ item.text }}</span>
+                </div>
+              </div>
+
+              <div v-if="isProposalPending(msg)" class="changes-actions">
+                <button class="btn btn-primary" @click="confirmStrategyChanges(msg)" :disabled="chatApplying">{{ chatApplying ? '应用中...' : '确认应用' }}</button>
+                <button class="btn" @click="cancelStrategyChanges(msg)" :disabled="chatApplying">取消</button>
+              </div>
+              <div v-else-if="msg.proposalStatus === 'applied'" class="changes-status">已应用本次调整</div>
+              <div v-else-if="msg.proposalStatus === 'cancelled'" class="changes-status">已取消本次调整</div>
+            </div>
+          </div>
+
+          <div v-if="chatLoading" class="chat-msg ai">
+            <div class="chat-bubble">AI 正在思考...</div>
+          </div>
+        </div>
+
+        <div class="chat-input">
+          <textarea
+            v-model="chatInput"
+            rows="3"
+            placeholder="描述你想怎么调整策略..."
+            :disabled="chatLoading || chatApplying"
+            @keydown="handleChatKeydown"
+          ></textarea>
+          <button class="btn btn-primary" @click="sendChatMessage" :disabled="chatLoading || chatApplying || !chatInput.trim()">{{ chatLoading ? '发送中...' : '发送' }}</button>
+        </div>
+      </div>
+    </AppDrawer>
+
     <AppDrawer v-model="showAIRegenerate" title="✨ AI 重新生成策略">
       <AIStrategyGenerator :preset-asset-id="strategy.asset_id" :existing-strategy-id="strategy.id" @done="onAIRegenDone" />
     </AppDrawer>
@@ -307,7 +361,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
@@ -333,8 +387,14 @@ const stressLoading = ref(false)
 const showDeleteConfirm = ref(false)
 const showActions = ref(false)
 const showAIRegenerate = ref(false)
+const showChatDrawer = ref(false)
 const showReviewHistory = ref(false)
 const deleting = ref(false)
+const chatMessages = ref([])
+const chatInput = ref('')
+const chatLoading = ref(false)
+const chatApplying = ref(false)
+const chatScrollRef = ref(null)
 
 const parsedParams = computed(() => {
   try { return JSON.parse(strategy.value.parameters || '{}') } catch { return null }
@@ -354,6 +414,134 @@ function normalizeReview(row) {
     ...row,
     deviation_analysis: safeParse(row?.deviation_analysis, row?.deviation_analysis || null),
     recommendations: Array.isArray(row?.recommendations) ? row.recommendations : safeParse(row?.recommendations, []),
+  }
+}
+
+function createChatMessage(role, text, extras = {}) {
+  return {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}` ,
+    role,
+    text,
+    proposal: null,
+    proposalStatus: 'none',
+    ...extras,
+  }
+}
+function scrollChatToBottom() {
+  nextTick(() => {
+    const el = chatScrollRef.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+function hasProposalChanges(proposal) {
+  return !!(proposal?.changes?.strategy_updates || proposal?.changes?.plans_add?.length || proposal?.changes?.plans_update?.length || proposal?.changes?.plans_delete?.length)
+}
+function isProposalPending(message) {
+  return message?.proposal?.understood && hasProposalChanges(message.proposal) && message.proposalStatus === 'pending'
+}
+function formatChangeValue(value) {
+  if (value == null) return '清空'
+  if (typeof value === 'number') return Number.isInteger(value) ? `${value}` : value.toFixed(2)
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+function describePlan(plan) {
+  const parts = []
+  if (plan.trigger_type && plan.trigger_value != null) parts.push(`${triggerLabel(plan.trigger_type)} ${plan.trigger_value}`)
+  if (plan.action) parts.push(plan.action === 'buy' ? '买入' : '卖出')
+  if (plan.amount != null) parts.push(`金额 ¥${fmtMoney(plan.amount)}`)
+  if (plan.quantity != null) parts.push(`数量 ${fmtNumber(plan.quantity, 4)}`)
+  if (plan.new_avg_cost != null) parts.push(`补后均价 ¥${fmtNumber(plan.new_avg_cost)}`)
+  if (plan.notes) parts.push(`备注：${plan.notes}`)
+  return parts.join('，')
+}
+function describePlanPatch(plan) {
+  const parts = []
+  if (Object.prototype.hasOwnProperty.call(plan, 'trigger_type') || Object.prototype.hasOwnProperty.call(plan, 'trigger_value')) {
+    parts.push(`触发条件改为 ${triggerLabel(plan.trigger_type || 'time')} ${plan.trigger_value ?? '-'}`)
+  }
+  if (Object.prototype.hasOwnProperty.call(plan, 'action')) parts.push(`操作改为 ${plan.action === 'buy' ? '买入' : '卖出'}`)
+  if (Object.prototype.hasOwnProperty.call(plan, 'amount')) parts.push(`金额改为 ${plan.amount == null ? '清空' : `¥${fmtMoney(plan.amount)}`}`)
+  if (Object.prototype.hasOwnProperty.call(plan, 'quantity')) parts.push(`数量改为 ${plan.quantity == null ? '清空' : fmtNumber(plan.quantity, 4)}`)
+  if (Object.prototype.hasOwnProperty.call(plan, 'new_avg_cost')) parts.push(`补后均价改为 ${plan.new_avg_cost == null ? '清空' : `¥${fmtNumber(plan.new_avg_cost)}`}`)
+  if (Object.prototype.hasOwnProperty.call(plan, 'status')) parts.push(`状态改为 ${planStatusLabel(plan.status)}`)
+  if (Object.prototype.hasOwnProperty.call(plan, 'notes')) parts.push(`备注改为 ${plan.notes || '空'}`)
+  return parts.length ? parts.join('；') : '更新计划细节'
+}
+function proposalChangeItems(proposal) {
+  const items = []
+  const updates = proposal?.changes?.strategy_updates
+  if (updates) {
+    if (Object.prototype.hasOwnProperty.call(updates, 'name')) items.push({ type: 'update', text: `更新策略名称为「${updates.name}」` })
+    if (Object.prototype.hasOwnProperty.call(updates, 'description')) items.push({ type: 'update', text: `更新策略描述为「${updates.description}」` })
+    if (Object.prototype.hasOwnProperty.call(updates, 'type')) items.push({ type: 'update', text: `更新策略类型为 ${typeLabel(updates.type)}` })
+    if (Object.prototype.hasOwnProperty.call(updates, 'status')) items.push({ type: 'update', text: `更新策略状态为 ${statusLabel(updates.status)}` })
+    if (Object.prototype.hasOwnProperty.call(updates, 'parameters')) items.push({ type: 'update', text: `更新策略参数：${formatChangeValue(updates.parameters)}` })
+  }
+  for (const plan of proposal?.changes?.plans_add || []) items.push({ type: 'add', text: `新增第${plan.seq || '?'}步：${describePlan(plan)}` })
+  for (const plan of proposal?.changes?.plans_update || []) items.push({ type: 'update', text: `修改${plan.seq ? `第${plan.seq}步` : `计划#${plan.id}` }：${describePlanPatch(plan)}` })
+  for (const plan of proposal?.changes?.plans_delete || []) items.push({ type: 'delete', text: `删除${plan.seq ? `第${plan.seq}步计划` : `计划#${plan.id}`}` })
+  return items
+}
+async function sendChatMessage() {
+  const message = chatInput.value.trim()
+  if (!message || chatLoading.value || chatApplying.value) return
+
+  chatMessages.value.push(createChatMessage('user', message))
+  chatInput.value = ''
+  chatLoading.value = true
+  scrollChatToBottom()
+
+  try {
+    const res = await api(`/api/strategies/${route.params.id}/chat`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    })
+    const json = await res.json()
+    if (!json.success) throw new Error(json.error || 'AI 调整失败')
+
+    const proposal = json.data || {}
+    const messageText = proposal.interpretation || proposal.summary || (proposal.understood ? '已生成调整建议' : '请更具体地描述调整需求')
+    chatMessages.value.push(createChatMessage('ai', messageText, {
+      proposal,
+      proposalStatus: proposal.understood && hasProposalChanges(proposal) ? 'pending' : 'none',
+    }))
+  } catch (e) {
+    toast.error(e.message)
+    chatMessages.value.push(createChatMessage('ai', e.message || 'AI 调整失败'))
+  } finally {
+    chatLoading.value = false
+    scrollChatToBottom()
+  }
+}
+async function confirmStrategyChanges(message) {
+  if (!isProposalPending(message) || chatApplying.value) return
+  chatApplying.value = true
+  try {
+    const res = await api(`/api/strategies/${route.params.id}/chat/apply`, {
+      method: 'POST',
+      body: JSON.stringify({ changes: message.proposal.changes }),
+    })
+    const json = await res.json()
+    if (!json.success) throw new Error(json.error || '应用失败')
+
+    message.proposalStatus = 'applied'
+    await loadData()
+    toast.success('策略调整已应用')
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    chatApplying.value = false
+  }
+}
+function cancelStrategyChanges(message) {
+  if (!message?.proposal) return
+  message.proposalStatus = 'cancelled'
+}
+function handleChatKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendChatMessage()
   }
 }
 
@@ -509,6 +697,10 @@ function onAIRegenDone() {
   toast.success('策略已更新')
   loadData()
 }
+
+watch(() => [chatMessages.value.length, chatLoading.value, showChatDrawer.value], () => {
+  if (showChatDrawer.value) scrollChatToBottom()
+})
 
 onMounted(loadData)
 </script>
@@ -734,6 +926,125 @@ onMounted(loadData)
   line-height: 1.6;
 }
 
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 65vh;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+.chat-empty {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+.chat-empty p { margin: 0; }
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-msg.user { align-items: flex-end; }
+.chat-msg.ai { align-items: flex-start; }
+.chat-bubble {
+  max-width: 88%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chat-msg.user .chat-bubble {
+  background: var(--blue);
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+.chat-msg.ai .chat-bubble {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 6px;
+}
+.chat-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.chat-input textarea {
+  flex: 1;
+  min-height: 88px;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+}
+.changes-card {
+  width: min(100%, 420px);
+  background: var(--bg-soft, rgba(59, 130, 246, 0.08));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.changes-summary {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.changes-interpretation {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+.changes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.change-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.change-indicator {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+.change-indicator.add { background: rgba(34, 197, 94, 0.12); color: var(--green); }
+.change-indicator.update { background: rgba(59, 130, 246, 0.12); color: var(--blue); }
+.change-indicator.delete { background: rgba(239, 68, 68, 0.12); color: var(--red); }
+.changes-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.changes-status {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 @media (max-width: 900px) {
   .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr 1fr; }
 }
@@ -745,5 +1056,8 @@ onMounted(loadData)
   .show-on-mobile { display: flex !important; }
   .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr; }
   .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat, .review-top, .review-title-row, .review-history-top { align-items: flex-start; }
+  .chat-input { flex-direction: column; align-items: stretch; }
+  .chat-bubble, .changes-card { max-width: 100%; width: 100%; }
 }
+
 </style>

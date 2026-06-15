@@ -3,7 +3,7 @@
     <Transition :name="isMobile ? 'sheet' : 'drawer'">
       <div v-if="modelValue" class="overlay" :class="{ 'overlay-mobile': isMobile }" @click.self="close">
         <!-- Desktop: side drawer -->
-        <div v-if="!isMobile" class="drawer-panel">
+        <div v-if="!isMobile" class="drawer-panel" :style="drawerStyle">
           <div class="panel-header">
             <h3 class="panel-title">{{ title }}</h3>
             <button class="panel-close" @click="close">✕</button>
@@ -45,6 +45,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 const props = defineProps({
   modelValue: Boolean,
   title: { type: String, default: '' },
+  width: { type: [String, Number], default: '480px' },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -98,6 +99,10 @@ function onTouchEnd() {
   }
   dragging.value = false
 }
+
+const drawerStyle = computed(() => ({
+  width: typeof props.width === 'number' ? `${props.width}px` : props.width,
+}))
 
 const sheetStyle = computed(() => {
   if (dragY.value > 0) {
