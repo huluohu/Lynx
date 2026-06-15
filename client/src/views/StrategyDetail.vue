@@ -37,37 +37,35 @@
       </div>
     </transition>
 
-    <div class="grid-2" style="margin-bottom:20px">
-      <div class="card">
-        <div class="section-title">📋 策略信息</div>
-        <div class="info-list">
-          <div class="info-row"><span class="info-label">类型</span><span class="badge badge-buy">{{ typeLabel(strategy.type) }}</span></div>
-          <div class="info-row"><span class="info-label">关联资产</span><span>{{ strategy.asset_name || '-' }} {{ strategy.symbol }}</span></div>
-          <div class="info-row"><span class="info-label">状态</span><span class="badge" :class="strategy.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ statusLabel(strategy.status) }}</span></div>
-          <div class="info-row" v-if="strategy.description"><span class="info-label">描述</span><span style="color:var(--text-dim)">{{ strategy.description }}</span></div>
-        </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title">📋 策略信息</div>
+      <div class="info-list">
+        <div class="info-row"><span class="info-label">类型</span><span class="badge badge-buy">{{ typeLabel(strategy.type) }}</span></div>
+        <div class="info-row"><span class="info-label">关联资产</span><span>{{ strategy.asset_name || '-' }} {{ strategy.symbol }}</span></div>
+        <div class="info-row"><span class="info-label">状态</span><span class="badge" :class="strategy.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ statusLabel(strategy.status) }}</span></div>
+        <div class="info-row" v-if="strategy.description"><span class="info-label">描述</span><span style="color:var(--text-dim)">{{ strategy.description }}</span></div>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="section-title">⚙️ 参数</div>
-        <div class="info-list" v-if="parsedParams">
-          <template v-if="strategy.type === 'recovery'">
-            <div class="info-row"><span class="info-label">预算</span><span>¥{{ parsedParams.budget }}</span></div>
-            <div v-if="parsedParams.buy_lines?.length" style="margin-top:8px">
-              <span class="info-label" style="display:block;margin-bottom:4px">补仓线</span>
-              <div v-for="(l,i) in parsedParams.buy_lines" :key="'b'+i" class="line-tag buy">≤ ¥{{ l.price }} → 买入 ¥{{ l.amount }}</div>
-            </div>
-            <div v-if="parsedParams.sell_lines?.length" style="margin-top:8px">
-              <span class="info-label" style="display:block;margin-bottom:4px">减仓线</span>
-              <div v-for="(l,i) in parsedParams.sell_lines" :key="'s'+i" class="line-tag sell">≥ ¥{{ l.price }} → 卖出 ¥{{ l.amount }}</div>
-            </div>
-          </template>
-          <template v-else>
-            <div v-for="(v, k) in parsedParams" :key="k" class="info-row">
-              <span class="info-label">{{ k }}</span><span>{{ v }}</span>
-            </div>
-          </template>
-        </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title">⚙️ 参数</div>
+      <div class="info-list" v-if="parsedParams">
+        <template v-if="strategy.type === 'recovery'">
+          <div class="info-row"><span class="info-label">预算</span><span>¥{{ parsedParams.budget }}</span></div>
+          <div v-if="parsedParams.buy_lines?.length" style="margin-top:8px">
+            <span class="info-label" style="display:block;margin-bottom:4px">补仓线</span>
+            <div v-for="(l,i) in parsedParams.buy_lines" :key="'b'+i" class="line-tag buy">≤ ¥{{ l.price }} → 买入 ¥{{ l.amount }}</div>
+          </div>
+          <div v-if="parsedParams.sell_lines?.length" style="margin-top:8px">
+            <span class="info-label" style="display:block;margin-bottom:4px">减仓线</span>
+            <div v-for="(l,i) in parsedParams.sell_lines" :key="'s'+i" class="line-tag sell">≥ ¥{{ l.price }} → 卖出 ¥{{ l.amount }}</div>
+          </div>
+        </template>
+        <template v-else>
+          <div v-for="(v, k) in parsedParams" :key="k" class="info-row">
+            <span class="info-label">{{ k }}</span><span>{{ v }}</span>
+          </div>
+        </template>
       </div>
     </div>
 
