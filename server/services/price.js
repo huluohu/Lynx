@@ -100,26 +100,26 @@ export async function fetchGold(asset) {
     log.debug('Neodata gold failed (gateway may be offline)', { error: e?.message });
   }
 
-  // --- Fallback: metals.live (XAUUSD 国际金价) ---
+  // --- Fallback: Swissquote (XAU/USD, free, no key) ---
   try {
-    const metals = await httpGet('https://api.metals.live/v1/spot', { timeout: 5000 });
-    if (Array.isArray(metals)) {
-      const gold = metals.find(m => m.gold !== undefined);
-      if (gold) {
-        const xauUsd = parseFloat(gold.gold);
+    const data = await httpGet('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD', { timeout: 5000 });
+    if (Array.isArray(data) && data.length > 0) {
+      const prices = data[0]?.spreadProfilePrices;
+      if (prices && prices.length > 0) {
+        const xauUsd = (prices[0].bid + prices[0].ask) / 2;
         if (isLondonGold) {
-          log.info('Gold price (metals.live)', { usd: xauUsd });
-          return { price: xauUsd, currency: 'USD', source: 'metals.live' };
+          log.info('Gold price (Swissquote)', { usd: xauUsd.toFixed(2) });
+          return { price: Math.round(xauUsd * 100) / 100, currency: 'USD', source: 'swissquote' };
         }
         // AU9999 ≈ XAUUSD × 汇率 ÷ 31.1035 (盎司→克)
         const rate = await getUsdCny();
         const cnPrice = Math.round(xauUsd * rate / 31.1035 * 100) / 100;
-        log.info('Gold price (metals.live→CNY)', { xauUsd, rate, cnPrice });
-        return { price: cnPrice, currency: 'CNY', source: 'metals.live' };
+        log.info('Gold price (Swissquote→CNY)', { xauUsd: xauUsd.toFixed(2), rate, cnPrice });
+        return { price: cnPrice, currency: 'CNY', source: 'swissquote' };
       }
     }
   } catch (e) {
-    log.warn('metals.live gold failed', { error: e?.message });
+    log.warn('Swissquote gold failed', { error: e?.message });
   }
 
   log.warn('All gold sources failed', { symbol });

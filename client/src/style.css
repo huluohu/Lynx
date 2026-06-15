@@ -82,6 +82,9 @@ a:hover { opacity: 0.8; }
 .nav-item:hover { background: var(--bg-hover); color: var(--text); }
 .nav-item.router-link-exact-active { background: var(--bg-hover); color: var(--blue); border-left-color: var(--blue); }
 .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+.nav-item .nav-icon { opacity: 0.7; }
+.nav-item:hover .nav-icon { opacity: 1; }
+.nav-item.router-link-exact-active .nav-icon { opacity: 1; stroke: var(--blue); }
 
 /* ===== Main ===== */
 .main {
@@ -339,6 +342,8 @@ tr:hover td { background: var(--bg-hover); }
 }
 .mobile-nav-item.router-link-exact-active { color: var(--blue); }
 .mobile-nav-item .icon { font-size: 20px; }
+.mobile-nav-item .nav-icon { width: 22px; height: 22px; opacity: 0.6; }
+.mobile-nav-item.router-link-exact-active .nav-icon { opacity: 1; stroke: var(--blue); }
 
 /* ===== Responsive ===== */
 @media (max-width: 1024px) {
