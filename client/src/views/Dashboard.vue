@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">📊 仪表盘</h1>
+      <h1 class="page-title">仪表盘</h1>
       <div style="display:flex;align-items:center;gap:12px">
         <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
         <button class="btn" @click="refresh" :disabled="loading">{{ loading ? '刷新中...' : '🔄 刷新' }}</button>

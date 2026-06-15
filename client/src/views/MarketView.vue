@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">📈 实时行情</h1>
+      <h1 class="page-title">实时行情</h1>
       <button class="btn" @click="refresh" :disabled="loading">{{ loading ? '加载中...' : '🔄 刷新' }}</button>
     </div>
 

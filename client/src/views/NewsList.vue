@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">📰 资讯</h1>
+      <h1 class="page-title">资讯</h1>
       <button class="btn btn-sm" @click="refresh" :disabled="refreshing">
         {{ refreshing ? '刷新中...' : '🔄 刷新' }}
       </button>

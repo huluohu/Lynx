@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">📝 操盘历史</h1>
+      <h1 class="page-title">操盘历史</h1>
       <button class="btn btn-primary" @click="showForm = true">+ 添加记录</button>
     </div>
 

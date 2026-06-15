@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">💰 资产管理</h1>
+      <h1 class="page-title">资产管理</h1>
       <router-link to="/assets/add" class="btn btn-primary">+ 添加资产</router-link>
     </div>
 

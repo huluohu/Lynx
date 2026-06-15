@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">🎯 策略管理</h1>
+      <h1 class="page-title">策略管理</h1>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" @click="showAI = true">🤖 AI 生成</button>
         <router-link to="/strategies/create" class="btn btn-primary">+ 创建策略</router-link>

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">➕ 添加资产</h1>
+      <h1 class="page-title">添加资产</h1>
     </div>
     <div class="card" style="max-width:600px">
       <form @submit.prevent="submit">

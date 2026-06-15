@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">🎯 {{ isEdit ? '编辑策略' : '创建策略' }}</h1>
+      <h1 class="page-title">{{ isEdit ? '编辑策略' : '创建策略' }}</h1>
     </div>
 
     <div class="card" style="max-width:700px">

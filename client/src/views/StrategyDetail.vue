@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">🎯 {{ strategy.name }}</h1>
+      <h1 class="page-title">{{ strategy.name }}</h1>
       <div class="page-actions">
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">🤖 生成计划</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">✏️ 编辑</router-link>

@@ -1,7 +1,7 @@
 <template>
   <div class="settings-page">
     <div class="page-header">
-      <h1 class="page-title">⚙️ 设置</h1>
+      <h1 class="page-title">设置</h1>
     </div>
 
     <div class="settings-container">

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header"><h1 class="page-title">📋 操盘计划</h1></div>
+    <div class="page-header"><h1 class="page-title">操盘计划</h1></div>
 
     <div class="card" v-if="plans.length">
       <table class="hide-mobile">
