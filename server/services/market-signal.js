@@ -148,12 +148,16 @@ function fallbackSignal(asset, indicators) {
     insight = 'RSI 偏低，价格可能接近超卖区。';
   }
 
+  // Read valid hours from settings
+  const validHoursRow = db.prepare("SELECT value FROM settings WHERE key = 'signal_valid_hours'").get();
+  const validHours = Math.max(1, parseInt(validHoursRow?.value || '24', 10));
+
   return {
     signal_type: signalType,
     strength,
     summary: `${asset.name} 当前最新价 ${latest || '-'}，${insight}`,
     ai_analysis: `技术指标自动分析：MA5=${indicators.ma5 ?? '-'}，MA20=${indicators.ma20 ?? '-'}，RSI14=${indicators.rsi14 ?? '-'}，7日涨跌=${indicators.change_7d_pct ?? '-'}%。${insight}`,
-    valid_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    valid_until: new Date(Date.now() + validHours * 60 * 60 * 1000).toISOString(),
   };
 }
 

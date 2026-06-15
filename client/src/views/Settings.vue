@@ -24,6 +24,23 @@
               <span class="setting-unit">分钟</span>
             </div>
           </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">自动缓存详情</span>
+              <span class="setting-desc">刷新后自动抓取文章全文内容</span>
+            </div>
+            <label class="switch"><input type="checkbox" v-model="form.news_auto_cache" true-value="true" false-value="false" @change="dirty.news = true" /><span class="slider"></span></label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">每批缓存数量</span>
+              <span class="setting-desc">每次自动缓存的最大文章数</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="1" max="20" v-model="form.news_cache_batch_size" @input="dirty.news = true" />
+              <span class="setting-unit">条</span>
+            </div>
+          </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">内置数据源</span>
             <div class="source-chips">
@@ -54,7 +71,7 @@
       <!-- 行情刷新 -->
       <div class="settings-group">
         <div class="settings-group-header">
-          <span class="settings-group-title">行情刷新</span>
+          <span class="settings-group-title">行情与监控</span>
           <button class="save-btn" :class="{ changed: dirty.market }" @click="saveGroup('market')">
             {{ saveState.market === 'saved' ? '✓ 已保存' : '保存' }}
           </button>
@@ -62,7 +79,7 @@
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
-              <span class="setting-label">自动刷新间隔</span>
+              <span class="setting-label">行情自动刷新间隔</span>
               <span class="setting-desc">前端自动请求最新行情（0=手动刷新）</span>
             </div>
             <div class="setting-control">
@@ -78,6 +95,26 @@
             <div class="setting-control">
               <input class="setting-input" type="number" inputmode="numeric" min="1" v-model="form.rate_cache_duration" @input="dirty.market = true" />
               <span class="setting-unit">分钟</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">策略监控间隔</span>
+              <span class="setting-desc">定时检查策略触发条件</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="1" v-model="form.strategy_monitor_interval" @input="dirty.market = true" />
+              <span class="setting-unit">分钟</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">市场信号有效期</span>
+              <span class="setting-desc">AI 生成的市场信号默认有效时长</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="1" v-model="form.signal_valid_hours" @input="dirty.market = true" />
+              <span class="setting-unit">小时</span>
             </div>
           </div>
           <div class="setting-item">
@@ -217,8 +254,12 @@ const form = reactive({
   refresh_interval: '60',
   market_refresh_interval: '5',
   rate_cache_duration: '60',
+  strategy_monitor_interval: '5',
+  signal_valid_hours: '24',
   news_refresh_interval: '30',
   news_sources_enabled: 'coindesk,cointelegraph,coingecko',
+  news_auto_cache: 'true',
+  news_cache_batch_size: '5',
   price_alert_threshold: '2',
   plan_approaching_pct: '5',
   ai_api_url: '',
@@ -257,9 +298,9 @@ const notifyEvents = [
 ]
 
 const groupKeys = {
-  market: ['refresh_interval', 'market_refresh_interval', 'rate_cache_duration', 'price_alert_threshold', 'plan_approaching_pct'],
+  market: ['refresh_interval', 'market_refresh_interval', 'rate_cache_duration', 'strategy_monitor_interval', 'signal_valid_hours', 'price_alert_threshold', 'plan_approaching_pct'],
   ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_search_api_url', 'agent_search_api_key'],
-  news: ['news_refresh_interval', 'news_sources_enabled'],
+  news: ['news_refresh_interval', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size'],
 }
 
 async function load() {

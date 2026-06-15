@@ -96,8 +96,16 @@ export function checkStrategyAlerts() {
   return { success: true, data: { strategies: strategies.length, triggered, approaching } };
 }
 
-export function startMonitor(intervalMs = 300000) {
+export function startMonitor(intervalMs) {
   if (monitorTimer) clearInterval(monitorTimer);
+
+  // Read interval from settings if not provided
+  if (!intervalMs) {
+    const db = getDb();
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'strategy_monitor_interval'").get();
+    const minutes = Math.max(1, parseInt(row?.value || '5', 10));
+    intervalMs = minutes * 60 * 1000;
+  }
 
   try {
     checkStrategyAlerts();
