@@ -7,4 +7,3 @@ client/node_modules
 data/*.db
 data/*.db-wal
 data/*.db-shm
-price_cache.json
