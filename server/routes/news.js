@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
-import { refreshNews } from '../services/news.js';
+import { refreshNews, cacheNewsContent, cachePendingNews } from '../services/news.js';
 
 const router = Router();
 
@@ -8,7 +8,7 @@ const router = Router();
 router.get('/', (req, res) => {
   const db = getDb();
   const { limit = 20, offset = 0 } = req.query;
-  const rows = db.prepare('SELECT * FROM news ORDER BY published_at DESC LIMIT ? OFFSET ?').all(Number(limit), Number(offset));
+  const rows = db.prepare('SELECT id, title, summary, url, source, published_at, read, cache_status, created_at FROM news ORDER BY published_at DESC LIMIT ? OFFSET ?').all(Number(limit), Number(offset));
   const total = db.prepare('SELECT COUNT(*) as count FROM news').get().count;
   res.json({ success: true, data: rows, total });
 });
@@ -17,10 +17,35 @@ router.get('/', (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     const count = await refreshNews();
+    // Trigger background caching
+    cachePendingNews(5).catch(() => {});
     res.json({ success: true, message: `已获取 ${count} 条新资讯` });
   } catch (e) {
     res.status(500).json({ success: false, error: '刷新失败' });
   }
+});
+
+// GET 单条新闻详情（含缓存内容）
+router.get('/:id/content', async (req, res) => {
+  const db = getDb();
+  const row = db.prepare('SELECT id, title, url, content, cache_status FROM news WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+
+  if (row.cache_status === 'cached' && row.content) {
+    return res.json({ success: true, data: row });
+  }
+
+  // Try to cache now
+  const result = await cacheNewsContent(row.id);
+  const updated = db.prepare('SELECT id, title, url, content, cache_status FROM news WHERE id = ?').get(row.id);
+  res.json({ success: true, data: updated });
+});
+
+// POST 批量缓存待处理新闻
+router.post('/cache-batch', async (req, res) => {
+  const { limit = 10 } = req.body || {};
+  const cached = await cachePendingNews(Math.min(limit, 20));
+  res.json({ success: true, cached });
 });
 
 // PUT 标记已读

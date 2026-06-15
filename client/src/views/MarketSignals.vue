@@ -50,8 +50,10 @@
         </div>
 
         <div class="signal-footer">
-          <span>有效期至 {{ fmtTime(signal.valid_until) }}</span>
-          <span>{{ fmtTime(signal.created_at) }}</span>
+          <span :class="{ 'expired-label': isExpired(signal.valid_until) }">
+            {{ isExpired(signal.valid_until) ? '已过期' : '有效期至' }} {{ fmtTime(signal.valid_until) }}
+          </span>
+          <span>生成于 {{ fmtTime(signal.created_at) }}</span>
         </div>
       </div>
     </div>
@@ -112,7 +114,15 @@ function fmtIndicator(value, suffix = '') {
   return Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}${suffix}` : '-'
 }
 function fmtTime(value) {
-  return value ? String(value).slice(0, 16).replace('T', ' ') : '-'
+  if (!value) return '-'
+  const d = new Date(value.endsWith('Z') || value.includes('+') ? value : value + 'Z')
+  if (isNaN(d.getTime())) return String(value).slice(0, 16).replace('T', ' ')
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+function isExpired(value) {
+  if (!value) return false
+  const d = new Date(value.endsWith('Z') || value.includes('+') ? value : value + 'Z')
+  return d.getTime() < Date.now()
 }
 
 onMounted(loadSignals)
@@ -210,6 +220,9 @@ onMounted(loadSignals)
   gap: 8px;
   font-size: 11px;
   color: var(--text-muted);
+}
+.expired-label {
+  color: var(--red);
 }
 
 @media (max-width: 768px) {

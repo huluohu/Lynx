@@ -3,6 +3,7 @@
     <div class="page-header">
       <h1 class="page-title">仪表盘</h1>
       <div style="display:flex;align-items:center;gap:12px">
+        <span v-if="lastUpdated" class="update-time">{{ fmtUpdateTime(lastUpdated) }} 更新</span>
         <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
         <button class="btn btn-inline-icon" @click="refresh" :disabled="loading">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -184,6 +185,7 @@ const alerts = ref([])
 const loading = ref(false)
 const initialized = ref(false)
 const usdCny = ref(null)
+const lastUpdated = ref(null)
 
 const alertCounts = computed(() => {
   const c = { danger: 0, warning: 0, info: 0 }
@@ -218,6 +220,7 @@ async function refresh() {
     if (aJson.data) alerts.value = aJson.data
     if (rJson.data) usdCny.value = rJson.data.usd_cny
     latestSignals.value = sigJson.data || []
+    lastUpdated.value = new Date()
   } catch (e) { console.error(e) }
   loading.value = false
   initialized.value = true
@@ -250,6 +253,10 @@ function signalLabel(type) { return { bullish: '看涨', bearish: '看跌', neut
 function signalBadgeClass(type) {
   return { bullish: 'badge-buy', bearish: 'badge-sell', neutral: 'badge-pending' }[type] || 'badge-pending'
 }
+function fmtUpdateTime(d) {
+  if (!d) return ''
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
 
 onMounted(refresh)
 </script>
@@ -261,6 +268,10 @@ onMounted(refresh)
   background: var(--bg-dim, #f5f5f5);
   padding: 2px 8px;
   border-radius: 4px;
+}
+.update-time {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 .btn-inline-icon {
   display: inline-flex;

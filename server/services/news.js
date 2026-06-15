@@ -242,3 +242,61 @@ export async function fetchAllNews() {
 export async function refreshNews() {
   return await fetchAllNews();
 }
+
+// ===== 异步缓存新闻详情 =====
+export async function cacheNewsContent(newsId) {
+  const db = getDb();
+  const row = db.prepare('SELECT id, url, cache_status FROM news WHERE id = ?').get(newsId);
+  if (!row || !row.url) return null;
+  if (row.cache_status === 'cached') return row;
+
+  db.prepare("UPDATE news SET cache_status = 'fetching' WHERE id = ?").run(newsId);
+
+  try {
+    const html = await fetchRss(row.url); // reuse fetchRss as generic HTTP GET
+    if (!html || html.length < 50) throw new Error('Empty response');
+
+    // Extract text content from HTML
+    const content = extractArticleText(html);
+    db.prepare("UPDATE news SET content = ?, cache_status = 'cached' WHERE id = ?").run(content, newsId);
+    return { id: newsId, content, cache_status: 'cached' };
+  } catch (e) {
+    db.prepare("UPDATE news SET cache_status = 'failed' WHERE id = ?").run(newsId);
+    log.debug('News content cache failed', { newsId, error: e.message });
+    return { id: newsId, content: null, cache_status: 'failed' };
+  }
+}
+
+// Batch cache pending news in background
+export async function cachePendingNews(limit = 5) {
+  const db = getDb();
+  const rows = db.prepare("SELECT id FROM news WHERE url IS NOT NULL AND url != '' AND cache_status = 'pending' ORDER BY created_at DESC LIMIT ?").all(limit);
+  let cached = 0;
+  for (const row of rows) {
+    const result = await cacheNewsContent(row.id);
+    if (result?.cache_status === 'cached') cached++;
+  }
+  return cached;
+}
+
+function extractArticleText(html) {
+  if (!html) return '';
+  // Remove scripts, styles, nav, header, footer
+  let text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[\s\S]*?<\/nav>/gi, '')
+    .replace(/<header[\s\S]*?<\/header>/gi, '')
+    .replace(/<footer[\s\S]*?<\/footer>/gi, '');
+  // Extract paragraphs
+  const paragraphs = [];
+  const pRe = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+  let m;
+  while ((m = pRe.exec(text)) !== null) {
+    const clean = cleanHtml(m[1]);
+    if (clean.length > 20) paragraphs.push(clean);
+  }
+  if (paragraphs.length >= 2) return paragraphs.join('\n\n');
+  // Fallback: strip all tags
+  return cleanHtml(text).slice(0, 5000);
+}

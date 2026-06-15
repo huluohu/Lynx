@@ -2,13 +2,16 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">资讯</h1>
-      <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-          <path d="M21 3v6h-6" />
-        </svg>
-        <span>{{ refreshing ? '刷新中...' : '刷新' }}</span>
-      </button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span v-if="lastUpdated" class="update-hint">{{ fmtUpdateTime(lastUpdated) }} 更新</span>
+        <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          <span>{{ refreshing ? '刷新中...' : '刷新' }}</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="card">
@@ -28,6 +31,7 @@
         <div class="news-meta">
           <span v-if="n.source" class="news-source">{{ n.source }}</span>
           <span>{{ formatTime(n.published_at) }}</span>
+          <span class="cache-badge" :class="'cache-' + (n.cache_status || 'pending')">{{ cacheLabel(n.cache_status) }}</span>
           <a v-if="n.url" :href="n.url" target="_blank" @click.stop class="news-link">查看原文 ↗</a>
         </div>
       </div>
@@ -56,6 +60,7 @@ const loading = ref(true)
 const refreshing = ref(false)
 const page = ref(0)
 const PAGE_SIZE = 20
+const lastUpdated = ref(null)
 
 async function loadData() {
   try {
@@ -64,6 +69,7 @@ async function loadData() {
     news.value = json.data || []
     total.value = json.total || 0
     page.value = 1
+    lastUpdated.value = new Date()
   } finally {
     loading.value = false
   }
@@ -116,11 +122,19 @@ function formatTime(ts) {
   if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
   return ts.slice(0, 10)
 }
+function fmtUpdateTime(d) {
+  if (!d) return ''
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+function cacheLabel(status) {
+  return { cached: '已缓存', fetching: '缓存中', failed: '缓存失败', pending: '待缓存' }[status || 'pending'] || '待缓存'
+}
 
 onMounted(loadData)
 </script>
 
 <style scoped>
+.update-hint { font-size: 11px; color: var(--text-muted); }
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .news-item {
@@ -138,6 +152,11 @@ onMounted(loadData)
 .news-source { background: var(--bg-dim, #f0f0f0); padding: 1px 6px; border-radius: 3px; }
 .news-link { color: var(--primary); text-decoration: none; }
 .news-link:hover { text-decoration: underline; }
+.cache-badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+.cache-cached { background: rgba(34,197,94,0.1); color: var(--green); }
+.cache-fetching { background: rgba(59,130,246,0.1); color: var(--primary); }
+.cache-failed { background: rgba(239,68,68,0.1); color: var(--red); }
+.cache-pending { background: var(--bg-dim, #f0f0f0); color: var(--text-muted); }
 .btn-sm { font-size: 12px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
 .btn-sm:hover { background: var(--bg-hover, #f5f5f5); }
 .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }

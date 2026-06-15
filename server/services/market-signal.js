@@ -4,6 +4,12 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('market-signal');
 
+function isValidFutureTime(value) {
+  if (!value) return false;
+  const d = new Date(value);
+  return !isNaN(d.getTime()) && d.getTime() > Date.now();
+}
+
 function extractJSON(text) {
   try { return JSON.parse(text); } catch {}
   const match = text?.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -206,7 +212,7 @@ export async function analyzeMarketSignals(assetId) {
             strength: clampStrength(parsed.strength, fallback.strength),
             summary: parsed.summary || fallback.summary,
             ai_analysis: parsed.ai_analysis || fallback.ai_analysis,
-            valid_until: parsed.valid_until || fallback.valid_until,
+            valid_until: isValidFutureTime(parsed.valid_until) ? parsed.valid_until : fallback.valid_until,
           };
         } else {
           log.warn('Market signal parse failed, using fallback', { assetId, preview: content?.slice?.(0, 200) || response?.error?.message || '' });
