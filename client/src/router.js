@@ -16,6 +16,7 @@ const routes = [
   { path: '/market', name: 'Market', component: () => import('./views/MarketView.vue') },
   { path: '/news', name: 'News', component: () => import('./views/NewsList.vue') },
   { path: '/history', name: 'History', component: () => import('./views/HistoryList.vue') },
+  { path: '/alerts', name: 'Alerts', component: () => import('./views/AlertHistory.vue') },
   { path: '/settings', name: 'Settings', component: () => import('./views/Settings.vue') },
   { path: '/:pathMatch(.*)*', name: 'NotFound', redirect: '/' },
 ]

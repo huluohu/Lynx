@@ -24,6 +24,43 @@ router.get('/unread-count', (req, res) => {
   res.json({ success: true, data: { count: row.count } });
 });
 
+// GET 提醒历史
+router.get('/history', (req, res) => {
+  const db = getDb();
+  const { page = 1, page_size = 20, type, severity, asset_id, strategy_id, status } = req.query;
+  const currentPage = Math.max(1, Number(page) || 1);
+  const pageSize = Math.max(1, Math.min(100, Number(page_size) || 20));
+  const offset = (currentPage - 1) * pageSize;
+
+  const conditions = [];
+  const params = [];
+  if (type) { conditions.push('n.type = ?'); params.push(type); }
+  if (severity) { conditions.push('n.severity = ?'); params.push(severity); }
+  if (asset_id) { conditions.push('n.asset_id = ?'); params.push(Number(asset_id)); }
+  if (strategy_id) { conditions.push('COALESCE(n.strategy_id, p.strategy_id) = ?'); params.push(Number(strategy_id)); }
+  if (status) { conditions.push('n.status = ?'); params.push(status); }
+
+  const fromSql = ` FROM notifications n
+    LEFT JOIN trading_plans p ON n.plan_id = p.id
+    LEFT JOIN assets a ON n.asset_id = a.id
+    LEFT JOIN strategies s ON COALESCE(n.strategy_id, p.strategy_id) = s.id`;
+  const whereSql = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
+
+  const total = db.prepare(`SELECT COUNT(*) AS count${fromSql}${whereSql}`).get(...params).count;
+  const rows = db.prepare(`SELECT n.*, a.name AS asset_name, a.symbol, s.name AS strategy_name${fromSql}${whereSql}
+    ORDER BY n.created_at DESC, n.id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
+
+  res.json({ success: true, data: {
+    items: rows,
+    pagination: {
+      page: currentPage,
+      page_size: pageSize,
+      total,
+      total_pages: Math.max(1, Math.ceil(total / pageSize)),
+    },
+  } });
+});
+
 // PUT 标记已读
 router.put('/:id/read', (req, res) => {
   getDb().prepare("UPDATE notifications SET status = 'read' WHERE id = ?").run(req.params.id);
@@ -33,6 +70,19 @@ router.put('/:id/read', (req, res) => {
 // PUT 全部标记已读
 router.put('/read-all', (req, res) => {
   getDb().prepare("UPDATE notifications SET status = 'read' WHERE status IN ('pending','sent')").run();
+  res.json({ success: true });
+});
+
+// DELETE 清空全部已读
+router.delete('/clear-all', (req, res) => {
+  const info = getDb().prepare("DELETE FROM notifications WHERE status = 'read'").run();
+  res.json({ success: true, data: { deleted: info.changes } });
+});
+
+// DELETE 删除单条通知
+router.delete('/:id', (req, res) => {
+  const info = getDb().prepare('DELETE FROM notifications WHERE id = ?').run(req.params.id);
+  if (!info.changes) return res.status(404).json({ success: false, error: '通知不存在' });
   res.json({ success: true });
 });
 
@@ -74,10 +124,21 @@ router.post('/send-wechat', (req, res) => {
 });
 
 // 插入通知（被其他模块调用）
-export function createNotification(db, { type, title, message, asset_id, plan_id, channel }) {
+export function createNotification(db, { type, title, message, asset_id, plan_id, strategy_id, severity, channel, status }) {
   return db.prepare(
-    'INSERT INTO notifications (type, title, message, asset_id, plan_id, channel) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(type, title, message, asset_id || null, plan_id || null, channel || 'web');
+    `INSERT INTO notifications (type, title, message, asset_id, plan_id, strategy_id, severity, channel, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    type,
+    title,
+    message,
+    asset_id || null,
+    plan_id || null,
+    strategy_id || null,
+    severity || 'info',
+    channel || 'web',
+    status || 'pending',
+  );
 }
 
 export default router;

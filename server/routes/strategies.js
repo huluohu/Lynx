@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { generatePlan } from '../services/strategy.js';
+import { runBacktest } from '../services/backtest.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('strategies');
@@ -181,6 +182,28 @@ router.post('/:id/generate-plan', (req, res) => {
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
+});
+
+// POST 执行策略回测
+router.post('/:id/backtest', (req, res) => {
+  try {
+    const result = runBacktest(Number(req.params.id));
+    res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// GET 策略回测结果
+router.get('/:id/backtest-results', (req, res) => {
+  const rows = getDb().prepare(`SELECT * FROM backtest_results
+    WHERE strategy_id = ?
+    ORDER BY created_at DESC, id DESC`).all(req.params.id).map(row => {
+      let details = [];
+      try { details = row.details ? JSON.parse(row.details) : []; } catch {}
+      return { ...row, details };
+    });
+  res.json({ success: true, data: rows });
 });
 
 // POST AI 智能生成策略

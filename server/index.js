@@ -17,6 +17,7 @@ import historyRouter from './routes/history.js';
 import dashboardRouter from './routes/dashboard.js';
 import settingsRouter from './routes/settings.js';
 import notificationsRouter from './routes/notifications.js';
+import { startMonitor } from './services/strategy-monitor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3456;
@@ -88,6 +89,7 @@ if (!existsSync(distDir)) {
 // ===== 启动 =====
 app.listen(PORT, () => {
   log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/invest.db' });
+  startMonitor();
 
   // 启动后延迟30秒拉取新闻（避免阻塞启动）
   setTimeout(async () => {
