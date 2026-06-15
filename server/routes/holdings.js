@@ -53,7 +53,7 @@ router.put('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM holdings WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
 
-  const { quantity, avg_cost, total_invested, target_price, stop_loss, notes, status } = req.body;
+  const { quantity, avg_cost, total_invested, target_price, stop_loss, notes, status, currency } = req.body;
   db.prepare(`UPDATE holdings SET quantity=?, avg_cost=?, total_invested=?,
     target_price=?, stop_loss=?, notes=?, status=?, updated_at=datetime('now')
     WHERE id=?`).run(
@@ -63,7 +63,13 @@ router.put('/:id', (req, res) => {
     status ?? existing.status, req.params.id
   );
 
-  const row = db.prepare('SELECT h.*, a.name, a.symbol FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.id = ?').get(req.params.id);
+  // Update asset currency if provided
+  if (currency) {
+    db.prepare('UPDATE assets SET currency = ?, updated_at = datetime(?) WHERE id = ?')
+      .run(currency, new Date().toISOString(), existing.asset_id);
+  }
+
+  const row = db.prepare('SELECT h.*, a.name, a.symbol, a.currency FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.id = ?').get(req.params.id);
   res.json({ success: true, data: row });
 });
 

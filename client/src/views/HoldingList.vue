@@ -69,6 +69,21 @@
         <div class="section-title">编辑</div>
         <form @submit.prevent="saveHolding">
           <div class="form-row">
+            <div class="form-group"><label class="form-label">数量</label><input class="form-input" type="number" step="any" v-model="editHolding.quantity" /></div>
+            <div class="form-group"><label class="form-label">成本价</label><input class="form-input" type="number" step="any" v-model="editHolding.avg_cost" /></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">总投入</label><input class="form-input" type="number" step="any" v-model="editHolding.total_invested" /></div>
+            <div class="form-group">
+              <label class="form-label">计价单位</label>
+              <select class="form-select" v-model="editHolding.currency">
+                <option value="CNY">人民币 (CNY)</option>
+                <option value="USD">美元 (USD)</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
             <div class="form-group"><label class="form-label">目标价</label><input class="form-input" type="number" step="any" v-model="editHolding.target_price" /></div>
             <div class="form-group"><label class="form-label">止损线</label><input class="form-input" type="number" step="any" v-model="editHolding.stop_loss" /></div>
           </div>
@@ -98,7 +113,7 @@ const holdings = ref([])
 const loading = ref(true)
 const showDetail = ref(false)
 const currentHolding = ref(null)
-const editHolding = reactive({ target_price: '', stop_loss: '' })
+const editHolding = reactive({ quantity: '', avg_cost: '', total_invested: '', currency: '', target_price: '', stop_loss: '' })
 const savingHolding = ref(false)
 
 async function loadData() {
@@ -111,6 +126,10 @@ async function loadData() {
 
 function openDetail(h) {
   currentHolding.value = h
+  editHolding.quantity = h.quantity || ''
+  editHolding.avg_cost = h.avg_cost || ''
+  editHolding.total_invested = h.total_invested || ''
+  editHolding.currency = h.currency || 'CNY'
   editHolding.target_price = h.target_price || ''
   editHolding.stop_loss = h.stop_loss || ''
   showDetail.value = true
@@ -125,9 +144,17 @@ function onTxSuccess() {
 async function saveHolding() {
   savingHolding.value = true
   try {
+    const payload = {
+      quantity: editHolding.quantity ? Number(editHolding.quantity) : undefined,
+      avg_cost: editHolding.avg_cost ? Number(editHolding.avg_cost) : undefined,
+      total_invested: editHolding.total_invested ? Number(editHolding.total_invested) : undefined,
+      target_price: editHolding.target_price ? Number(editHolding.target_price) : null,
+      stop_loss: editHolding.stop_loss ? Number(editHolding.stop_loss) : null,
+      currency: editHolding.currency || undefined,
+    }
     const res = await api(`/api/holdings/${currentHolding.value.id}`, {
       method: 'PUT',
-      body: JSON.stringify({ target_price: editHolding.target_price ? Number(editHolding.target_price) : null, stop_loss: editHolding.stop_loss ? Number(editHolding.stop_loss) : null })
+      body: JSON.stringify(payload)
     })
     const json = await res.json()
     if (json.success) { toast.success('已保存'); loadData() }
