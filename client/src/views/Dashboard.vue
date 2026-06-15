@@ -27,7 +27,7 @@
         </div>
       </div>
       <div
-        v-for="a in alerts.slice(0, 3)"
+        v-for="a in alerts.slice(0, 2)"
         :key="a.id"
         :class="['alert-item', `alert-${a.level}`]"
       >
@@ -54,8 +54,8 @@
           <button v-else-if="a.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(a.id)">完成</button>
         </div>
       </div>
-      <div v-if="alerts.length > 3" class="alert-section-footer">
-        <router-link to="/alerts" class="alert-view-all">查看全部 →</router-link>
+      <div v-if="alerts.length > 2" class="alert-section-footer">
+        <router-link to="/alerts" class="alert-view-all">查看全部 ({{ alerts.length }}) →</router-link>
       </div>
     </div>
 
@@ -115,20 +115,31 @@
       <div class="card">
         <div class="section-title">活跃计划</div>
         <div v-if="activePlans.length">
-          <table>
-            <thead><tr><th>资产</th><th>触发</th><th>操作</th><th>数量</th><th>状态</th></tr></thead>
+          <table class="hide-mobile">
+            <thead><tr><th>资产</th><th>触发</th><th>操作</th><th>状态</th></tr></thead>
             <tbody>
               <tr v-for="p in activePlans" :key="p.id">
                 <td>{{ p.asset_name }}</td>
                 <td>{{ p.trigger_type === 'price_above' ? '≥' : '≤' }} {{ p.trigger_value }}</td>
                 <td><span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? '买入' : '卖出' }}</span></td>
-                <td>{{ p.quantity ? p.quantity.toFixed(4) : '-' }}</td>
                 <td><span class="badge" :class="p.status === 'triggered' ? 'badge-triggered' : 'badge-pending'">{{ p.status === 'triggered' ? '⚡触发' : '等待' }}</span></td>
               </tr>
             </tbody>
           </table>
+          <div class="show-mobile mini-cards">
+            <div v-for="p in activePlans" :key="p.id" class="mini-card">
+              <div class="mini-card-row">
+                <span style="font-weight:600">{{ p.asset_name }}</span>
+                <span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? '买入' : '卖出' }}</span>
+              </div>
+              <div class="mini-card-row">
+                <span class="text-muted">{{ p.trigger_type === 'price_above' ? '≥' : '≤' }} {{ p.trigger_value }}</span>
+                <span class="badge" :class="p.status === 'triggered' ? 'badge-triggered' : 'badge-pending'">{{ p.status === 'triggered' ? '⚡触发' : '等待' }}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div v-else class="empty" style="padding:24px"><p>暂无活跃计划，去创建策略吧 👉</p></div>
+        <div v-else class="empty" style="padding:24px"><p>暂无活跃计划</p></div>
       </div>
     </div>
 
@@ -153,7 +164,7 @@
 
     <div class="card">
       <div class="section-title">最近交易</div>
-      <table v-if="recentTrades.length">
+      <table v-if="recentTrades.length" class="hide-mobile">
         <thead><tr><th>时间</th><th>资产</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th></tr></thead>
         <tbody>
           <tr v-for="t in recentTrades" :key="t.id">
@@ -166,7 +177,19 @@
           </tr>
         </tbody>
       </table>
-      <div v-else class="empty" style="padding:24px"><p>暂无交易记录</p></div>
+      <div v-if="recentTrades.length" class="show-mobile mini-cards">
+        <div v-for="t in recentTrades" :key="t.id" class="mini-card">
+          <div class="mini-card-row">
+            <span style="font-weight:600">{{ t.name }}</span>
+            <span class="badge" :class="t.type === 'buy' ? 'badge-buy' : 'badge-sell'">{{ t.type === 'buy' ? '买入' : '卖出' }}</span>
+          </div>
+          <div class="mini-card-row">
+            <span class="text-muted">{{ t.executed_at?.slice(0,10) }} · {{ t.quantity }}股</span>
+            <span :class="t.type === 'buy' ? 'pnl negative' : 'pnl positive'">{{ t.type === 'buy' ? '-' : '+' }}¥{{ fmt(t.total) }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="!recentTrades.length" class="empty" style="padding:24px"><p>暂无交易记录</p></div>
     </div>
   </div>
 </template>
@@ -418,6 +441,30 @@ onMounted(refresh)
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.mini-cards {
+  flex-direction: column;
+  gap: 8px;
+}
+.mini-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.mini-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.mini-card-row + .mini-card-row {
+  margin-top: 4px;
+}
+.text-muted {
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 @media (max-width: 768px) {

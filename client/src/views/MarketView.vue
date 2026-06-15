@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">实时行情</h1>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span v-if="lastUpdated" class="update-hint">{{ fmtTime(lastUpdated) }} 更新</span>
         <button class="btn btn-inline-icon" @click="refresh(true)" :disabled="loading">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

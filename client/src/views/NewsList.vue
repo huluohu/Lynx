@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">资讯</h1>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span v-if="lastUpdated" class="update-hint">{{ fmtUpdateTime(lastUpdated) }} 更新</span>
         <button class="btn btn-sm" @click="cacheAll" :disabled="caching" v-if="pendingCacheCount > 0">
           {{ caching ? '缓存中...' : `缓存 (${pendingCacheCount})` }}

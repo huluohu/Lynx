@@ -356,7 +356,7 @@ tr:hover td { background: var(--bg-hover); }
 @media (max-width: 768px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
-  .main { margin-left: 0; padding: 16px; padding-top: 14px; padding-bottom: 72px; }
+  .main { margin-left: 0; padding: 16px; padding-top: 14px; padding-bottom: 80px; }
   .grid-2 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
   .mobile-nav { display: block; }
@@ -368,11 +368,14 @@ tr:hover td { background: var(--bg-hover); }
   .asset-card-price { font-size: 24px; }
   .card { overflow-x: auto; }
 
-  /* Mobile button sizing (44px min touch target) */
-  .btn { padding: 12px 18px; font-size: 14px; min-height: 44px; border-radius: 10px; }
-  .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+  /* Mobile button sizing */
+  .btn { padding: 10px 16px; font-size: 14px; min-height: 40px; border-radius: 10px; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; min-height: 32px; }
   .btn-icon { width: 36px; height: 36px; min-height: 36px; padding: 0; }
+  .btn-inline-icon { padding: 6px 10px; min-height: 32px; font-size: 12px; }
   .page-actions { flex-shrink: 0; }
+  .page-header .btn { min-height: 32px; padding: 6px 12px; font-size: 12px; }
+  .page-header .btn-primary { min-height: 36px; padding: 8px 14px; font-size: 13px; }
 
   /* Stat card on mobile */
   .stat-value { font-size: 15px; word-break: break-all; }

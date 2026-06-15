@@ -94,32 +94,64 @@
           <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
           <span>概览</span>
         </router-link>
-        <router-link to="/assets" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>
-          <span>资产</span>
+        <router-link to="/holdings" class="mobile-nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+          <span>持仓</span>
         </router-link>
         <router-link to="/market" class="mobile-nav-item">
           <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           <span>行情</span>
         </router-link>
-        <router-link to="/signals" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 12h3l2 5 4-10 3 7 2-4h4"/></svg>
-          <span>信号</span>
-        </router-link>
         <router-link to="/strategies" class="mobile-nav-item">
           <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
           <span>策略</span>
         </router-link>
-        <router-link to="/alerts" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
-          <span>提醒</span>
-        </router-link>
-        <router-link to="/settings" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <span>设置</span>
-        </router-link>
+        <button class="mobile-nav-item" @click="moreMenuOpen = true">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          <span>更多</span>
+        </button>
       </div>
     </nav>
+
+    <!-- More Menu (mobile) -->
+    <Teleport to="body">
+      <Transition name="slide-up">
+        <div v-if="moreMenuOpen" class="action-sheet-overlay" @click="moreMenuOpen = false">
+          <div class="action-sheet" @click.stop>
+            <router-link to="/assets" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>
+              资产
+            </router-link>
+            <router-link to="/history" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              交易记录
+            </router-link>
+            <router-link to="/alerts" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+              提醒
+              <span v-if="unreadCount" class="nav-badge" style="margin-left:auto">{{ unreadCount }}</span>
+            </router-link>
+            <router-link to="/signals" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 12h3l2 5 4-10 3 7 2-4h4"/></svg>
+              市场信号
+            </router-link>
+            <router-link to="/news" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M18 18h-8M18 10h-8"/></svg>
+              资讯
+            </router-link>
+            <router-link to="/plans" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              操盘计划
+            </router-link>
+            <router-link to="/settings" class="action-sheet-item" @click="moreMenuOpen = false">
+              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              设置
+            </router-link>
+            <div class="action-sheet-cancel" @click="moreMenuOpen = false">取消</div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
   <div v-else>
     <AppToast />
@@ -137,6 +169,7 @@ import AppToast from './components/AppToast.vue'
 const router = useRouter()
 const authStore = useAuthStore()
 const sidebarOpen = ref(false)
+const moreMenuOpen = ref(false)
 const unreadCount = ref(0)
 let pollTimer
 
@@ -229,5 +262,11 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 0 4px;
+}
+button.mobile-nav-item {
+  background: none;
+  border: none;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 </style>
