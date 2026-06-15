@@ -159,7 +159,7 @@
             <div class="setting-info">
               <span class="setting-label">推送渠道</span>
             </div>
-            <select class="form-select" v-model="form.push_webhook_type" @change="dirty.push = true" style="width:160px">
+            <select class="form-select" v-model="form.push_webhook_type" @change="dirty.push = true" style="max-width:160px">
               <option value="wecom">企业微信机器人</option>
               <option value="serverchan">Server酱</option>
               <option value="pushplus">PushPlus</option>

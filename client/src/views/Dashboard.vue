@@ -2,7 +2,7 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">仪表盘</h1>
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span v-if="lastUpdated" class="update-time">{{ fmtUpdateTime(lastUpdated) }} 更新</span>
         <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
         <button class="btn btn-inline-icon" @click="refresh" :disabled="loading">
