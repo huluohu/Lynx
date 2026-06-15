@@ -227,10 +227,5 @@ onMounted(loadData)
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .page-actions {
-    width: 100%;
-    justify-content: stretch;
-  }
-  .page-actions .btn { flex: 1; justify-content: center; font-size: 12px; padding: 8px 8px; }
 }
 </style>
