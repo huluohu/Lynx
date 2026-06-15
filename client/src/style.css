@@ -363,7 +363,7 @@ tr:hover td { background: var(--bg-hover); }
   .page-header {
     flex-direction: row;
     align-items: center;
-    padding-left: 44px;
+    padding-left: 56px;
     min-height: 36px;
     gap: 8px;
     /* Sticky header on mobile */
@@ -606,7 +606,7 @@ tr:hover td { background: var(--bg-hover); }
   .stat-value { font-size: 14px; }
   .grid-4 { grid-template-columns: 1fr; }
   .page-title { font-size: 16px; }
-  .page-header { padding-left: 40px; }
+  .page-header { padding-left: 56px; }
 
   /* Ensure form rows stack on very small screens */
   .form-row { flex-direction: column; gap: 0; }
