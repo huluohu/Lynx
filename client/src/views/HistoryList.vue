@@ -53,27 +53,37 @@
 
     <div class="card" v-if="history.length">
       <table class="hide-mobile">
-        <thead><tr><th>日期</th><th>资产</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th><th>盈亏</th></tr></thead>
+        <thead><tr><th>日期</th><th>资产</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th><th>盈亏</th><th>操作</th></tr></thead>
         <tbody>
-          <tr v-for="h in history" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
+          <tr v-for="h in history" :key="h.id" class="history-row" :class="{ 'reverted-row': h.reverted }" @click="openDetail(h)">
             <td>{{ h.executed_at?.slice(0,10) }}</td>
             <td>{{ h.asset_name }}</td>
-            <td><span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span></td>
+            <td>
+              <div class="history-type-cell">
+                <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
+                <span v-if="h.reverted" class="badge badge-sell">已撤销</span>
+              </div>
+            </td>
             <td>{{ h.quantity }}</td>
             <td>{{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</td>
             <td>{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</td>
             <td :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl ? (h.pnl>=0?'+':'') + moneyPrefix(h.currency) + fmt(Math.abs(h.pnl)) : '-' }}</td>
+            <td>
+              <button v-if="!h.reverted" class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">撤销</button>
+              <span v-else class="history-action-placeholder">-</span>
+            </td>
           </tr>
         </tbody>
       </table>
 
       <div class="show-mobile history-cards">
-        <div v-for="h in history" :key="h.id" class="history-card" @click="openDetail(h)">
+        <div v-for="h in history" :key="h.id" class="history-card" :class="{ 'reverted-card': h.reverted }" @click="openDetail(h)">
           <div class="history-card-header">
             <div>
               <div class="history-card-title">
                 <span style="font-weight:600">{{ h.asset_name }}</span>
                 <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
+                <span v-if="h.reverted" class="badge badge-sell">已撤销</span>
               </div>
               <div class="history-card-meta">{{ h.executed_at?.slice(0,10) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
             </div>
@@ -84,6 +94,9 @@
             <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':'' }}{{ moneyPrefix(h.currency) }}{{ fmt(Math.abs(h.pnl)) }}</span>
           </div>
           <div v-if="h.reason" class="history-card-reason">{{ h.reason }}</div>
+          <div v-if="!h.reverted" class="history-card-actions">
+            <button class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">撤销</button>
+          </div>
         </div>
       </div>
     </div>
@@ -103,6 +116,7 @@
         <div class="detail-section">
           <div class="detail-row"><span>资产</span><span style="font-weight:600">{{ detailRecord.asset_name }}</span></div>
           <div class="detail-row"><span>类型</span><span class="badge" :class="detailRecord.type==='buy'?'badge-buy':'badge-sell'">{{ detailRecord.type==='buy'?'买入':'卖出' }}</span></div>
+          <div class="detail-row"><span>状态</span><span class="badge" :class="detailRecord.reverted ? 'badge-sell' : 'badge-executed'">{{ detailRecord.reverted ? '已撤销' : '有效' }}</span></div>
           <div class="detail-row"><span>日期</span><span>{{ detailRecord.executed_at?.slice(0,10) }}</span></div>
         </div>
         <div class="detail-section">
@@ -111,6 +125,7 @@
           <div class="detail-row"><span>计价单位</span><span>{{ detailRecord.currency || 'CNY' }}</span></div>
           <div class="detail-row"><span>价格</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.price, 8) }}</span></div>
           <div class="detail-row"><span>总金额</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.total) }}</span></div>
+          <div class="detail-row" v-if="detailRecord.reverted_at"><span>撤销时间</span><span>{{ detailRecord.reverted_at }}</span></div>
           <div class="detail-row" v-if="detailRecord.pnl"><span>盈亏</span><span :class="(detailRecord.pnl||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl>=0?'+':'' }}{{ moneyPrefix(detailRecord.currency) }}{{ fmt(Math.abs(detailRecord.pnl)) }}</span></div>
           <div class="detail-row" v-if="detailRecord.pnl_pct"><span>盈亏率</span><span :class="(detailRecord.pnl_pct||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl_pct>=0?'+':'' }}{{ detailRecord.pnl_pct }}%</span></div>
         </div>
@@ -120,6 +135,29 @@
         </div>
       </div>
     </AppDrawer>
+
+    <Teleport to="body">
+      <Transition name="dialog">
+        <div v-if="undoDialog.open" class="dialog-overlay" @click.self="closeUndoDialog">
+          <div class="dialog-box">
+            <div class="dialog-header">
+              <h3 class="dialog-title">撤销交易记录</h3>
+            </div>
+            <div class="dialog-body">
+              <p>确认撤销这条交易记录吗？撤销后将标记为“已撤销”。</p>
+              <label class="undo-checkbox">
+                <input type="checkbox" v-model="undoDialog.rollbackHoldings" />
+                <span>是否同步回滚持仓？</span>
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button class="btn" @click="closeUndoDialog">取消</button>
+              <button class="btn btn-danger" @click="confirmUndo" :disabled="undoSubmitting">{{ undoSubmitting ? '处理中...' : '确认撤销' }}</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -138,8 +176,10 @@ const showForm = ref(false)
 const submitting = ref(false)
 const showDetailDrawer = ref(false)
 const detailRecord = ref(null)
+const undoSubmitting = ref(false)
 const currencyOptions = ['CNY', 'USD', 'USDT', 'BTC', 'ETH']
 const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', currency: 'CNY', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
+const undoDialog = reactive({ open: false, record: null, rollbackHoldings: true })
 
 const selectedAsset = computed(() => assets.value.find(asset => String(asset.id) === String(form.asset_id)) || null)
 const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto')
@@ -157,6 +197,9 @@ async function loadData() {
     const [hres, ares] = await Promise.all([api('/api/history'), api('/api/assets')])
     history.value = (await hres.json()).data || []
     assets.value = (await ares.json()).data || []
+    if (detailRecord.value) {
+      detailRecord.value = history.value.find(item => item.id === detailRecord.value.id) || detailRecord.value
+    }
   } finally {
     loading.value = false
   }
@@ -175,9 +218,22 @@ function resetForm() {
   form.reason = ''
 }
 
-function openDetail(h) {
-  detailRecord.value = h
+function openDetail(record) {
+  detailRecord.value = record
   showDetailDrawer.value = true
+}
+
+function openUndoDialog(record) {
+  undoDialog.open = true
+  undoDialog.record = record
+  undoDialog.rollbackHoldings = true
+}
+
+function closeUndoDialog(force = false) {
+  if (undoSubmitting.value && !force) return
+  undoDialog.open = false
+  undoDialog.record = null
+  undoDialog.rollbackHoldings = true
 }
 
 async function addRecord() {
@@ -205,10 +261,33 @@ async function addRecord() {
     resetForm()
     await loadData()
     toast.success('交易记录已保存')
-  } catch (e) {
-    toast.error('保存失败: ' + e.message)
+  } catch (error) {
+    toast.error('保存失败: ' + error.message)
   } finally {
     submitting.value = false
+  }
+}
+
+async function confirmUndo() {
+  if (!undoDialog.record) return
+  undoSubmitting.value = true
+  try {
+    const res = await api(`/api/history/${undoDialog.record.id}/undo`, {
+      method: 'POST',
+      body: JSON.stringify({ rollback_holdings: undoDialog.rollbackHoldings }),
+    })
+    const json = await res.json()
+    if (!json.success) {
+      toast.error(json.error || '撤销失败')
+      return
+    }
+    closeUndoDialog(true)
+    await loadData()
+    toast.success('交易记录已撤销')
+  } catch (error) {
+    toast.error(error.message || '撤销失败')
+  } finally {
+    undoSubmitting.value = false
   }
 }
 
@@ -229,22 +308,65 @@ onMounted(loadData)
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
 .currency-help { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+.history-row { cursor: pointer; }
+.history-type-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.history-action-placeholder { color: var(--text-muted); }
+.reverted-row td { opacity: 0.5; text-decoration: line-through; }
 .history-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
 .history-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: background 0.15s; }
 .history-card:hover { background: var(--bg-hover); }
 .history-card:active { background: var(--bg-hover); }
+.reverted-card { opacity: 0.5; text-decoration: line-through; }
 .history-card-header { display: flex; justify-content: space-between; gap: 12px; }
-.history-card-title { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.history-card-title { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
 .history-card-meta { font-size: 12px; color: var(--text-dim); }
 .history-card-total { font-weight: 600; white-space: nowrap; }
 .history-card-body { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 13px; }
 .history-card-currency { font-size: 12px; color: var(--text-muted); }
 .history-card-reason { margin-top: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.history-card-actions { margin-top: 12px; }
 
 .detail-drawer-content { display: flex; flex-direction: column; gap: 16px; }
 .detail-section { background: var(--bg); border-radius: 10px; padding: 4px 0; }
 .detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); padding: 8px 14px 4px; }
 .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; gap: 12px; }
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.dialog-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 420px;
+  max-width: 100%;
+}
+.dialog-header { padding: 20px 20px 0; }
+.dialog-title { font-size: 16px; font-weight: 600; }
+.dialog-body { padding: 12px 20px 20px; color: var(--text-dim); font-size: 14px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 0 20px 20px; }
+.undo-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--text);
+}
+.dialog-enter-active,
+.dialog-leave-active { transition: opacity 0.2s ease; }
+.dialog-enter-active .dialog-box,
+.dialog-leave-active .dialog-box { transition: transform 0.2s ease; }
+.dialog-enter-from,
+.dialog-leave-to { opacity: 0; }
+.dialog-enter-from .dialog-box,
+.dialog-leave-to .dialog-box { transform: scale(0.95); }
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }

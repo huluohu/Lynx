@@ -165,6 +165,7 @@ tr:hover td { background: var(--bg-hover); }
 .badge-pending { background: rgba(100,116,139,0.15); color: var(--text-muted); }
 .badge-triggered { background: rgba(239,68,68,0.15); color: var(--red); }
 .badge-executed { background: rgba(59,130,246,0.15); color: var(--blue); }
+.badge-partial { background: rgba(240,192,64,0.18); color: var(--gold); }
 
 /* ===== Buttons ===== */
 .btn {
