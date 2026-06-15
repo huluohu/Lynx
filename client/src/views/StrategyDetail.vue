@@ -2,35 +2,12 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ strategy.name }}</h1>
-      <div class="page-actions desktop-only">
+      <div class="page-actions">
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">生成计划</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">编辑</router-link>
         <button class="btn btn-danger" @click="showDeleteConfirm = true">删除</button>
       </div>
-      <button class="btn btn-icon mobile-only" @click="showActions = !showActions" title="操作">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-      </button>
     </div>
-
-    <!-- Mobile action sheet -->
-    <div v-if="showActions" class="action-sheet-overlay" @click="showActions = false"></div>
-    <transition name="slide-up">
-      <div v-if="showActions" class="action-sheet">
-        <div class="action-sheet-item" @click="generatePlan(); showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
-          生成计划
-        </div>
-        <router-link :to="`/strategies/${route.params.id}/edit`" class="action-sheet-item" @click="showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          编辑策略
-        </router-link>
-        <div class="action-sheet-item danger" @click="showDeleteConfirm = true; showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          删除策略
-        </div>
-        <div class="action-sheet-cancel" @click="showActions = false">取消</div>
-      </div>
-    </transition>
 
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
@@ -135,7 +112,6 @@ const strategy = ref({})
 const plans = ref([])
 const generating = ref(false)
 const showDeleteConfirm = ref(false)
-const showActions = ref(false)
 const deleting = ref(false)
 
 const parsedParams = computed(() => {
@@ -227,5 +203,7 @@ onMounted(loadData)
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
+  .page-actions { flex-wrap: wrap; }
+  .page-actions .btn { font-size: 12px; padding: 6px 10px; }
 }
 </style>
