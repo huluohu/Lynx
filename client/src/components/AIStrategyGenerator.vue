@@ -157,24 +157,68 @@
         <p style="font-size:13px;color:var(--text-dim);line-height:1.6">{{ result.execution_notes }}</p>
       </div>
 
-      <!-- 操盘计划 -->
+      <!-- 操盘计划（可编辑） -->
       <div class="preview-section">
-        <div class="section-title">📋 操盘计划 ({{ result.plans.length }} 步)</div>
+        <div class="section-title">📋 操盘计划 ({{ editablePlans.length }} 步)
+          <span class="budget-usage">预算使用: ¥{{ totalBudgetUsed }}</span>
+        </div>
         <div class="plan-preview-list">
-          <div v-for="p in result.plans" :key="p.seq" class="plan-preview-item">
+          <div v-for="(p, idx) in editablePlans" :key="p.seq" class="plan-preview-item" :class="{ editing: editingPlanIdx === idx }">
             <div class="plan-preview-header">
               <span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? '买入' : '卖出' }}</span>
-              <span style="font-weight:600">{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
+              <template v-if="editingPlanIdx === idx">
+                <select v-model="p.trigger_type" class="inline-select">
+                  <option value="price_below">价格 ≤</option>
+                  <option value="price_above">价格 ≥</option>
+                  <option value="time">时间</option>
+                </select>
+                <input type="number" v-model.number="p.trigger_value" class="inline-input" style="width:80px" />
+              </template>
+              <template v-else>
+                <span style="font-weight:600">{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
+              </template>
               <span v-if="selectedAssetIds.length > 1 && p.asset_id" class="plan-asset-tag">{{ getAssetName(p.asset_id) }}</span>
+              <div class="plan-actions">
+                <button class="plan-action-btn" @click="editingPlanIdx = editingPlanIdx === idx ? -1 : idx" :title="editingPlanIdx === idx ? '完成' : '编辑'">
+                  {{ editingPlanIdx === idx ? '✓' : '✏️' }}
+                </button>
+                <button class="plan-action-btn del" @click="removePlan(idx)" title="删除">✕</button>
+              </div>
             </div>
             <div class="plan-preview-meta">
-              <span v-if="p.amount">¥{{ Math.round(p.amount) }}</span>
-              <span v-if="p.quantity">{{ typeof p.quantity === 'number' ? p.quantity.toFixed(4) : p.quantity }}</span>
-              <span v-if="p.new_avg_cost">均价→¥{{ p.new_avg_cost }}</span>
+              <template v-if="editingPlanIdx === idx">
+                <label>金额: <input type="number" v-model.number="p.amount" class="inline-input" style="width:70px" /></label>
+                <label>数量: <input type="number" v-model.number="p.quantity" class="inline-input" style="width:70px" step="0.0001" /></label>
+              </template>
+              <template v-else>
+                <span v-if="p.amount">¥{{ Math.round(p.amount) }}</span>
+                <span v-if="p.quantity">{{ typeof p.quantity === 'number' ? p.quantity.toFixed(4) : p.quantity }}</span>
+                <span v-if="p.new_avg_cost">均价→¥{{ p.new_avg_cost }}</span>
+              </template>
             </div>
-            <div v-if="p.rationale" class="plan-rationale">📌 {{ p.rationale }}</div>
-            <div v-else-if="p.notes" style="font-size:11px;color:var(--text-muted);margin-top:2px">{{ p.notes }}</div>
+            <div v-if="p.rationale && editingPlanIdx !== idx" class="plan-rationale">📌 {{ p.rationale }}</div>
+            <div v-else-if="p.notes && editingPlanIdx !== idx" style="font-size:11px;color:var(--text-muted);margin-top:2px">{{ p.notes }}</div>
           </div>
+        </div>
+      </div>
+
+      <!-- 重新生成区域 -->
+      <div class="preview-section regenerate-section">
+        <div class="section-title clickable" @click="showRegenerate = !showRegenerate">
+          🔄 不满意？调整后重新生成
+          <span class="toggle-icon">{{ showRegenerate ? '▼' : '▶' }}</span>
+          <span v-if="regenerateCount > 0" class="regen-count">已迭代 {{ regenerateCount }} 次</span>
+        </div>
+        <div v-if="showRegenerate" class="regenerate-form">
+          <textarea 
+            v-model="userFeedback" 
+            class="form-input feedback-input" 
+            placeholder="输入您的调整建议，例如：买入价格再低一些、增加止损条件、减少单笔金额..."
+            rows="3"
+          ></textarea>
+          <button class="btn btn-secondary" style="width:100%;margin-top:8px" @click="regenerate" :disabled="generating || !userFeedback.trim()">
+            🔄 基于反馈重新生成
+          </button>
         </div>
       </div>
 
@@ -182,7 +226,7 @@
         <button class="btn btn-primary" style="flex:1" @click="confirmSave" :disabled="saving">
           {{ saving ? '保存中...' : '✅ 确认采用' }}
         </button>
-        <button class="btn" @click="step = 'config'">← 重新生成</button>
+        <button class="btn" @click="step = 'config'">← 重新配置</button>
       </div>
     </div>
   </div>
@@ -208,6 +252,12 @@ const saving = ref(false)
 const error = ref('')
 const result = ref(null)
 const showAnalysis = ref(false)
+const showRegenerate = ref(false)
+const editingPlanIdx = ref(-1)
+const editablePlans = ref([])
+const generationId = ref(null)
+const regenerateCount = ref(0)
+const userFeedback = ref('')
 const form = reactive({
   budget: 20000,
   goal: 'recovery',
@@ -229,6 +279,13 @@ const selectedAssetNames = computed(() => {
     .join('、')
 })
 
+const totalBudgetUsed = computed(() => {
+  return editablePlans.value
+    .filter(p => p.action === 'buy' && p.amount)
+    .reduce((sum, p) => sum + (p.amount || 0), 0)
+    .toLocaleString()
+})
+
 function toggleAsset(id) {
   const idx = selectedAssetIds.value.indexOf(id)
   if (idx >= 0) selectedAssetIds.value.splice(idx, 1)
@@ -239,6 +296,12 @@ function toggleAsset(id) {
 function getAssetName(id) {
   const a = assets.value.find(x => x.id === id)
   return a ? a.name : `#${id}`
+}
+
+function removePlan(idx) {
+  editablePlans.value.splice(idx, 1)
+  // Re-number seq
+  editablePlans.value.forEach((p, i) => { p.seq = i + 1 })
 }
 
 async function loadAssets() {
@@ -288,74 +351,106 @@ async function generate() {
   error.value = ''
   generating.value = true
   result.value = null
+  editablePlans.value = []
+  editingPlanIdx.value = -1
 
   // Reset progress
   agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = ''; })
 
   try {
-    const token = localStorage.getItem('token')
-    const baseUrl = import.meta.env.VITE_API_BASE || ''
-    const response = await fetch(`${baseUrl}/api/strategies/ai-agent-generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        asset_ids: selectedAssetIds.value,
-        budget: form.budget,
-        goal: form.goal,
-        risk_level: form.risk_level,
-      }),
+    await doGenerate({
+      asset_ids: selectedAssetIds.value,
+      budget: form.budget,
+      goal: form.goal,
+      risk_level: form.risk_level,
     })
-
-    if (!response.ok) {
-      const text = await response.text()
-      try {
-        const json = JSON.parse(text)
-        throw new Error(json.error || `HTTP ${response.status}`)
-      } catch (e) {
-        if (e.message.startsWith('HTTP')) throw e
-        throw new Error(`请求失败: ${response.status}`)
-      }
-    }
-
-    // Parse SSE stream
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      let eventType = ''
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          eventType = line.slice(7).trim()
-        } else if (line.startsWith('data: ') && eventType) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            handleSSEEvent(eventType, data)
-          } catch {}
-          eventType = ''
-        }
-      }
-    }
   } catch (e) {
     error.value = e.message
   }
   generating.value = false
 }
 
+async function regenerate() {
+  if (!userFeedback.value.trim()) return
+  error.value = ''
+  generating.value = true
+
+  // Reset progress
+  agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = ''; })
+  step.value = 'config' // show progress
+
+  try {
+    await doGenerate({
+      asset_ids: selectedAssetIds.value,
+      budget: form.budget,
+      goal: form.goal,
+      risk_level: form.risk_level,
+      parent_id: generationId.value,
+      user_feedback: userFeedback.value.trim(),
+    })
+    regenerateCount.value++
+    userFeedback.value = ''
+    showRegenerate.value = false
+  } catch (e) {
+    error.value = e.message
+  }
+  generating.value = false
+}
+
+async function doGenerate(body) {
+  const token = localStorage.getItem('token')
+  const baseUrl = import.meta.env.VITE_API_BASE || ''
+  const response = await fetch(`${baseUrl}/api/strategies/ai-agent-generate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    try {
+      const json = JSON.parse(text)
+      throw new Error(json.error || `HTTP ${response.status}`)
+    } catch (e) {
+      if (e.message.startsWith('HTTP')) throw e
+      throw new Error(`请求失败: ${response.status}`)
+    }
+  }
+
+  // Parse SSE stream
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+
+    let eventType = ''
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        eventType = line.slice(7).trim()
+      } else if (line.startsWith('data: ') && eventType) {
+        try {
+          const data = JSON.parse(line.slice(6))
+          handleSSEEvent(eventType, data)
+        } catch {}
+        eventType = ''
+      }
+    }
+  }
+}
+
 function handleSSEEvent(event, data) {
   if (event === 'progress') {
     const { step: stepName, message } = data
-    // Map step names to progress indicators
     if (stepName === 'collecting') {
       updateAgentStep('collecting', 'active', message)
     } else if (stepName === 'collecting_done') {
@@ -374,6 +469,8 @@ function handleSSEEvent(event, data) {
   } else if (event === 'result') {
     if (data.success && data.data) {
       result.value = data.data
+      editablePlans.value = JSON.parse(JSON.stringify(data.data.plans || []))
+      generationId.value = data.data.generation_id || null
       step.value = 'preview'
       showAnalysis.value = true
     } else {
@@ -392,7 +489,8 @@ async function confirmSave() {
       body: JSON.stringify({
         asset_ids: selectedAssetIds.value,
         strategy: result.value.strategy,
-        plans: result.value.plans,
+        plans: editablePlans.value,
+        generation_id: generationId.value,
       }),
     })
     const json = await res.json()
@@ -607,9 +705,15 @@ onMounted(() => {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
+  transition: border-color 0.2s;
+}
+.plan-preview-item.editing {
+  border-color: var(--primary);
+  background: rgba(59,130,246,0.03);
 }
 .plan-preview-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
-.plan-preview-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-dim); }
+.plan-preview-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-dim); align-items: center; }
+.plan-preview-meta label { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .plan-rationale {
   font-size: 11px;
   color: var(--primary);
@@ -626,5 +730,72 @@ onMounted(() => {
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text-dim);
+}
+.plan-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.plan-action-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+.plan-action-btn:hover { border-color: var(--primary); background: rgba(59,130,246,0.05); }
+.plan-action-btn.del:hover { border-color: var(--red); background: rgba(239,68,68,0.05); color: var(--red); }
+
+.inline-input {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: var(--card-bg);
+  color: var(--text);
+}
+.inline-input:focus { border-color: var(--primary); outline: none; }
+.inline-select {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.budget-usage {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+  margin-left: 8px;
+}
+
+/* Regenerate Section */
+.regenerate-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.regenerate-form {
+  margin-top: 10px;
+}
+.feedback-input {
+  resize: vertical;
+  min-height: 60px;
+  font-size: 13px;
+}
+.regen-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 400;
 }
 </style>

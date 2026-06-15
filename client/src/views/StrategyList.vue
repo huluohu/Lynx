@@ -3,6 +3,9 @@
     <div class="page-header">
       <h1 class="page-title">策略管理</h1>
       <div class="page-actions">
+        <button v-if="drafts.length" class="btn btn-draft" @click="showDrafts = true">
+          📝 草稿 <span class="draft-badge">{{ drafts.length }}</span>
+        </button>
         <button class="btn btn-primary" @click="showAI = true">AI 生成</button>
         <router-link to="/strategies/create" class="btn">+ 创建</router-link>
       </div>
@@ -49,30 +52,104 @@
     <!-- Detail Drawer -->
     <AppDrawer v-model="showDetailDrawer" :title="detailStrategy?.name || '策略详情'">
       <div v-if="detailStrategy" class="detail-drawer-content">
-        <div class="detail-section">
-          <div class="detail-row"><span>类型</span><span class="badge badge-buy">{{ typeLabel(detailStrategy.type) }}</span></div>
-          <div class="detail-row"><span>关联资产</span><span>{{ assetDisplay(detailStrategy) }}</span></div>
-          <div class="detail-row"><span>状态</span><span class="badge" :class="statusBadge(detailStrategy.status)">{{ statusLabel(detailStrategy.status) }}</span></div>
-          <div class="detail-row"><span>创建时间</span><span style="color:var(--text-dim)">{{ detailStrategy.created_at?.slice(0,10) }}</span></div>
-          <div class="detail-row" v-if="detailStrategy.description"><span>描述</span><span style="color:var(--text-dim);font-size:13px">{{ detailStrategy.description }}</span></div>
+        <!-- Tabs: 详情 / 生成历史 -->
+        <div class="drawer-tabs">
+          <button class="drawer-tab" :class="{ active: detailTab === 'info' }" @click="detailTab = 'info'">详情</button>
+          <button class="drawer-tab" :class="{ active: detailTab === 'history' }" @click="detailTab = 'history'; loadGenerationHistory()">生成历史</button>
         </div>
 
-        <div v-if="detailPlans.length" class="detail-section">
-          <div class="detail-section-title">操盘计划 ({{ detailPlans.length }} 步)</div>
-          <div v-for="p in detailPlans" :key="p.id" class="plan-mini">
-            <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'" style="font-size:11px">{{ p.action==='buy'?'买':'卖' }}</span>
-            <span>{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
-            <span v-if="p.amount" style="color:var(--text-dim)">¥{{ Math.round(p.amount) }}</span>
-            <span class="badge" :class="planStatusBadge(p.status)" style="font-size:10px;margin-left:auto">{{ planStatusLabel(p.status) }}</span>
+        <template v-if="detailTab === 'info'">
+          <div class="detail-section">
+            <div class="detail-row"><span>类型</span><span class="badge badge-buy">{{ typeLabel(detailStrategy.type) }}</span></div>
+            <div class="detail-row"><span>关联资产</span><span>{{ assetDisplay(detailStrategy) }}</span></div>
+            <div class="detail-row"><span>状态</span><span class="badge" :class="statusBadge(detailStrategy.status)">{{ statusLabel(detailStrategy.status) }}</span></div>
+            <div class="detail-row"><span>创建时间</span><span style="color:var(--text-dim)">{{ detailStrategy.created_at?.slice(0,10) }}</span></div>
+            <div class="detail-row" v-if="detailStrategy.description"><span>描述</span><span style="color:var(--text-dim);font-size:13px">{{ detailStrategy.description }}</span></div>
+          </div>
+
+          <div v-if="detailPlans.length" class="detail-section">
+            <div class="detail-section-title">操盘计划 ({{ detailPlans.length }} 步)</div>
+            <div v-for="p in detailPlans" :key="p.id" class="plan-mini">
+              <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'" style="font-size:11px">{{ p.action==='buy'?'买':'卖' }}</span>
+              <span>{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
+              <span v-if="p.amount" style="color:var(--text-dim)">¥{{ Math.round(p.amount) }}</span>
+              <span class="badge" :class="planStatusBadge(p.status)" style="font-size:10px;margin-left:auto">{{ planStatusLabel(p.status) }}</span>
+            </div>
+          </div>
+          <div v-else class="detail-section" style="padding:12px 14px;color:var(--text-dim);font-size:13px">
+            暂无操盘计划
+          </div>
+
+          <div class="detail-actions">
+            <router-link :to="`/strategies/${detailStrategy.id}`" class="btn btn-primary" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看完整详情</router-link>
+            <router-link :to="`/strategies/${detailStrategy.id}/edit`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">编辑</router-link>
+          </div>
+        </template>
+
+        <!-- Generation History Tab -->
+        <template v-if="detailTab === 'history'">
+          <div v-if="generationHistory.length === 0" class="detail-section" style="padding:16px 14px;color:var(--text-dim);font-size:13px;text-align:center">
+            暂无生成历史
+          </div>
+          <div v-else class="history-list">
+            <div v-for="h in generationHistory" :key="h.id" class="history-item" @click="viewHistoryDetail(h)">
+              <div class="history-item-header">
+                <span class="history-name">{{ h.strategy_name || '策略生成' }}</span>
+                <span class="badge" :class="h.status === 'adopted' ? 'badge-buy' : h.status === 'discarded' ? 'badge-sell' : 'badge-pending'">
+                  {{ { draft: '草稿', adopted: '已采用', discarded: '已丢弃' }[h.status] || h.status }}
+                </span>
+              </div>
+              <div class="history-item-meta">
+                <span>{{ h.goal }} · {{ h.risk_level }}</span>
+                <span>{{ h.created_at?.slice(0, 16).replace('T', ' ') }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </AppDrawer>
+
+    <!-- Drafts Drawer -->
+    <AppDrawer v-model="showDrafts" title="AI 策略草稿">
+      <div class="drafts-list">
+        <div v-for="d in drafts" :key="d.id" class="draft-item">
+          <div class="draft-item-header">
+            <span class="draft-name">{{ d.strategy_name || '未命名策略' }}</span>
+            <span style="font-size:11px;color:var(--text-dim)">{{ d.created_at?.slice(0, 16).replace('T', ' ') }}</span>
+          </div>
+          <div class="draft-item-meta">
+            <span>{{ d.goal }} · ¥{{ d.budget }} · {{ d.risk_level }}</span>
+            <span v-if="d.elapsed_ms">{{ (d.elapsed_ms / 1000).toFixed(1) }}s</span>
+          </div>
+          <div class="draft-item-actions">
+            <button class="btn btn-primary btn-sm" @click="adoptDraft(d)">✅ 采用</button>
+            <button class="btn btn-sm" @click="viewDraftDetail(d)">👁️ 查看</button>
+            <button class="btn btn-sm btn-danger" @click="discardDraft(d)">🗑️ 丢弃</button>
           </div>
         </div>
-        <div v-else class="detail-section" style="padding:12px 14px;color:var(--text-dim);font-size:13px">
-          暂无操盘计划
+        <div v-if="!drafts.length" style="text-align:center;color:var(--text-dim);padding:20px">
+          暂无草稿
         </div>
+      </div>
+    </AppDrawer>
 
-        <div class="detail-actions">
-          <router-link :to="`/strategies/${detailStrategy.id}`" class="btn btn-primary" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看完整详情</router-link>
-          <router-link :to="`/strategies/${detailStrategy.id}/edit`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">编辑</router-link>
+    <!-- History Detail Drawer -->
+    <AppDrawer v-model="showHistoryDetail" :title="historyDetail?.strategy_name || '生成详情'">
+      <div v-if="historyDetail" class="detail-drawer-content">
+        <div class="detail-section">
+          <div class="detail-row"><span>目标</span><span>{{ historyDetail.goal }}</span></div>
+          <div class="detail-row"><span>风险</span><span>{{ historyDetail.risk_level }}</span></div>
+          <div class="detail-row"><span>预算</span><span>¥{{ historyDetail.budget }}</span></div>
+          <div class="detail-row"><span>模型</span><span style="color:var(--text-dim)">{{ historyDetail.model }}</span></div>
+          <div class="detail-row"><span>耗时</span><span style="color:var(--text-dim)">{{ (historyDetail.elapsed_ms / 1000).toFixed(1) }}s</span></div>
+        </div>
+        <div v-if="historyDetail.reasoning" class="detail-section" style="padding:12px 14px">
+          <div class="detail-section-title" style="padding:0 0 6px 0">💡 决策逻辑</div>
+          <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0">{{ historyDetail.reasoning }}</p>
+        </div>
+        <div v-if="historyDetail.analysis?.market_assessment" class="detail-section" style="padding:12px 14px">
+          <div class="detail-section-title" style="padding:0 0 6px 0">📊 市场评估</div>
+          <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0">{{ historyDetail.analysis.market_assessment }}</p>
         </div>
       </div>
     </AppDrawer>
@@ -82,14 +159,22 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
+import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 
+const toast = useToast()
 const strategies = ref([])
+const drafts = ref([])
 const showAI = ref(false)
+const showDrafts = ref(false)
 const showDetailDrawer = ref(false)
+const showHistoryDetail = ref(false)
 const detailStrategy = ref(null)
 const detailPlans = ref([])
+const detailTab = ref('info')
+const generationHistory = ref([])
+const historyDetail = ref(null)
 
 async function loadData() {
   const res = await api('/api/strategies')
@@ -97,9 +182,18 @@ async function loadData() {
   strategies.value = json.data || []
 }
 
+async function loadDrafts() {
+  try {
+    const res = await api('/api/strategies/drafts')
+    const json = await res.json()
+    drafts.value = json.data || []
+  } catch { drafts.value = [] }
+}
+
 async function openDetail(s) {
   detailStrategy.value = s
   detailPlans.value = []
+  detailTab.value = 'info'
   showDetailDrawer.value = true
   try {
     const res = await api(`/api/plans?strategy_id=${s.id}`)
@@ -108,7 +202,65 @@ async function openDetail(s) {
   } catch {}
 }
 
-function onAIDone() { showAI.value = false; loadData() }
+async function loadGenerationHistory() {
+  if (!detailStrategy.value) return
+  try {
+    const res = await api(`/api/strategies/generation-logs?asset_id=${detailStrategy.value.asset_id || ''}`)
+    const json = await res.json()
+    generationHistory.value = json.data || []
+  } catch { generationHistory.value = [] }
+}
+
+async function viewHistoryDetail(h) {
+  try {
+    const res = await api(`/api/strategies/generation-logs/${h.id}`)
+    const json = await res.json()
+    if (json.success) {
+      historyDetail.value = { ...json.data, strategy_name: h.strategy_name }
+      showHistoryDetail.value = true
+    }
+  } catch {}
+}
+
+async function viewDraftDetail(d) {
+  try {
+    const res = await api(`/api/strategies/generation-logs/${d.id}`)
+    const json = await res.json()
+    if (json.success) {
+      historyDetail.value = { ...json.data, strategy_name: d.strategy_name }
+      showHistoryDetail.value = true
+    }
+  } catch {}
+}
+
+async function adoptDraft(d) {
+  try {
+    const res = await api(`/api/strategies/drafts/${d.id}/adopt`, { method: 'POST' })
+    const json = await res.json()
+    if (json.success) {
+      toast.success('策略已采用')
+      loadData()
+      loadDrafts()
+    } else {
+      toast.error(json.error)
+    }
+  } catch (e) { toast.error(e.message) }
+}
+
+async function discardDraft(d) {
+  try {
+    const res = await api(`/api/strategies/drafts/${d.id}`, { method: 'DELETE' })
+    const json = await res.json()
+    if (json.success) {
+      toast.success('草稿已丢弃')
+      loadDrafts()
+    } else {
+      toast.error(json.error)
+    }
+  } catch (e) { toast.error(e.message) }
+}
+
+function onAIDone() { showAI.value = false; loadData(); loadDrafts() }
 function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t }
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
@@ -121,7 +273,7 @@ function assetDisplay(s) {
   }
   return s.asset_name || '-'
 }
-onMounted(loadData)
+onMounted(() => { loadData(); loadDrafts() })
 </script>
 
 <style scoped>
@@ -140,6 +292,50 @@ onMounted(loadData)
 .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; }
 .plan-mini { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; }
 .detail-actions { display: flex; gap: 10px; margin-top: 8px; }
+
+/* Draft button */
+.btn-draft { position: relative; }
+.draft-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; border-radius: 9px;
+  background: var(--primary); color: #fff; font-size: 11px;
+  margin-left: 4px; padding: 0 4px;
+}
+
+/* Drawer Tabs */
+.drawer-tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+.drawer-tab {
+  flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 500;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-dim); cursor: pointer; transition: all 0.2s;
+}
+.drawer-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* History list */
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-item {
+  border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  cursor: pointer; transition: background 0.15s;
+}
+.history-item:hover { background: var(--bg-hover); }
+.history-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.history-name { font-weight: 600; font-size: 13px; }
+.history-item-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
+
+/* Drafts */
+.drafts-list { display: flex; flex-direction: column; gap: 12px; }
+.draft-item {
+  border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+}
+.draft-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.draft-name { font-weight: 600; font-size: 14px; }
+.draft-item-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; display: flex; justify-content: space-between; }
+.draft-item-actions { display: flex; gap: 8px; }
+.btn-sm { font-size: 12px; padding: 4px 10px; }
+.btn-danger { color: var(--red); border-color: rgba(239,68,68,0.3); }
+.btn-danger:hover { background: rgba(239,68,68,0.1); }
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }

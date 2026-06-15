@@ -453,7 +453,7 @@ async function runAnalysis(collectedData, config) {
 // ============================================================
 
 function buildStrategistPrompt(analysisReport, collectedData, userConstraints) {
-  const { budget, goal, riskLevel, assetIds } = userConstraints;
+  const { budget, goal, riskLevel, assetIds, previousResult, userFeedback } = userConstraints;
   const { assets, triggeredPlans } = collectedData;
 
   const goalMap = {
@@ -571,7 +571,16 @@ ${assets.map(a => {
 - plans 按 seq 从1开始编号
 - asset_id 必须是: ${assets.map(a => a.asset.id).join(', ')}
 - 价格保留2位小数
-${isMulti ? '- 组合策略要体现资产间的配置逻辑和再平衡思路' : ''}`;
+${isMulti ? '- 组合策略要体现资产间的配置逻辑和再平衡思路' : ''}${previousResult && userFeedback ? `
+
+## ⚠️ 用户反馈（基于上次生成结果的调整要求）
+
+上次生成的策略名称: ${previousResult.strategy?.name || ''}
+上次生成的推理: ${(previousResult.reasoning || '').slice(0, 500)}
+
+**用户反馈:** ${userFeedback}
+
+请根据用户反馈对策略进行针对性调整，保持分析报告中的有效结论，但修正用户不满意的部分。` : ''}`;
 }
 
 async function generateStrategy(analysisReport, collectedData, userConstraints, config) {
@@ -620,7 +629,7 @@ async function generateStrategy(analysisReport, collectedData, userConstraints, 
  * @param {function} onProgress - Callback for progress updates: (step, message) => void
  * @returns {object} { analysis, strategy, plans, reasoning, risk_management, execution_notes }
  */
-export async function runStrategyAgent(db, { assetIds, budget, goal, riskLevel }, onProgress) {
+export async function runStrategyAgent(db, { assetIds, budget, goal, riskLevel, previousResult, userFeedback }, onProgress) {
   const config = getAgentConfig(db);
   if (!config.apiUrl || !config.apiKey) {
     throw new Error('请先在设置中配置 AI API 地址和密钥');
@@ -628,8 +637,9 @@ export async function runStrategyAgent(db, { assetIds, budget, goal, riskLevel }
 
   const notify = onProgress || (() => {});
   const startTime = Date.now();
+  const isRegenerate = !!(previousResult && userFeedback);
 
-  log.info('Strategy Agent started', { assetIds, budget, goal, riskLevel });
+  log.info('Strategy Agent started', { assetIds, budget, goal, riskLevel, isRegenerate });
 
   // Step 1: Data Collection
   notify('collecting', '正在收集持仓、行情和市场数据...');
@@ -641,9 +651,9 @@ export async function runStrategyAgent(db, { assetIds, budget, goal, riskLevel }
   const analysisReport = await runAnalysis(collectedData, config);
   notify('analyzing_done', `分析完成：置信度 ${Math.round((analysisReport.confidence_level || 0.5) * 100)}%`);
 
-  // Step 3: Strategy Generation
-  notify('generating', '正在基于分析结论生成操盘策略...');
-  const strategyResult = await generateStrategy(analysisReport, collectedData, { assetIds, budget, goal, riskLevel }, config);
+  // Step 3: Strategy Generation (with optional feedback context)
+  notify('generating', isRegenerate ? '正在基于您的反馈优化策略...' : '正在基于分析结论生成操盘策略...');
+  const strategyResult = await generateStrategy(analysisReport, collectedData, { assetIds, budget, goal, riskLevel, previousResult, userFeedback }, config);
   notify('done', '策略生成完成');
 
   const elapsed = Date.now() - startTime;
@@ -656,5 +666,6 @@ export async function runStrategyAgent(db, { assetIds, budget, goal, riskLevel }
     reasoning: strategyResult.reasoning || '',
     risk_management: strategyResult.risk_management || null,
     execution_notes: strategyResult.execution_notes || '',
+    _meta: { model: config.model, elapsed_ms: elapsed },
   };
 }
