@@ -90,7 +90,7 @@ if (!existsSync(distDir)) {
 
 // ===== 启动 =====
 app.listen(PORT, () => {
-  log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/invest.db' });
+  log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/lynx.db' });
   startMonitor();
 
   // 启动后延迟30秒拉取新闻（避免阻塞启动）

@@ -11,14 +11,24 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function wasRecentlyNotified(db, { type, planId, strategyId }) {
+function wasRecentlyNotified(db, { type, planId, strategyId, assetId }) {
+  if (planId || strategyId) {
+    const row = db.prepare(`SELECT id FROM notifications
+      WHERE type = ?
+        AND COALESCE(plan_id, 0) = COALESCE(?, 0)
+        AND COALESCE(strategy_id, 0) = COALESCE(?, 0)
+        AND created_at >= datetime('now', '-1 day')
+      ORDER BY created_at DESC
+      LIMIT 1`).get(type, planId || null, strategyId || null);
+    return !!row;
+  }
+  // For stop_loss and price_swing: deduplicate by asset_id
   const row = db.prepare(`SELECT id FROM notifications
     WHERE type = ?
-      AND COALESCE(plan_id, 0) = COALESCE(?, 0)
-      AND COALESCE(strategy_id, 0) = COALESCE(?, 0)
+      AND asset_id = ?
       AND created_at >= datetime('now', '-1 day')
     ORDER BY created_at DESC
-    LIMIT 1`).get(type, planId || null, strategyId || null);
+    LIMIT 1`).get(type, assetId || null);
   return !!row;
 }
 
@@ -27,6 +37,10 @@ export function checkStrategyAlerts() {
   const approachingPct = safeNumber(
     db.prepare("SELECT value FROM settings WHERE key = 'plan_approaching_pct'").get()?.value,
     5,
+  );
+  const priceAlertThreshold = safeNumber(
+    db.prepare("SELECT value FROM settings WHERE key = 'price_alert_threshold'").get()?.value,
+    2,
   );
 
   const strategies = db.prepare(`SELECT id, name FROM strategies WHERE status = 'active' ORDER BY id ASC`).all();
@@ -93,8 +107,63 @@ export function checkStrategyAlerts() {
     }
   }
 
-  log.debug('Strategy alerts checked', { strategies: strategies.length, triggered, approaching });
-  return { success: true, data: { strategies: strategies.length, triggered, approaching } };
+  // 3. 持仓止损监控
+  const holdings = db.prepare(`SELECT h.*, a.name, a.symbol FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'`).all();
+  let stopLossCount = 0;
+
+  for (const h of holdings) {
+    const latestPrice = latestPriceStmt.get(h.asset_id);
+    if (!latestPrice || !h.stop_loss) continue;
+    const price = safeNumber(latestPrice.price);
+    const stopLoss = safeNumber(h.stop_loss);
+    if (price <= 0 || stopLoss <= 0) continue;
+    const diffPct = (price - stopLoss) / stopLoss * 100;
+
+    if (diffPct <= 5) {
+      const type = diffPct <= 0 ? 'stop_loss_triggered' : 'stop_loss_approaching';
+      if (!wasRecentlyNotified(db, { type, planId: null, strategyId: null, assetId: h.asset_id })) {
+        createNotification(db, {
+          type,
+          title: diffPct <= 0 ? `止损触发：${h.name}` : `接近止损：${h.name}`,
+          message: diffPct <= 0
+            ? `${h.name} 当前价格 ${price} 已跌破止损线 ${stopLoss}！`
+            : `${h.name} 距止损线 ${stopLoss} 仅 ${diffPct.toFixed(1)}%（当前 ${price}）`,
+          asset_id: h.asset_id,
+          severity: diffPct <= 0 ? 'danger' : 'warning',
+          channel: 'web',
+        });
+        stopLossCount += 1;
+      }
+    }
+  }
+
+  // 4. 价格大幅波动
+  const assets = db.prepare('SELECT id, name, symbol FROM assets').all();
+  let swingCount = 0;
+
+  for (const asset of assets) {
+    const lastTwo = db.prepare(`SELECT price, fetched_at FROM price_cache WHERE asset_id = ? ORDER BY datetime(fetched_at) DESC, id DESC LIMIT 2`).all(asset.id);
+    if (lastTwo.length < 2) continue;
+    const changePct = (lastTwo[0].price - lastTwo[1].price) / lastTwo[1].price * 100;
+    if (Math.abs(changePct) >= priceAlertThreshold) {
+      if (!wasRecentlyNotified(db, { type: 'price_swing', planId: null, strategyId: null, assetId: asset.id })) {
+        createNotification(db, {
+          type: 'price_swing',
+          title: `价格波动：${asset.name}`,
+          message: changePct >= 0
+            ? `${asset.name} 大涨 +${changePct.toFixed(1)}%`
+            : `${asset.name} 大跌 ${changePct.toFixed(1)}%`,
+          asset_id: asset.id,
+          severity: Math.abs(changePct) >= 5 ? 'danger' : 'info',
+          channel: 'web',
+        });
+        swingCount += 1;
+      }
+    }
+  }
+
+  log.debug('Strategy alerts checked', { strategies: strategies.length, triggered, approaching, stopLossCount, swingCount });
+  return { success: true, data: { strategies: strategies.length, triggered, approaching, stopLossCount, swingCount } };
 }
 
 export function startMonitor(intervalMs) {

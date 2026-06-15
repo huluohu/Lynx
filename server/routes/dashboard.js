@@ -76,133 +76,34 @@ router.get('/summary', (req, res) => {
   }});
 });
 
-// GET 提醒/告警
+// GET 提醒/告警（统一从 notifications 表读取）
 router.get('/alerts', (req, res) => {
   const db = getDb();
-  const alerts = [];
 
-  // 1. 已触发的计划
-  const triggeredPlans = db.prepare(`SELECT p.*, a.name as asset_name, a.symbol, a.icon, a.type
-    FROM trading_plans p JOIN assets a ON p.asset_id = a.id
-    WHERE p.status = 'triggered' ORDER BY p.seq`).all();
+  const rows = db.prepare(`
+    SELECT n.*, a.name AS asset_name, a.symbol, a.icon
+    FROM notifications n
+    LEFT JOIN assets a ON n.asset_id = a.id
+    WHERE n.status IN ('pending', 'sent')
+    ORDER BY
+      CASE n.severity WHEN 'danger' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
+      n.created_at DESC
+  `).all();
 
-  for (const p of triggeredPlans) {
-    alerts.push({
-      id: `plan-${p.id}`,
-      level: 'danger',
-      type: 'plan_triggered',
-      asset_name: p.asset_name,
-      asset_icon: p.icon,
-      symbol: p.symbol,
-      message: `${p.action === 'buy' ? '📥 补仓机会' : '📤 减仓机会'}：${p.asset_name} ${p.action === 'buy' ? '跌至' : '涨至'} ${p.trigger_value}，建议${p.action === 'buy' ? '买入' : '卖出'} ${p.quantity || '-'}`,
-      action: p.action,
-      quantity: p.quantity,
-      trigger_value: p.trigger_value,
-      plan_id: p.id,
-      strategy_id: p.strategy_id,
-      time: p.updated_at || p.created_at,
-    });
-  }
+  const levelMap = { danger: 'danger', warning: 'warning', info: 'info' };
 
-  // 2. 接近触发线（价格与触发值差 ≤ 5%）
-  const pendingPlans = db.prepare(`SELECT p.*, a.name as asset_name, a.symbol, a.icon, a.type
-    FROM trading_plans p JOIN assets a ON p.asset_id = a.id
-    WHERE p.status = 'pending' ORDER BY p.seq`).all();
-
-  const prices = {};
-  const priceRows = db.prepare(`SELECT pc.* FROM price_cache pc
-    JOIN (SELECT asset_id, MAX(fetched_at) as max_ts FROM price_cache GROUP BY asset_id) latest
-    ON pc.asset_id = latest.asset_id AND pc.fetched_at = latest.max_ts`).all();
-  for (const p of priceRows) prices[p.asset_id] = { price: p.price, currency: p.currency || 'CNY' };
-
-  for (const p of pendingPlans) {
-    const priceData = prices[p.asset_id];
-    if (!priceData) continue;
-    const price = priceData.price;
-    const trigger = parseFloat(p.trigger_value);
-    if (!trigger) continue;
-    const diffPct = Math.abs((price - trigger) / trigger * 100);
-    if (diffPct <= 5) {
-      const direction = p.trigger_type === 'price_below' ? (price <= trigger) : (price >= trigger);
-      const nearLabel = direction ? '已到达' : (price < trigger ? '差' : '超') + diffPct.toFixed(1) + '%';
-      alerts.push({
-        id: `near-${p.id}`,
-        level: direction ? 'danger' : 'warning',
-        type: 'plan_approaching',
-        asset_name: p.asset_name,
-        asset_icon: p.icon,
-        symbol: p.symbol,
-        message: direction
-          ? `⚡ ${p.asset_name} 已触及 ${p.action === 'buy' ? '补仓线' : '减仓线'} ${p.trigger_value}`
-          : `⏳ ${p.asset_name} 距 ${p.action === 'buy' ? '补仓' : '减仓'}线 ${p.trigger_value} ${nearLabel}（当前 ${priceData.currency === 'USD' ? '$' : '¥'}${price}）`,
-        action: direction ? p.action : null,
-        quantity: direction ? p.quantity : null,
-        trigger_value: p.trigger_value,
-        current_price: price,
-        diff_pct: diffPct,
-        plan_id: p.id,
-        strategy_id: p.strategy_id,
-        time: new Date().toISOString(),
-      });
-    }
-  }
-
-  // 3. 持仓止损监控
-  const holdings = db.prepare(`SELECT h.*, a.name, a.symbol, a.icon, a.type
-    FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'`).all();
-
-  for (const h of holdings) {
-    const priceData = prices[h.asset_id];
-    if (!priceData || !h.stop_loss) continue;
-    const price = priceData.price;
-    const stopLoss = parseFloat(h.stop_loss);
-    const diffPct = (price - stopLoss) / stopLoss * 100;
-    if (diffPct <= 5) {
-      alerts.push({
-        id: `stop-${h.id}`,
-        level: diffPct <= 0 ? 'danger' : 'warning',
-        type: 'stop_loss',
-        asset_name: h.name,
-        asset_icon: h.icon,
-        symbol: h.symbol,
-        message: diffPct <= 0
-          ? `🚨 ${h.name} 触发止损线 ${stopLoss}！`
-          : `⚠️ ${h.name} 距止损线 ${stopLoss} 仅 ${diffPct.toFixed(1)}%（当前 ${priceData.currency === 'USD' ? '$' : '¥'}${price}）`,
-        current_price: price,
-        stop_loss: stopLoss,
-        diff_pct: diffPct,
-        time: new Date().toISOString(),
-      });
-    }
-  }
-
-  // 4. 价格大幅波动
-  for (const [assetId, priceData] of Object.entries(prices)) {
-    const lastTwo = db.prepare(`SELECT price, fetched_at FROM price_cache
-      WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 2`).all(assetId);
-    if (lastTwo.length < 2) continue;
-    const changePct = (lastTwo[0].price - lastTwo[1].price) / lastTwo[1].price * 100;
-    if (Math.abs(changePct) >= 2) {
-      const asset = db.prepare('SELECT name, icon, symbol FROM assets WHERE id = ?').get(assetId);
-      if (!asset) continue;
-      alerts.push({
-        id: `vol-${assetId}-${Date.now()}`,
-        level: Math.abs(changePct) >= 5 ? 'danger' : 'info',
-        type: 'price_swing',
-        asset_name: asset.name,
-        asset_icon: asset.icon,
-        symbol: asset.symbol,
-        message: changePct >= 0
-          ? `📈 ${asset.name} 大涨 +${changePct.toFixed(1)}%`
-          : `📉 ${asset.name} 大跌 ${changePct.toFixed(1)}%`,
-        change_pct: changePct,
-        time: lastTwo[0].fetched_at,
-      });
-    }
-  }
-
-  const levelOrder = { danger: 0, warning: 1, info: 2 };
-  alerts.sort((a, b) => levelOrder[a.level] - levelOrder[b.level] || a.type.localeCompare(b.type));
+  const alerts = rows.map(r => ({
+    id: r.id,
+    level: levelMap[r.severity] || 'info',
+    type: r.type,
+    asset_name: r.asset_name,
+    asset_icon: r.icon,
+    symbol: r.symbol,
+    message: r.message,
+    plan_id: r.plan_id,
+    strategy_id: r.strategy_id,
+    time: r.created_at,
+  }));
 
   res.json({ success: true, data: alerts });
 });

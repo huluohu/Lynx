@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/invest-compass.iml" filepath="$PROJECT_DIR$/.idea/invest-compass.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/lynx.iml" filepath="$PROJECT_DIR$/.idea/lynx.iml" />
     </modules>
   </component>
 </project>

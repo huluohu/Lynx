@@ -6,7 +6,7 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('db');
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH || join(__dirname, '..', '..', 'data', 'invest.db');
+const DB_PATH = process.env.DB_PATH || join(__dirname, '..', '..', 'data', 'lynx.db');
 
 let db;
 

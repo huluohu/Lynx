@@ -11,7 +11,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3456"
-      DB_PATH: /app/data/invest.db
+      DB_PATH: /app/data/lynx.db
       TZ: Asia/Shanghai
       LANG: C.UTF-8
       LC_ALL: C.UTF-8

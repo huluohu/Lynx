@@ -42,12 +42,7 @@
         <div class="alert-body">
           <div class="alert-message">{{ a.message }}</div>
           <div class="alert-meta">
-            <span v-if="a.type === 'plan_approaching' && a.diff_pct" class="alert-gauge">
-              <span class="gauge-bar"><span class="gauge-fill" :style="{width: Math.min(100 - a.diff_pct * 20, 100) + '%'}" :class="a.diff_pct <= 2 ? 'red' : a.diff_pct <= 5 ? 'orange' : ''"></span></span>
-              <span class="gauge-label">差{{ a.diff_pct.toFixed(1) }}%</span>
-            </span>
             <span v-if="a.symbol" class="alert-asset-tag">{{ a.symbol }}</span>
-            <span v-if="a.change_pct" :class="a.change_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ a.change_pct >= 0 ? '+' : '' }}{{ a.change_pct.toFixed(1) }}%</span>
           </div>
         </div>
         <div class="alert-action">
@@ -252,7 +247,10 @@ async function refresh() {
   initialized.value = true
 }
 
-function markDone(id) {
+async function markDone(id) {
+  try {
+    await api(`/api/notifications/${id}/read`, { method: 'PUT' })
+  } catch { /* ignore */ }
   alerts.value = alerts.value.filter(a => a.id !== id)
 }
 
