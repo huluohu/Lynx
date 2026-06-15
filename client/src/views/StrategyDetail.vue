@@ -124,7 +124,7 @@
 
     <!-- AI Regenerate Drawer -->
     <AppDrawer v-model="showAIRegenerate" title="🤖 AI 重新生成策略">
-      <AIStrategyGenerator :preset-asset-id="strategy.asset_id" @done="onAIRegenDone" />
+      <AIStrategyGenerator :preset-asset-id="strategy.asset_id" :existing-strategy-id="strategy.id" @done="onAIRegenDone" />
     </AppDrawer>
   </div>
 </template>
@@ -192,12 +192,10 @@ function triggerLabel(t) { return { price_above:'价格 ≥', price_below:'价�
 function planStatusLabel(s) { return { pending:'等待', triggered:'⚡触发', executed:'已执行', cancelled:'取消' }[s] || s }
 function planStatusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
 
-function onAIRegenDone(newStrategyId) {
+function onAIRegenDone(strategyId) {
   showAIRegenerate.value = false
-  toast.success('新策略已生成')
-  if (newStrategyId) {
-    router.push(`/strategies/${newStrategyId}`)
-  }
+  toast.success('策略已更新')
+  loadData()
 }
 
 onMounted(loadData)

@@ -240,6 +240,7 @@ import { useToast } from '../utils/toast.js'
 
 const props = defineProps({
   presetAssetId: { type: [Number, String], default: null },
+  existingStrategyId: { type: [Number, String], default: null },
 })
 const emit = defineEmits(['done'])
 
@@ -486,18 +487,22 @@ function handleSSEEvent(event, data) {
 async function confirmSave() {
   saving.value = true
   try {
+    const body = {
+      asset_ids: selectedAssetIds.value,
+      strategy: result.value.strategy,
+      plans: editablePlans.value,
+      generation_id: generationId.value,
+    }
+    if (props.existingStrategyId) {
+      body.existing_strategy_id = Number(props.existingStrategyId)
+    }
     const res = await api('/api/strategies/ai-confirm', {
       method: 'POST',
-      body: JSON.stringify({
-        asset_ids: selectedAssetIds.value,
-        strategy: result.value.strategy,
-        plans: editablePlans.value,
-        generation_id: generationId.value,
-      }),
+      body: JSON.stringify(body),
     })
     const json = await res.json()
     if (!json.success) throw new Error(json.error)
-    toast.success('策略已保存')
+    toast.success(props.existingStrategyId ? '策略已更新' : '策略已保存')
     emit('done', json.data.strategyId)
   } catch (e) {
     toast.error(e.message)

@@ -180,10 +180,16 @@
 
         <div style="display:flex;gap:12px;margin-top:16px">
           <button type="submit" class="btn btn-primary" :disabled="submitting || selectedAssetIds.length === 0">{{ submitting ? '创建中...' : (isEdit ? '保存修改' : '创建策略') }}</button>
+          <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true">🤖 AI 重新生成</button>
           <router-link to="/strategies" class="btn">取消</router-link>
         </div>
       </form>
     </div>
+
+    <!-- AI Regenerate Drawer -->
+    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" title="🤖 AI 重新生成策略">
+      <AIStrategyGenerator :preset-asset-id="selectedAssetIds[0]" :existing-strategy-id="strategyId" @done="onAIRegenDone" />
+    </AppDrawer>
   </div>
 </template>
 
@@ -192,11 +198,14 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import AppDrawer from '../components/AppDrawer.vue'
+import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
 const submitting = ref(false)
+const showAIRegenerate = ref(false)
 const assets = ref([])
 const isEdit = ref(false)
 const strategyId = ref(null)
@@ -403,6 +412,12 @@ async function submit() {
     router.push(isEdit.value ? `/strategies/${strategyId.value}` : '/strategies')
   } catch (e) { toast.error(e.message) }
   finally { submitting.value = false }
+}
+
+function onAIRegenDone(strategyId) {
+  showAIRegenerate.value = false
+  toast.success('策略已更新')
+  router.push(`/strategies/${strategyId}`)
 }
 
 onMounted(async () => {

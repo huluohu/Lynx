@@ -352,7 +352,7 @@ router.delete('/drafts/:id', (req, res) => {
 
 // POST AI 生成后确认保存 (legacy — still works for direct save without draft)
 router.post('/ai-confirm', (req, res) => {
-  const { asset_id, asset_ids, strategy, plans, generation_id } = req.body;
+  const { asset_id, asset_ids, strategy, plans, generation_id, existing_strategy_id } = req.body;
   if (!strategy || !plans) return res.status(400).json({ success: false, error: '缺少策略数据' });
 
   const db = getDb();
@@ -363,10 +363,24 @@ router.post('/ai-confirm', (req, res) => {
   try {
     const saveAll = db.transaction(() => {
       const params = typeof strategy.parameters === 'string' ? strategy.parameters : JSON.stringify(strategy.parameters || {});
-      const sResult = db.prepare(
-        'INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, 'active');
-      const strategyId = sResult.lastInsertRowid;
+      let strategyId;
+
+      if (existing_strategy_id) {
+        // Update existing strategy
+        db.prepare(
+          'UPDATE strategies SET name = ?, description = ?, type = ?, asset_id = ?, asset_ids = ?, parameters = ? WHERE id = ?'
+        ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, existing_strategy_id);
+        strategyId = existing_strategy_id;
+
+        // Remove old plans and re-insert
+        db.prepare('DELETE FROM trading_plans WHERE strategy_id = ?').run(strategyId);
+      } else {
+        // Create new strategy
+        const sResult = db.prepare(
+          'INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, 'active');
+        strategyId = sResult.lastInsertRowid;
+      }
 
       const insert = db.prepare(
         'INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
