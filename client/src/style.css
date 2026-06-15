@@ -369,6 +369,8 @@ tr:hover td { background: var(--bg-hover); }
   /* Mobile button sizing (44px min touch target) */
   .btn { padding: 12px 18px; font-size: 14px; min-height: 44px; border-radius: 10px; }
   .btn-sm { padding: 8px 12px; font-size: 13px; min-height: 36px; }
+  .btn-icon { width: 36px; height: 36px; min-height: 36px; padding: 0; }
+  .page-actions { flex-shrink: 0; }
 
   /* Stat card on mobile */
   .stat-value { font-size: 15px; word-break: break-all; }
@@ -403,6 +405,80 @@ tr:hover td { background: var(--bg-hover); }
 .holding-card:active {
   transform: scale(0.98);
   background: var(--bg-hover);
+}
+
+/* ===== Desktop/Mobile visibility ===== */
+.desktop-only { display: flex; gap: 8px; align-items: center; }
+.mobile-only { display: none; }
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; gap: 8px; align-items: center; }
+}
+
+/* ===== Icon button ===== */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn-icon:active { background: var(--bg-hover); }
+
+/* ===== Action Sheet (mobile) ===== */
+.action-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 500;
+}
+.action-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 0 env(safe-area-inset-bottom, 16px);
+  z-index: 501;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+}
+.action-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  font-size: 15px;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+}
+.action-sheet-item:active { background: var(--bg-hover); }
+.action-sheet-item.danger { color: var(--red); }
+.action-sheet-item svg { opacity: 0.7; }
+.action-sheet-cancel {
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.action-sheet-cancel:active { background: var(--bg-hover); }
+
+/* Slide-up transition */
+.slide-up-enter-active, .slide-up-leave-active {
+  transition: transform 0.25s ease;
+}
+.slide-up-enter-from, .slide-up-leave-to {
+  transform: translateY(100%);
 }
 
 /* Hamburger for mobile */
