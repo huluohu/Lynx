@@ -32,7 +32,19 @@
             <select class="form-select" v-model="form.currency">
               <option value="CNY">人民币 (CNY)</option>
               <option value="USD">美元 (USD)</option>
+              <option v-if="form.type === 'crypto'" value="USDT">USDT</option>
             </select>
+          </div>
+        </div>
+
+        <!-- 加密货币快速选择 -->
+        <div v-if="form.type === 'crypto'" class="crypto-presets">
+          <label class="form-label">快速选择主流币种</label>
+          <div class="preset-grid">
+            <button v-for="c in cryptoPresets" :key="c.symbol" type="button" class="preset-btn" :class="{ active: form.symbol === c.symbol }" @click="applyCryptoPreset(c)">
+              <span class="preset-icon">{{ c.icon }}</span>
+              <span class="preset-name">{{ c.name }}</span>
+            </button>
           </div>
         </div>
         <div class="form-row">
@@ -83,6 +95,27 @@ const submitting = ref(false)
 const form = reactive({ name: '', symbol: '', type: '', currency: 'CNY', icon: '', data_source: '' })
 const holding = reactive({ quantity: '', avg_cost: '' })
 
+const cryptoPresets = [
+  { name: 'Bitcoin', symbol: 'BTC', icon: '₿', coingeckoId: 'bitcoin' },
+  { name: 'Ethereum', symbol: 'ETH', icon: '⟠', coingeckoId: 'ethereum' },
+  { name: 'BNB', symbol: 'BNB', icon: '🔶', coingeckoId: 'binancecoin' },
+  { name: 'Solana', symbol: 'SOL', icon: '◎', coingeckoId: 'solana' },
+  { name: 'XRP', symbol: 'XRP', icon: '✕', coingeckoId: 'ripple' },
+  { name: 'Cardano', symbol: 'ADA', icon: '◆', coingeckoId: 'cardano' },
+  { name: 'Dogecoin', symbol: 'DOGE', icon: '🐕', coingeckoId: 'dogecoin' },
+  { name: 'TRON', symbol: 'TRX', icon: '⚡', coingeckoId: 'tron' },
+  { name: 'Polkadot', symbol: 'DOT', icon: '●', coingeckoId: 'polkadot' },
+  { name: 'Avalanche', symbol: 'AVAX', icon: '🔺', coingeckoId: 'avalanche-2' },
+]
+
+function applyCryptoPreset(c) {
+  form.name = c.name
+  form.symbol = c.symbol
+  form.icon = c.icon
+  form.currency = 'USD'
+  form.data_source = 'coingecko'
+}
+
 async function submit() {
   submitting.value = true
   try {
@@ -115,3 +148,23 @@ async function submit() {
   }
 }
 </script>
+
+<style scoped>
+.crypto-presets { margin-bottom: 16px; }
+.preset-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
+.preset-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 4px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); cursor: pointer; transition: all 0.15s;
+}
+.preset-btn:hover { border-color: var(--primary); background: rgba(59,130,246,0.04); }
+.preset-btn.active { border-color: var(--primary); background: rgba(59,130,246,0.08); }
+.preset-icon { font-size: 20px; }
+.preset-name { font-size: 11px; color: var(--text-dim); }
+@media (max-width: 768px) {
+  .preset-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .preset-btn { padding: 8px 2px; }
+  .preset-icon { font-size: 16px; }
+  .preset-name { font-size: 10px; }
+}
+</style>

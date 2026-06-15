@@ -2,13 +2,16 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">实时行情</h1>
-      <button class="btn btn-inline-icon" @click="refresh(true)" :disabled="loading">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-          <path d="M21 3v6h-6" />
-        </svg>
-        <span>{{ loading ? '刷新中...' : '刷新' }}</span>
-      </button>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span v-if="lastUpdated" class="update-hint">{{ fmtTime(lastUpdated) }} 更新</span>
+        <button class="btn btn-inline-icon" @click="refresh(true)" :disabled="loading">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          <span>{{ loading ? '刷新中...' : '刷新' }}</span>
+        </button>
+      </div>
     </div>
 
     <!-- Skeleton state -->
@@ -67,6 +70,7 @@ const toast = useToast()
 const prices = ref([])
 const loading = ref(false)
 const initialized = ref(false)
+const lastUpdated = ref(null)
 
 async function refresh(force = false) {
   loading.value = true
@@ -75,6 +79,7 @@ async function refresh(force = false) {
     const res = await api(url)
     const json = await res.json()
     prices.value = json.data || []
+    lastUpdated.value = new Date()
     if (force) {
       const fresh = prices.value.filter(p => !p.cached && !p.stale).length
       toast.success(`已刷新 ${fresh} 个资产行情`)
@@ -92,10 +97,15 @@ function fmt(n) {
 function typeBadge(t) {
   return { gold:'badge-gold', crypto:'badge-crypto', stock:'badge-stock' }[t] || 'badge-pending'
 }
+function fmtTime(d) {
+  if (!d) return ''
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
 onMounted(() => refresh(false))
 </script>
 
 <style scoped>
+.update-hint { font-size: 11px; color: var(--text-muted); }
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .market-card { transition: transform 0.15s; }
