@@ -104,4 +104,14 @@ async function submit() {
   gap: 10px;
   margin-top: 16px;
 }
+
+@media (max-width: 768px) {
+  .transaction-form .form-actions {
+    flex-direction: column;
+  }
+  .transaction-form .form-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 </style>

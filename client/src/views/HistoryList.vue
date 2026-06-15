@@ -372,5 +372,11 @@ onMounted(loadData)
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
   .history-card-header { align-items: flex-start; }
+  .dialog-box { width: 100%; margin: 16px; }
+  .dialog-actions { flex-wrap: wrap; gap: 8px; }
+  .dialog-actions .btn { flex: 1; min-width: 0; }
+  .dialog-header { padding: 16px 16px 0; }
+  .dialog-body { padding: 12px 16px 16px; }
+  .dialog-actions { padding: 0 16px 16px; }
 }
 </style>

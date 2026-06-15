@@ -298,5 +298,8 @@ onMounted(loadData)
   .show-mobile { display: flex !important; }
   .hide-on-mobile { display: none !important; }
   .show-on-mobile { display: flex !important; }
+  .info-row { flex-wrap: wrap; gap: 4px; }
+  .tx-card-body { flex-wrap: wrap; gap: 4px; font-size: 13px; }
+  .tx-card { padding: 12px 14px; }
 }
 </style>

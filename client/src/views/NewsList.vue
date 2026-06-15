@@ -190,4 +190,12 @@ onMounted(loadData)
 .btn-sm { font-size: 12px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
 .btn-sm:hover { background: var(--bg-hover, #f5f5f5); }
 .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 768px) {
+  .news-meta { flex-wrap: wrap; gap: 6px; font-size: 12px; }
+  .news-title { font-size: 15px; }
+  .news-item { padding: 16px 0; }
+  .btn-inline-icon { min-height: 36px; padding: 8px 12px; font-size: 13px; }
+  .btn-sm { min-height: 36px; padding: 8px 12px; font-size: 13px; }
+}
 </style>

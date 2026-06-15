@@ -376,5 +376,11 @@ onMounted(() => { loadData(); loadDrafts() })
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
   .page-actions .btn { font-size: 13px; padding: 6px 10px; }
+  .strategy-card-body { flex-wrap: wrap; gap: 6px; }
+  .detail-actions { flex-wrap: wrap; gap: 8px; }
+  .detail-actions .btn { flex: 1; min-width: 0; text-align: center; }
+  .plan-mini { flex-wrap: wrap; gap: 6px; }
+  .draft-item-actions { flex-wrap: wrap; }
+  .draft-item-actions .btn { min-height: 36px; padding: 8px 12px; }
 }
 </style>

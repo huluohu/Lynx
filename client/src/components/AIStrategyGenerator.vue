@@ -805,4 +805,68 @@ onMounted(() => {
   color: var(--text-dim);
   font-weight: 400;
 }
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+  .plan-action-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+  .inline-input, .inline-select {
+    padding: 8px 10px;
+    font-size: 14px;
+    min-height: 36px;
+    border-radius: 6px;
+  }
+  .plan-preview-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .plan-preview-meta {
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  .plan-preview-meta label {
+    font-size: 13px;
+  }
+  .plan-actions {
+    margin-left: 0;
+    margin-top: 8px;
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .plan-preview-item {
+    padding: 12px;
+  }
+  .info-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .asset-chip {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  .summary-row {
+    font-size: 14px;
+    padding: 4px 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .plan-preview-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .plan-preview-meta label {
+    width: 100%;
+  }
+  .plan-preview-meta label .inline-input,
+  .plan-preview-meta label .inline-select {
+    flex: 1;
+    width: 100%;
+  }
+}
 </style>

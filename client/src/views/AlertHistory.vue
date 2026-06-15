@@ -352,6 +352,7 @@ onMounted(async () => {
   }
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .pagination { justify-content: space-between; }
+  .pagination { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .pagination .btn { min-height: 36px; padding: 8px 12px; }
 }
 </style>

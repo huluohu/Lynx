@@ -1061,9 +1061,15 @@ onMounted(loadData)
   .hide-on-mobile { display: none !important; }
   .show-on-mobile { display: flex !important; }
   .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr; }
-  .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat, .review-top, .review-title-row, .review-history-top { align-items: flex-start; }
+  .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat, .review-top, .review-title-row, .review-history-top { align-items: flex-start; flex-wrap: wrap; }
   .chat-input { flex-direction: column; align-items: stretch; }
   .chat-bubble, .changes-card { max-width: 100%; width: 100%; }
+  .info-row { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .info-row .info-label { font-size: 12px; }
+  .chat-panel { min-height: 50vh; }
+  .chat-input textarea { min-height: 60px; font-size: 16px; }
+  .changes-actions { flex-wrap: wrap; }
+  .changes-actions .btn { flex: 1; min-width: 0; }
 }
 
 </style>

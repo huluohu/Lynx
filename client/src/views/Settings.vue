@@ -159,7 +159,7 @@
             <div class="setting-info">
               <span class="setting-label">推送渠道</span>
             </div>
-            <select class="form-select" v-model="form.push_webhook_type" @change="dirty.push = true" style="max-width:160px">
+            <select class="form-select" v-model="form.push_webhook_type" @change="dirty.push = true" style="max-width:160px;width:auto">
               <option value="wecom">企业微信机器人</option>
               <option value="serverchan">Server酱</option>
               <option value="pushplus">PushPlus</option>
@@ -219,14 +219,14 @@
             <div class="setting-info">
               <span class="setting-label">模型名称</span>
             </div>
-            <input class="setting-input" type="text" v-model="form.ai_model" placeholder="gpt-4o-mini" style="width:160px" @input="dirty.ai = true" />
+            <input class="setting-input" type="text" v-model="form.ai_model" placeholder="gpt-4o-mini" @input="dirty.ai = true" />
           </div>
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">分析模型</span>
               <span class="setting-desc">Agent 研判用的模型（可选更强的模型）</span>
             </div>
-            <input class="setting-input" type="text" v-model="form.agent_analysis_model" placeholder="同上" style="width:160px" @input="dirty.ai = true" />
+            <input class="setting-input" type="text" v-model="form.agent_analysis_model" placeholder="同上" @input="dirty.ai = true" />
           </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">搜索 API 地址 <span class="setting-desc">(可选，增强市场资讯获取)</span></span>
@@ -584,9 +584,15 @@ onMounted(load)
 
 @media (max-width: 768px) {
   .settings-page { max-width: 100%; }
-  .setting-input { width: 70px; font-size: 16px; }
+  .setting-input { width: 100%; max-width: 160px; font-size: 16px; }
   .setting-input-full { font-size: 16px; }
-  .setting-item { padding: 16px; }
+  .setting-item { padding: 16px; flex-wrap: wrap; gap: 10px; }
+  .setting-item .form-select { max-width: 100%; width: 100%; }
+  .add-source-row { flex-wrap: wrap; }
+  .add-source-row .setting-input-full { min-width: 0; flex: 1 1 120px; }
+  .btn-tiny { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; }
+  .custom-source-item { flex-wrap: wrap; gap: 6px; }
+  .save-btn { min-height: 36px; padding: 8px 16px; }
 }
 
 /* Source chips */

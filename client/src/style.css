@@ -555,3 +555,75 @@ tr:hover td { background: var(--bg-hover); }
   font-size: 1.1em;
   flex-shrink: 0;
 }
+
+/* ===== Global Mobile Enhancements ===== */
+
+/* Table wrapper for horizontal scroll */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+/* Modal/Dialog mobile protection */
+.modal-content, .dialog-content, .confirm-dialog {
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+}
+
+/* Ensure long text doesn't overflow */
+.text-break {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+@media (max-width: 480px) {
+  /* Extra small screen adjustments */
+  .main { padding: 12px; padding-bottom: 80px; }
+  .card { padding: 14px; border-radius: 10px; }
+  .stat-card { padding: 10px 12px; }
+  .stat-value { font-size: 14px; }
+  .grid-4 { grid-template-columns: 1fr; }
+  .page-title { font-size: 16px; }
+  .page-header { padding-left: 40px; }
+
+  /* Ensure form rows stack on very small screens */
+  .form-row { flex-direction: column; gap: 0; }
+
+  /* Action sheet adjustments */
+  .action-sheet-item { padding: 14px 20px; }
+}
+
+@media (max-width: 768px) {
+  /* Inline edit controls mobile sizing */
+  .inline-input, .inline-select {
+    padding: 6px 10px;
+    font-size: 14px;
+    min-height: 32px;
+    border-radius: 6px;
+  }
+
+  /* Ensure all modals/overlays fit */
+  .overlay-panel, .drawer-panel {
+    max-width: 100vw;
+    width: 100% !important;
+  }
+
+  /* Touch-friendly small buttons */
+  .btn-tiny, .plan-action-btn {
+    min-width: 36px;
+    min-height: 36px;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Flex row overflow protection */
+  .flex-wrap-mobile {
+    flex-wrap: wrap;
+  }
+}
