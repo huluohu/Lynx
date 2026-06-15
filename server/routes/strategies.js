@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { generatePlan } from '../services/strategy.js';
 import { runBacktest } from '../services/backtest.js';
+import { runStressTest } from '../services/stress-test.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('strategies');
@@ -72,6 +73,103 @@ router.get('/generation-logs/:id', (req, res) => {
   try { row.risk_management = JSON.parse(row.risk_management); } catch {}
   try { row.asset_ids = JSON.parse(row.asset_ids); } catch {}
   res.json({ success: true, data: row });
+});
+
+// POST AI 对比生成策略 (must be before /:id)
+router.post('/ai-compare', async (req, res) => {
+  const { asset_id, asset_ids, budget, goal, risk_level } = req.body;
+  const ids = asset_ids && asset_ids.length > 0 ? asset_ids : (asset_id ? [asset_id] : []);
+  if (ids.length === 0) return res.status(400).json({ success: false, error: '请选择资产' });
+
+  const db = getDb();
+  const compareTypes = [
+    { riskLevel: 'low', label: '保守型' },
+    { riskLevel: 'medium', label: '均衡型' },
+    { riskLevel: 'high', label: '进取型' },
+  ];
+  const requestedRisk = ['low', 'medium', 'high'].includes(risk_level) ? risk_level : 'medium';
+
+  try {
+    const { runStrategyAgent } = await import('../services/strategy-agent.js');
+    const settled = await Promise.allSettled(compareTypes.map(({ riskLevel }) => runStrategyAgent(db, {
+      assetIds: ids,
+      budget: Number(budget) || 20000,
+      goal: goal || 'recovery',
+      riskLevel,
+    })));
+
+    const comparisons = compareTypes.map(({ riskLevel, label }, index) => {
+      const item = settled[index];
+      if (item.status !== 'fulfilled') {
+        return { risk_level: riskLevel, label, success: false, error: item.reason?.message || '生成失败' };
+      }
+
+      const result = item.value;
+      const logResult = db.prepare(`
+        INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status)
+        VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft')
+      `).run({
+        asset_ids: JSON.stringify(ids),
+        budget: Number(budget) || 20000,
+        goal: goal || 'recovery',
+        risk_level: riskLevel,
+        analysis: JSON.stringify(result.analysis || null),
+        strategy: JSON.stringify(result.strategy || null),
+        plans: JSON.stringify(result.plans || []),
+        reasoning: result.reasoning || '',
+        risk_management: JSON.stringify(result.risk_management || null),
+        execution_notes: result.execution_notes || '',
+        model: result._meta?.model || '',
+        elapsed_ms: result._meta?.elapsed_ms || 0,
+      });
+
+      const plans = result.plans || [];
+      const budgetUsage = plans
+        .filter(plan => plan.action === 'buy')
+        .reduce((sum, plan) => sum + (Number(plan.amount) || 0), 0);
+
+      return {
+        risk_level: riskLevel,
+        label,
+        success: true,
+        generation_id: Number(logResult.lastInsertRowid),
+        strategy: result.strategy,
+        plans,
+        analysis: result.analysis,
+        reasoning: result.reasoning || '',
+        execution_notes: result.execution_notes || '',
+        risk_management: result.risk_management || null,
+        meta: {
+          model: result._meta?.model || '',
+          elapsed_ms: result._meta?.elapsed_ms || 0,
+          plan_count: plans.length,
+          budget_usage: budgetUsage,
+        },
+      };
+    });
+
+    const successCount = comparisons.filter(item => item.success).length;
+    if (!successCount) {
+      return res.status(400).json({ success: false, error: '3 个方案生成均失败，请检查 AI 配置后重试' });
+    }
+
+    const recommended = comparisons.find(item => item.success && item.risk_level === requestedRisk)
+      || comparisons.find(item => item.success && item.risk_level === 'medium')
+      || comparisons.find(item => item.success);
+
+    res.json({
+      success: true,
+      data: {
+        asset_ids: ids,
+        budget: Number(budget) || 20000,
+        goal: goal || 'recovery',
+        recommended_risk_level: recommended?.risk_level || null,
+        comparisons,
+      },
+    });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
 });
 
 // GET 单个策略
@@ -189,6 +287,16 @@ router.post('/:id/backtest', (req, res) => {
   try {
     const result = runBacktest(Number(req.params.id));
     res.json({ success: true, data: result });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// POST 策略压力测试
+router.post('/:id/stress-test', (req, res) => {
+  try {
+    const results = runStressTest(Number(req.params.id));
+    res.json({ success: true, data: results });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }

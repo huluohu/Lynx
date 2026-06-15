@@ -46,30 +46,13 @@ function calculateMaxDrawdown(equityCurve) {
   return maxDrawdown;
 }
 
-export function runBacktest(strategyId) {
-  const db = getDb();
-  const strategy = db.prepare(`SELECT s.*, a.name AS asset_name, a.symbol,
-      h.quantity AS holding_quantity, h.avg_cost AS holding_avg_cost, h.total_invested AS holding_total_invested
-    FROM strategies s
-    LEFT JOIN assets a ON s.asset_id = a.id
-    LEFT JOIN holdings h ON h.asset_id = s.asset_id AND h.status = 'active'
-    WHERE s.id = ?`).get(strategyId);
-
+export function simulateBacktest({ strategy, plans, prices, assetId }) {
   if (!strategy) throw new Error('策略不存在');
+  if (!plans?.length) throw new Error('策略暂无操盘计划');
+  if (!prices?.length) throw new Error('缺少历史价格数据');
 
-  const plans = db.prepare(`SELECT * FROM trading_plans
-    WHERE strategy_id = ?
-    ORDER BY seq ASC, id ASC`).all(strategyId);
-  if (!plans.length) throw new Error('策略暂无操盘计划');
-
-  const assetId = strategy.asset_id || plans[0]?.asset_id;
-  if (!assetId) throw new Error('策略未关联资产');
-
-  const prices = db.prepare(`SELECT asset_id, price, fetched_at
-    FROM price_cache
-    WHERE asset_id = ?
-    ORDER BY datetime(fetched_at) ASC, id ASC`).all(assetId);
-  if (!prices.length) throw new Error('缺少历史价格数据');
+  const resolvedAssetId = assetId || strategy.asset_id || plans[0]?.asset_id;
+  if (!resolvedAssetId) throw new Error('策略未关联资产');
 
   const params = parseJson(strategy.parameters, {});
   const plannedBuyCapital = plans
@@ -180,10 +163,50 @@ export function runBacktest(strategyId) {
   const totalReturnPct = initialInvestment > 0
     ? ((finalValue - initialInvestment) / initialInvestment) * 100
     : 0;
-  const maxDrawdownPct = calculateMaxDrawdown(equityCurve);
-  const winRate = sellTrades > 0 ? (winningTrades / sellTrades) * 100 : 0;
-  const totalTrades = details.length;
-  const sharpeRatio = calculateSharpeRatio(equityCurve);
+
+  return {
+    strategy_id: strategy.id,
+    asset_id: resolvedAssetId,
+    start_date: prices[0].fetched_at,
+    end_date: prices[prices.length - 1].fetched_at,
+    initial_investment: initialInvestment,
+    final_value: finalValue,
+    total_return_pct: totalReturnPct,
+    max_drawdown_pct: calculateMaxDrawdown(equityCurve),
+    win_rate: sellTrades > 0 ? (winningTrades / sellTrades) * 100 : 0,
+    total_trades: details.length,
+    sharpe_ratio: calculateSharpeRatio(equityCurve),
+    details,
+    plans_triggered: executedPlanIds.size,
+  };
+}
+
+export function runBacktest(strategyId) {
+  const db = getDb();
+  const strategy = db.prepare(`SELECT s.*, a.name AS asset_name, a.symbol,
+      h.quantity AS holding_quantity, h.avg_cost AS holding_avg_cost, h.total_invested AS holding_total_invested
+    FROM strategies s
+    LEFT JOIN assets a ON s.asset_id = a.id
+    LEFT JOIN holdings h ON h.asset_id = s.asset_id AND h.status = 'active'
+    WHERE s.id = ?`).get(strategyId);
+
+  if (!strategy) throw new Error('策略不存在');
+
+  const plans = db.prepare(`SELECT * FROM trading_plans
+    WHERE strategy_id = ?
+    ORDER BY seq ASC, id ASC`).all(strategyId);
+  if (!plans.length) throw new Error('策略暂无操盘计划');
+
+  const assetId = strategy.asset_id || plans[0]?.asset_id;
+  if (!assetId) throw new Error('策略未关联资产');
+
+  const prices = db.prepare(`SELECT asset_id, price, fetched_at
+    FROM price_cache
+    WHERE asset_id = ?
+    ORDER BY datetime(fetched_at) ASC, id ASC`).all(assetId);
+  if (!prices.length) throw new Error('缺少历史价格数据');
+
+  const simulation = simulateBacktest({ strategy, plans, prices, assetId });
 
   const insert = db.prepare(`INSERT INTO backtest_results (
       strategy_id, asset_id, start_date, end_date, initial_investment, final_value,
@@ -192,20 +215,20 @@ export function runBacktest(strategyId) {
   const info = insert.run(
     strategy.id,
     assetId,
-    prices[0].fetched_at,
-    prices[prices.length - 1].fetched_at,
-    initialInvestment,
-    finalValue,
-    totalReturnPct,
-    maxDrawdownPct,
-    winRate,
-    totalTrades,
-    sharpeRatio,
-    JSON.stringify(details)
+    simulation.start_date,
+    simulation.end_date,
+    simulation.initial_investment,
+    simulation.final_value,
+    simulation.total_return_pct,
+    simulation.max_drawdown_pct,
+    simulation.win_rate,
+    simulation.total_trades,
+    simulation.sharpe_ratio,
+    JSON.stringify(simulation.details)
   );
 
   const result = db.prepare('SELECT * FROM backtest_results WHERE id = ?').get(info.lastInsertRowid);
-  result.details = details;
-  log.info('Backtest completed', { strategyId, trades: totalTrades, totalReturnPct: totalReturnPct.toFixed(2) });
+  result.details = simulation.details;
+  log.info('Backtest completed', { strategyId, trades: simulation.total_trades, totalReturnPct: simulation.total_return_pct.toFixed(2) });
   return result;
 }

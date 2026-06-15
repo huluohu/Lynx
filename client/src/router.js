@@ -9,6 +9,7 @@ const routes = [
   { path: '/assets/:id', name: 'AssetDetail', component: () => import('./views/AssetDetail.vue') },
   { path: '/holdings', name: 'Holdings', component: () => import('./views/HoldingList.vue') },
   { path: '/strategies', name: 'Strategies', component: () => import('./views/StrategyList.vue') },
+  { path: '/strategies/compare', name: 'StrategyCompare', component: () => import('./views/StrategyCompare.vue') },
   { path: '/strategies/create', name: 'StrategyCreate', component: () => import('./views/StrategyForm.vue') },
   { path: '/strategies/:id/edit', name: 'StrategyEdit', component: () => import('./views/StrategyForm.vue') },
   { path: '/strategies/:id', name: 'StrategyDetail', component: () => import('./views/StrategyDetail.vue') },

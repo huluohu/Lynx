@@ -6,6 +6,7 @@
         <button v-if="drafts.length" class="btn btn-draft" @click="showDrafts = true">
           📝 草稿 <span class="draft-badge">{{ drafts.length }}</span>
         </button>
+        <router-link to="/strategies/compare" class="btn">AI 对比方案</router-link>
         <button class="btn btn-primary" @click="showAI = true">AI 生成</button>
         <router-link to="/strategies/create" class="btn">+ 创建</router-link>
       </div>

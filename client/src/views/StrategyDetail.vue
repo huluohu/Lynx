@@ -4,6 +4,10 @@
       <h1 class="page-title">{{ loading ? '策略详情' : (strategy.name || '策略详情') }}</h1>
       <div v-if="!loading" class="page-actions hide-on-mobile">
         <button class="btn" @click="runBacktestAction" :disabled="backtesting">{{ backtesting ? '回测中...' : '📊 回测' }}</button>
+        <button class="btn" @click="runStressTestAction" :disabled="stressTesting">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
+          {{ stressTesting ? '测试中...' : '压力测试' }}
+        </button>
         <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? '生成中...' : '生成计划' }}</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">编辑</router-link>
@@ -30,6 +34,10 @@
           <div class="action-sheet-item" @click="runBacktestAction(); showActions = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-5"/></svg>
             {{ backtesting ? '回测中...' : '运行回测' }}
+          </div>
+          <div class="action-sheet-item" @click="runStressTestAction(); showActions = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
+            {{ stressTesting ? '压力测试中...' : '运行压力测试' }}
           </div>
           <div class="action-sheet-item" @click="showAIRegenerate = true; showActions = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
@@ -189,6 +197,43 @@
           <p>暂无回测结果，点击上方“📊 回测”开始分析。</p>
         </div>
       </div>
+
+      <div class="card">
+        <div class="section-title">🧪 压力测试</div>
+        <div v-if="stressLoading" class="stress-grid">
+          <div class="stress-card" v-for="i in 6" :key="i">
+            <div class="skeleton skeleton-text" style="width:90px;margin-bottom:12px"></div>
+            <div class="skeleton skeleton-text" style="width:100%;margin-bottom:8px"></div>
+            <div class="skeleton skeleton-text short" style="margin-bottom:8px"></div>
+            <div class="skeleton skeleton-text short"></div>
+          </div>
+        </div>
+        <div v-else-if="stressResults.length" class="stress-grid">
+          <div v-for="item in stressResults" :key="item.scenario_name" class="stress-card" :class="stressCardClass(item.return_pct)">
+            <div class="stress-head">
+              <div class="stress-title">{{ scenarioLabel(item) }}</div>
+              <span class="badge" :class="Number(item.return_pct) >= 0 ? 'badge-buy' : 'badge-sell'">{{ fmtSignedPct(item.return_pct) }}</span>
+            </div>
+            <div class="stress-stats">
+              <div class="stress-stat">
+                <span class="stress-label">预期收益</span>
+                <b :class="Number(item.return_pct) >= 0 ? 'pnl positive' : 'pnl negative'">{{ fmtSignedPct(item.return_pct) }}</b>
+              </div>
+              <div class="stress-stat">
+                <span class="stress-label">最大回撤</span>
+                <b class="pnl negative">{{ fmtPct(item.max_drawdown_pct) }}</b>
+              </div>
+              <div class="stress-stat">
+                <span class="stress-label">触发计划数</span>
+                <b>{{ item.plans_triggered || 0 }}</b>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty" style="padding:24px">
+          <p>点击上方“压力测试”模拟极端行情下的策略表现。</p>
+        </div>
+      </div>
     </template>
 
     <ConfirmDialog
@@ -222,9 +267,12 @@ const loading = ref(true)
 const strategy = ref({})
 const plans = ref([])
 const backtestResults = ref([])
+const stressResults = ref([])
 const generating = ref(false)
 const backtesting = ref(false)
+const stressTesting = ref(false)
 const backtestLoading = ref(false)
+const stressLoading = ref(false)
 const showDeleteConfirm = ref(false)
 const showActions = ref(false)
 const showAIRegenerate = ref(false)
@@ -256,6 +304,7 @@ async function loadData() {
     if (json.data) strategy.value = json.data
     plans.value = pjson.data || []
     backtestResults.value = (bjson.data || []).map(normalizeBacktest)
+    stressResults.value = []
   } catch (e) {
     toast.error(e.message)
   } finally {
@@ -271,6 +320,7 @@ async function generatePlan() {
     if (json.success) {
       plans.value = json.data || []
       backtestResults.value = []
+      stressResults.value = []
       toast.success('计划已生成')
     } else toast.error('生成失败: ' + json.error)
   } catch (e) {
@@ -299,6 +349,25 @@ async function runBacktestAction() {
   backtestLoading.value = false
 }
 
+async function runStressTestAction() {
+  stressTesting.value = true
+  stressLoading.value = true
+  try {
+    const res = await api(`/api/strategies/${route.params.id}/stress-test`, { method: 'POST' })
+    const json = await res.json()
+    if (json.success) {
+      stressResults.value = json.data || []
+      toast.success('压力测试完成')
+    } else {
+      toast.error(json.error || '压力测试失败')
+    }
+  } catch (e) {
+    toast.error(e.message)
+  }
+  stressTesting.value = false
+  stressLoading.value = false
+}
+
 async function doDelete() {
   deleting.value = true
   try {
@@ -324,6 +393,14 @@ function fmtNumber(n, digits = 2) { return Number.isFinite(Number(n)) ? Number(n
 function fmtMoney(n) { return Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : '-' }
 function fmtPct(n) { return Number.isFinite(Number(n)) ? `${Number(n).toFixed(2)}%` : '-' }
 function fmtSignedPct(n) { return Number.isFinite(Number(n)) ? `${Number(n) >= 0 ? '+' : ''}${Number(n).toFixed(2)}%` : '-' }
+function scenarioLabel(item) {
+  return item?.scenario_label || ({ crash_30:'暴跌 30%', crash_50:'暴跌 50%', slow_bleed:'阴跌 20%', sideways:'震荡行情', recovery_v:'V 型反弹', bull_run:'牛市上涨' }[item?.scenario_name] || item?.scenario_name || '-')
+}
+function stressCardClass(value) {
+  const pct = Number(value)
+  if (!Number.isFinite(pct)) return 'neutral'
+  return pct > 0 ? 'positive' : (pct < 0 ? 'negative' : 'neutral')
+}
 function fmtDate(value) { return value ? String(value).slice(0, 10) : '-' }
 function fmtDateTime(value) { return value ? String(value).slice(0, 16).replace('T', ' ') : '-' }
 
@@ -434,9 +511,43 @@ onMounted(loadData)
   font-size: 12px;
   color: var(--text-dim);
 }
+.stress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.stress-card {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--bg);
+}
+.stress-card.positive { border-left-color: var(--green); }
+.stress-card.negative { border-left-color: var(--red); }
+.stress-card.neutral { border-left-color: #f59e0b; }
+.stress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.stress-title { font-size: 14px; font-weight: 700; }
+.stress-stats {
+  display: grid;
+  gap: 8px;
+}
+.stress-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.stress-label { color: var(--text-muted); }
 
 @media (max-width: 900px) {
-  .backtest-loading, .backtest-stats { grid-template-columns: 1fr 1fr; }
+  .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 768px) {
@@ -444,7 +555,7 @@ onMounted(loadData)
   .show-mobile { display: flex !important; }
   .hide-on-mobile { display: none !important; }
   .show-on-mobile { display: flex !important; }
-  .backtest-loading, .backtest-stats { grid-template-columns: 1fr 1fr; }
-  .trade-log-top, .backtest-meta, .info-row { align-items: flex-start; }
+  .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr; }
+  .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat { align-items: flex-start; }
 }
 </style>
