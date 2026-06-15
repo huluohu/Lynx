@@ -1,6 +1,7 @@
 <template>
   <div class="app-layout" v-if="authStore.isLoggedIn">
     <AppToast />
+    <ConfirmDialog />
     <!-- Menu toggle (mobile) -->
     <button class="menu-toggle" @click="sidebarOpen = !sidebarOpen">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -13,8 +14,8 @@
     <aside class="sidebar" :class="{ open: sidebarOpen }">
       <div class="sidebar-brand">
         <span class="brand-logo">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></svg>
-          投资罗盘
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13 Q6 8 9 9 Q11 5 12 5 Q13 5 15 9 Q18 8 20 13 Q20 18 12 20 Q4 18 4 13Z"/><circle cx="9.5" cy="13" r="1.2" fill="currentColor"/><circle cx="14.5" cy="13" r="1.2" fill="currentColor"/><path d="M5 7 L4 4M6 6 L5.5 3.5M19 7 L20 4M18 6 L18.5 3.5"/></svg>
+          L¥NX
         </span>
       </div>
       <nav class="sidebar-nav">
@@ -156,6 +157,7 @@
   </div>
   <div v-else>
     <AppToast />
+    <ConfirmDialog />
     <router-view />
   </div>
 </template>
@@ -165,10 +167,13 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth.js'
 import { api } from './utils/api.js'
+import { useConfirm } from './utils/confirm.js'
 import AppToast from './components/AppToast.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const confirm = useConfirm()
 const sidebarOpen = ref(false)
 const moreMenuOpen = ref(false)
 const unreadCount = ref(0)
@@ -188,10 +193,15 @@ function doLogout() {
   router.push('/login')
 }
 
-function confirmLogout() {
-  if (confirm('确定要退出登录吗？')) {
-    doLogout()
-  }
+async function confirmLogout() {
+  const ok = await confirm({
+    title: '退出登录',
+    message: '确定要退出登录吗？',
+    confirmText: '退出',
+    icon: 'logout',
+    danger: true,
+  })
+  if (ok) doLogout()
 }
 
 function startPolling() {

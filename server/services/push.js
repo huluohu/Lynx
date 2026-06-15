@@ -109,7 +109,7 @@ export async function sendTestPush() {
     return { success: false, error: '未配置 Webhook URL' };
   }
 
-  const title = '🔔 投资罗盘测试通知';
+  const title = '🔔 L¥NX 测试通知';
   const content = `这是一条测试推送消息。\n渠道类型: ${config.type}\n时间: ${new Date().toLocaleString('zh-CN')}`;
 
   try {

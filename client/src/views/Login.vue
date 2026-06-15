@@ -2,7 +2,8 @@
   <div class="login-page">
     <div class="login-card">
       <div class="login-header">
-        <h1>📊 投资规划</h1>
+        <img src="/logo.svg" alt="Lynx" class="login-logo" />
+        <h1>L¥NX</h1>
         <p>登录以继续</p>
       </div>
       <form @submit.prevent="doLogin">
@@ -14,6 +15,10 @@
           <label class="form-label">密码</label>
           <input class="form-input" type="password" v-model="password" placeholder="••••••" autocomplete="current-password" />
         </div>
+        <label class="remember-me">
+          <input type="checkbox" v-model="rememberMe" />
+          <span>记住密码（保持登录 30 天）</span>
+        </label>
         <div v-if="error" class="login-error">{{ error }}</div>
         <button type="submit" class="btn btn-primary login-btn" :disabled="loading">
           {{ loading ? '登录中...' : '登录' }}
@@ -35,12 +40,14 @@ const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
+const rememberMe = ref(localStorage.getItem('rememberMe') === 'true')
 
 async function doLogin() {
   error.value = ''
   loading.value = true
   try {
-    await auth.login(username.value, password.value)
+    await auth.login(username.value, password.value, rememberMe.value)
+    localStorage.setItem('rememberMe', rememberMe.value)
     router.push('/')
   } catch (e) {
     error.value = e.message
@@ -69,8 +76,28 @@ async function doLogin() {
   text-align: center;
   margin-bottom: 28px;
 }
-.login-header h1 { font-size: 28px; margin-bottom: 8px; }
+.login-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+.login-header h1 { font-size: 24px; margin-bottom: 8px; }
 .login-header p { color: var(--text-dim); font-size: 14px; }
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.remember-me input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
 .login-btn { width: 100%; margin-top: 20px; padding: 12px; font-size: 15px; }
 .login-error {
   padding: 10px 14px;

@@ -118,9 +118,11 @@
 import { reactive, ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { useConfirm } from '../utils/confirm.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
+const confirm = useConfirm()
 const loading = ref(true)
 const clearing = ref(false)
 const assets = ref([])
@@ -182,7 +184,14 @@ async function markAsRead(item) {
 }
 
 async function deleteAlert(item) {
-  if (!window.confirm(`删除提醒「${item.title}」？`)) return
+  const ok = await confirm({
+    title: '删除提醒',
+    message: `确定删除提醒「${item.title}」？`,
+    confirmText: '删除',
+    icon: 'delete',
+    danger: true,
+  })
+  if (!ok) return
   try {
     const res = await api(`/api/notifications/${item.id}`, { method: 'DELETE' })
     const json = await res.json()
@@ -199,7 +208,14 @@ async function deleteAlert(item) {
 }
 
 async function clearRead() {
-  if (!window.confirm('清空所有已读提醒？')) return
+  const ok = await confirm({
+    title: '清空已读',
+    message: '确定清空所有已读提醒？此操作不可恢复。',
+    confirmText: '清空',
+    icon: 'delete',
+    danger: true,
+  })
+  if (!ok) return
   clearing.value = true
   try {
     const res = await api('/api/notifications/clear-all', { method: 'DELETE' })

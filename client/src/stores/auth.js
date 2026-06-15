@@ -6,11 +6,11 @@ export const useAuthStore = defineStore('auth', () => {
   const username = ref(localStorage.getItem('username') || '')
   const isLoggedIn = ref(!!token.value)
 
-  async function login(user, pass) {
+  async function login(user, pass, rememberMe = false) {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: user, password: pass })
+      body: JSON.stringify({ username: user, password: pass, rememberMe })
     })
     const json = await res.json()
     if (!json.success) throw new Error(json.error || '登录失败')

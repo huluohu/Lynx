@@ -1,5 +1,5 @@
 {
-  "name": "invest-compass",
+  "name": "lynx-invest",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",

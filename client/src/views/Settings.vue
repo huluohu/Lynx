@@ -261,7 +261,7 @@
 
       <!-- 版本信息 -->
       <div class="version-info">
-        投资罗盘 v{{ appVersion }}
+        L¥NX v{{ appVersion }}
       </div>
     </div>
   </div>
@@ -272,9 +272,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { api } from '../utils/api.js'
+import { useConfirm } from '../utils/confirm.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const confirm = useConfirm()
 const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
 const form = reactive({
   refresh_interval: '60',
@@ -421,10 +423,15 @@ function doLogout() {
   router.push('/login')
 }
 
-function confirmLogout() {
-  if (confirm('确定要退出登录吗？')) {
-    doLogout()
-  }
+async function confirmLogout() {
+  const ok = await confirm({
+    title: '退出登录',
+    message: '确定要退出登录吗？',
+    confirmText: '退出',
+    icon: 'logout',
+    danger: true,
+  })
+  if (ok) doLogout()
 }
 
 async function testPush() {

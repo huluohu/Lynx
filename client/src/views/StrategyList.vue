@@ -240,11 +240,13 @@
 import { ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { useConfirm } from '../utils/confirm.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
+const confirm = useConfirm()
 const strategies = ref([])
 const drafts = ref([])
 const loading = ref(true)
@@ -350,7 +352,14 @@ async function discardDraft(d) {
 function onAIDone() { showAI.value = false; loadData(); loadDrafts() }
 
 async function deleteStrategy(s) {
-  if (!confirm(`确定删除策略「${s.name}」？`)) return
+  const ok = await confirm({
+    title: '删除策略',
+    message: `确定删除策略「${s.name}」？删除后不可恢复。`,
+    confirmText: '删除',
+    icon: 'delete',
+    danger: true,
+  })
+  if (!ok) return
   try {
     const res = await api(`/api/strategies/${s.id}`, { method: 'DELETE' })
     const json = await res.json()

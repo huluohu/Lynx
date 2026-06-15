@@ -5,10 +5,11 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('auth');
 
 // Security: warn if using default credentials
-const JWT_SECRET = process.env.JWT_SECRET || 'invest-compass-jwt-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'lynx-invest-jwt-secret';
 const AUTH_USERNAME = process.env.AUTH_USERNAME || 'admin';
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || 'admin123';
 const TOKEN_EXPIRY = '7d';
+const TOKEN_EXPIRY_REMEMBER = '30d';
 
 if (!process.env.JWT_SECRET || !process.env.AUTH_PASSWORD) {
   log.warn('⚠️  Using default credentials. Set JWT_SECRET, AUTH_USERNAME, AUTH_PASSWORD env vars for production!');
@@ -38,14 +39,15 @@ export function createAuthRouter() {
   const router = Router();
 
   router.post('/login', (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, rememberMe } = req.body;
     if (username !== AUTH_USERNAME || password !== AUTH_PASSWORD) {
       log.warn('Login failed', { username, ip: req.ip });
       return res.status(401).json({ success: false, error: '用户名或密码错误' });
     }
-    const token = jwt.sign({ username, role: 'admin' }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-    log.info('Login successful', { username, ip: req.ip });
-    res.json({ success: true, data: { token, username, expiresIn: TOKEN_EXPIRY } });
+    const expiry = rememberMe ? TOKEN_EXPIRY_REMEMBER : TOKEN_EXPIRY;
+    const token = jwt.sign({ username, role: 'admin' }, JWT_SECRET, { expiresIn: expiry });
+    log.info('Login successful', { username, ip: req.ip, rememberMe: !!rememberMe });
+    res.json({ success: true, data: { token, username, expiresIn: expiry } });
   });
 
   router.get('/me', (req, res) => {

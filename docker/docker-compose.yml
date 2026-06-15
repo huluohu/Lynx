@@ -1,7 +1,7 @@
 services:
-  invest-compass:
-    image: fooololo/invest-compass:${APP_VERSION:-latest}
-    container_name: invest-compass
+  lynx:
+    image: fooololo/lynx:${APP_VERSION:-latest}
+    container_name: lynx
     restart: unless-stopped
     network_mode: bridge
     extra_hosts:

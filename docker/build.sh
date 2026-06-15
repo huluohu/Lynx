@@ -1,5 +1,5 @@
 #!/bin/bash
-# 投资罗盘 Docker 构建脚本 (使用 buildx 多平台构建)
+# L¥NX Docker 构建脚本 (使用 buildx 多平台构建)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -7,7 +7,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-IMAGE_NAME="invest-compass"
+IMAGE_NAME="lynx"
 
 # 读取当前最新版本
 ENV_FILE="${SCRIPT_DIR}/.env"
@@ -67,7 +67,7 @@ PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 # 判断是否多平台（包含逗号）
 if [[ "$PLATFORM" == *","* ]]; then
   # 多平台需要 docker-container driver
-  BUILDER_NAME="invest-compass-builder"
+  BUILDER_NAME="lynx-invest-builder"
   if docker buildx inspect "$BUILDER_NAME" &>/dev/null; then
     docker buildx use "$BUILDER_NAME"
   else
@@ -156,4 +156,4 @@ echo "运行方式："
 echo "  cd docker && docker compose up -d"
 echo ""
 echo "或直接运行："
-echo "  docker run -d --name invest-compass -p 3456:3456 -v \$(pwd)/data:/app/data ${IMAGE_NAME}:${TAG}"
+echo "  docker run -d --name lynx-invest -p 3456:3456 -v \$(pwd)/data:/app/data ${IMAGE_NAME}:${TAG}"

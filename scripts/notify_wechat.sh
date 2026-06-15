@@ -7,7 +7,7 @@ API_BASE="http://localhost:3456/api"
 WECHAT_TARGET="o9cq80xbTzBA4ECsNax0SJPEB8MM@im.wechat"
 
 # 从环境变量或设置获取 JWT（如果有缓存的话）
-JWT_CACHE="/tmp/invest-compass-jwt"
+JWT_CACHE="/tmp/lynx-invest-jwt"
 
 # 登录
 get_token() {

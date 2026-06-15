@@ -1,25 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a73e8"/>
-      <stop offset="100%" style="stop-color:#0d47a1"/>
-    </linearGradient>
-  </defs>
-  <!-- Background circle -->
-  <circle cx="256" cy="256" r="256" fill="url(#bg)"/>
-  <!-- Compass outer ring -->
-  <circle cx="256" cy="256" r="180" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="8"/>
-  <circle cx="256" cy="256" r="160" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
-  <!-- Compass needle (N-S) -->
-  <polygon points="256,100 270,240 256,256 242,240" fill="#fff" opacity="0.95"/>
-  <polygon points="256,412 270,272 256,256 242,272" fill="rgba(255,255,255,0.4)"/>
-  <!-- Chart line overlay -->
-  <polyline points="120,320 180,280 220,310 270,220 320,250 370,180 400,200" fill="none" stroke="#4fc3f7" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
-  <!-- Center dot -->
-  <circle cx="256" cy="256" r="12" fill="#fff"/>
-  <!-- Cardinal markers -->
-  <circle cx="256" cy="88" r="6" fill="rgba(255,255,255,0.6)"/>
-  <circle cx="256" cy="424" r="4" fill="rgba(255,255,255,0.3)"/>
-  <circle cx="88" cy="256" r="4" fill="rgba(255,255,255,0.3)"/>
-  <circle cx="424" cy="256" r="4" fill="rgba(255,255,255,0.3)"/>
+  <!-- Background - clean white -->
+  <rect width="512" height="512" rx="108" fill="#ffffff"/>
+  <!-- Subtle border -->
+  <rect x="2" y="2" width="508" height="508" rx="106" fill="none" stroke="#e5e7eb" stroke-width="3"/>
+
+  <!-- Geometric lynx head - dark on light -->
+  <!-- Ears -->
+  <polygon points="155,130 200,230 110,210" fill="#7c3aed"/>
+  <polygon points="357,130 312,230 402,210" fill="#7c3aed"/>
+  <!-- Ear tufts -->
+  <line x1="148" y1="122" x2="135" y2="80" stroke="#1a1a2e" stroke-width="8" stroke-linecap="round"/>
+  <line x1="162" y1="118" x2="154" y2="78" stroke="#1a1a2e" stroke-width="5" stroke-linecap="round"/>
+  <line x1="364" y1="122" x2="377" y2="80" stroke="#1a1a2e" stroke-width="8" stroke-linecap="round"/>
+  <line x1="350" y1="118" x2="358" y2="78" stroke="#1a1a2e" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Head polygon - solid dark -->
+  <polygon points="256,148 375,225 385,320 342,375 256,392 170,375 127,320 137,225" fill="#1a1a2e"/>
+
+  <!-- Eyes - bright cyan on dark -->
+  <ellipse cx="200" cy="275" rx="34" ry="30" fill="#22d3ee"/>
+  <ellipse cx="312" cy="275" rx="34" ry="30" fill="#22d3ee"/>
+  <!-- ¥ in left eye -->
+  <text x="200" y="284" text-anchor="middle" font-family="Arial,sans-serif" font-size="28" font-weight="bold" fill="#1a1a2e">¥</text>
+  <!-- Vertical slit in right eye -->
+  <ellipse cx="312" cy="275" rx="6" ry="18" fill="#1a1a2e"/>
+  <!-- Eye highlights -->
+  <circle cx="188" cy="265" r="6" fill="#fff" opacity="0.9"/>
+  <circle cx="300" cy="265" r="6" fill="#fff" opacity="0.9"/>
+
+  <!-- Nose -->
+  <path d="M248,325 L256,337 L264,325 Z" fill="#7c3aed"/>
+
+  <!-- L¥NX text - dark navy -->
+  <text x="256" y="462" text-anchor="middle" font-family="'SF Pro Display','Helvetica Neue',Arial,sans-serif" font-size="68" font-weight="900" letter-spacing="6" fill="#1a1a2e">L¥NX</text>
 </svg>
