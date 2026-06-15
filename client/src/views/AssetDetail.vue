@@ -39,7 +39,7 @@
 
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
-        <div class="section-title">📋 基本信息</div>
+        <div class="section-title">基本信息</div>
         <div class="info-list">
           <div class="info-row"><span class="info-label">代码</span><span style="color:var(--text-dim)">{{ asset.symbol }}</span></div>
           <div class="info-row"><span class="info-label">类型</span><span class="badge" :class="typeBadge(asset.type)">{{ asset.type }}</span></div>
@@ -62,7 +62,7 @@
 
     <!-- 交易记录 -->
     <div class="card">
-      <div class="section-title">📝 交易记录</div>
+      <div class="section-title">交易记录</div>
       <!-- Desktop -->
       <table v-if="transactions.length" class="hide-mobile">
         <thead><tr><th>时间</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th><th>手续费</th></tr></thead>

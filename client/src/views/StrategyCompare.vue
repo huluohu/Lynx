@@ -16,7 +16,7 @@
 
     <template v-else>
       <div class="card">
-        <div class="section-title">⚙️ 方案配置</div>
+        <div class="section-title">方案配置</div>
 
         <div class="form-group">
           <label class="form-label">选择资产 *（可多选）</label>
@@ -64,7 +64,7 @@
       </div>
 
       <div class="card">
-        <div class="section-title">📊 方案对比</div>
+        <div class="section-title">方案对比</div>
 
         <div v-if="comparing" class="compare-grid">
           <div class="compare-card" v-for="i in 3" :key="i">

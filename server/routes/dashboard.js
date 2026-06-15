@@ -99,6 +99,7 @@ router.get('/alerts', (req, res) => {
       quantity: p.quantity,
       trigger_value: p.trigger_value,
       plan_id: p.id,
+      strategy_id: p.strategy_id,
       time: p.updated_at || p.created_at,
     });
   }
@@ -140,6 +141,7 @@ router.get('/alerts', (req, res) => {
         current_price: price,
         diff_pct: diffPct,
         plan_id: p.id,
+        strategy_id: p.strategy_id,
         time: new Date().toISOString(),
       });
     }

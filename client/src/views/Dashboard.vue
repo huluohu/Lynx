@@ -49,7 +49,7 @@
           </div>
         </div>
         <div class="alert-action">
-          <router-link v-if="a.type === 'plan_triggered' && a.plan_id" :to="`/strategies/${a.plan_id?.toString().split('-')[0] || ''}`" class="btn btn-sm">查看</router-link>
+          <router-link v-if="a.strategy_id" :to="`/strategies/${a.strategy_id}`" class="btn btn-sm">查看</router-link>
           <button v-else-if="a.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(a.id)">完成</button>
         </div>
       </div>
@@ -91,7 +91,7 @@
 
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
-        <div class="section-title">📊 资产配置</div>
+        <div class="section-title">资产配置</div>
         <div v-if="allocation.length">
           <div v-for="a in allocation" :key="a.asset_id" class="alloc-item">
             <div class="alloc-header">
@@ -112,7 +112,7 @@
       </div>
 
       <div class="card">
-        <div class="section-title">📋 活跃计划</div>
+        <div class="section-title">活跃计划</div>
         <div v-if="activePlans.length">
           <table>
             <thead><tr><th>资产</th><th>触发</th><th>操作</th><th>数量</th><th>状态</th></tr></thead>
@@ -133,7 +133,7 @@
 
     <div class="card" style="margin-bottom:20px">
       <div class="signals-head">
-        <div class="section-title" style="margin:0">📡 市场信号</div>
+        <div class="section-title" style="margin:0">市场信号</div>
         <router-link to="/signals" class="btn btn-sm">查看全部</router-link>
       </div>
       <div v-if="heldSignals.length" class="signal-compact-grid">
@@ -151,7 +151,7 @@
     </div>
 
     <div class="card">
-      <div class="section-title">📝 最近交易</div>
+      <div class="section-title">最近交易</div>
       <table v-if="recentTrades.length">
         <thead><tr><th>时间</th><th>资产</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th></tr></thead>
         <tbody>

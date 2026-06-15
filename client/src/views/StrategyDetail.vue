@@ -75,7 +75,7 @@
       </transition>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="section-title">📋 策略信息</div>
+        <div class="section-title">策略信息</div>
         <div class="info-list">
           <div class="info-row"><span class="info-label">类型</span><span class="badge badge-buy">{{ typeLabel(strategy.type) }}</span></div>
           <div class="info-row"><span class="info-label">关联资产</span><span>{{ strategy.asset_name || '-' }} {{ strategy.symbol }}</span></div>
@@ -85,7 +85,7 @@
       </div>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="section-title">⚙️ 参数</div>
+        <div class="section-title">参数</div>
         <div class="info-list" v-if="parsedParams">
           <template v-if="strategy.type === 'recovery'">
             <div class="info-row"><span class="info-label">预算</span><span>¥{{ parsedParams.budget }}</span></div>
@@ -107,7 +107,7 @@
       </div>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="section-title">📋 操盘计划 ({{ plans.length }} 步)</div>
+        <div class="section-title">操盘计划 ({{ plans.length }} 步)</div>
         <div v-if="generating" style="text-align:center;padding:24px"><span class="spinner"></span> 生成中...</div>
 
         <table v-else-if="plans.length" class="hide-mobile">
@@ -147,7 +147,7 @@
       </div>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="section-title">📊 回测结果</div>
+        <div class="section-title">回测结果</div>
         <div v-if="backtestLoading" class="backtest-loading">
           <div class="stat-card" v-for="i in 5" :key="i">
             <div class="skeleton skeleton-text short"></div>
@@ -209,12 +209,12 @@
           </details>
         </template>
         <div v-else class="empty" style="padding:24px">
-          <p>暂无回测结果，点击上方“📊 回测”开始分析。</p>
+          <p>暂无回测结果，点击上方“回测”开始分析。</p>
         </div>
       </div>
 
       <div class="card" style="margin-bottom:16px">
-        <div class="section-title">🧪 压力测试</div>
+        <div class="section-title">压力测试</div>
         <div v-if="stressLoading" class="stress-grid">
           <div class="stress-card" v-for="i in 6" :key="i">
             <div class="skeleton skeleton-text" style="width:90px;margin-bottom:12px"></div>
@@ -252,7 +252,7 @@
 
       <div class="card">
         <div class="section-title review-title-row">
-          <span>📝 AI 复盘</span>
+          <span>AI 复盘</span>
           <span v-if="latestReview" class="review-date">{{ fmtDateTime(latestReview.created_at) }}</span>
         </div>
         <div v-if="reviewing" class="review-loading"><span class="spinner"></span> AI 正在生成复盘...</div>
@@ -297,7 +297,7 @@
           </div>
         </template>
         <div v-else class="empty" style="padding:24px">
-          <p>暂未生成 AI 复盘，点击上方“📝 AI 复盘”开始分析。</p>
+          <p>暂未生成 AI 复盘，点击上方“AI 复盘”开始分析。</p>
         </div>
       </div>
     </template>

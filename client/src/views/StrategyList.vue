@@ -176,7 +176,7 @@
           <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0">{{ historyDetail.reasoning }}</p>
         </div>
         <div v-if="historyDetail.analysis?.market_assessment" class="detail-section" style="padding:12px 14px">
-          <div class="detail-section-title" style="padding:0 0 6px 0">📊 市场评估</div>
+          <div class="detail-section-title" style="padding:0 0 6px 0">市场评估</div>
           <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0">{{ historyDetail.analysis.market_assessment }}</p>
         </div>
       </div>

@@ -44,7 +44,7 @@
 
         <!-- 动态参数：按资产分组 -->
         <div v-if="form.type && selectedAssetIds.length > 0" class="params-section">
-          <div class="section-title">⚙️ 策略参数</div>
+          <div class="section-title">策略参数</div>
 
           <!-- Recovery: 按资产分组 -->
           <div v-if="form.type === 'recovery'">

@@ -61,7 +61,7 @@
       </div>
 
       <div style="margin-top:20px">
-        <div class="section-title">✏️ 编辑</div>
+        <div class="section-title">编辑</div>
         <form @submit.prevent="saveHolding">
           <div class="form-row">
             <div class="form-group"><label class="form-label">目标价</label><input class="form-input" type="number" step="any" v-model="editHolding.target_price" /></div>
