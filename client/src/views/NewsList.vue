@@ -4,6 +4,9 @@
       <h1 class="page-title">资讯</h1>
       <div style="display:flex;align-items:center;gap:10px">
         <span v-if="lastUpdated" class="update-hint">{{ fmtUpdateTime(lastUpdated) }} 更新</span>
+        <button class="btn btn-sm" @click="cacheAll" :disabled="caching" v-if="pendingCacheCount > 0">
+          {{ caching ? '缓存中...' : `缓存 (${pendingCacheCount})` }}
+        </button>
         <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" />
@@ -49,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 
@@ -58,9 +61,12 @@ const news = ref([])
 const total = ref(0)
 const loading = ref(true)
 const refreshing = ref(false)
+const caching = ref(false)
 const page = ref(0)
 const PAGE_SIZE = 20
 const lastUpdated = ref(null)
+
+const pendingCacheCount = computed(() => news.value.filter(n => n.cache_status === 'pending' && n.url).length)
 
 async function loadData() {
   try {
@@ -109,7 +115,31 @@ function openNews(n) {
     api(`/api/news/${n.id}`, { method: 'PUT' })
     n.read = 1
   }
+  // Lazy cache: trigger content fetch if pending
+  if (n.cache_status === 'pending' && n.url) {
+    n.cache_status = 'fetching'
+    api(`/api/news/${n.id}/content`).then(r => r.json()).then(json => {
+      if (json.data) n.cache_status = json.data.cache_status || 'failed'
+    }).catch(() => { n.cache_status = 'failed' })
+  }
   if (n.url) window.open(n.url, '_blank')
+}
+
+async function cacheAll() {
+  caching.value = true
+  try {
+    const res = await api('/api/news/cache-batch', { method: 'POST', body: JSON.stringify({ limit: 10 }) })
+    const json = await res.json()
+    if (json.success) {
+      toast.success(`已缓存 ${json.cached} 条`)
+      await loadData()
+    } else {
+      toast.error('缓存失败')
+    }
+  } catch (e) {
+    toast.error(e.message)
+  }
+  caching.value = false
 }
 
 function formatTime(ts) {

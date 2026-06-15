@@ -98,7 +98,6 @@ const holding = reactive({ quantity: '', avg_cost: '' })
 const cryptoPresets = [
   { name: 'Bitcoin', symbol: 'BTC', icon: '₿', coingeckoId: 'bitcoin' },
   { name: 'Ethereum', symbol: 'ETH', icon: '⟠', coingeckoId: 'ethereum' },
-  { name: 'Tether', symbol: 'USDT', icon: '💲', coingeckoId: 'tether' },
   { name: 'BNB', symbol: 'BNB', icon: '🔶', coingeckoId: 'binancecoin' },
   { name: 'Solana', symbol: 'SOL', icon: '◎', coingeckoId: 'solana' },
   { name: 'XRP', symbol: 'XRP', icon: '✕', coingeckoId: 'ripple' },
@@ -106,6 +105,7 @@ const cryptoPresets = [
   { name: 'Dogecoin', symbol: 'DOGE', icon: '🐕', coingeckoId: 'dogecoin' },
   { name: 'TRON', symbol: 'TRX', icon: '⚡', coingeckoId: 'tron' },
   { name: 'Polkadot', symbol: 'DOT', icon: '●', coingeckoId: 'polkadot' },
+  { name: 'Avalanche', symbol: 'AVAX', icon: '🔺', coingeckoId: 'avalanche-2' },
 ]
 
 function applyCryptoPreset(c) {

@@ -1,5 +1,6 @@
 import { getDb } from '../db/database.js';
 import { createNotification } from '../routes/notifications.js';
+import { pushPendingNotifications } from './push.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('strategy-monitor');
@@ -116,6 +117,8 @@ export function startMonitor(intervalMs) {
   monitorTimer = setInterval(() => {
     try {
       checkStrategyAlerts();
+      // Auto-push pending notifications via webhook
+      pushPendingNotifications().catch(() => {});
     } catch (error) {
       log.warn('Monitor iteration failed', { error: error.message });
     }

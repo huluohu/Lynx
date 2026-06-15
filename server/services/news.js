@@ -87,16 +87,12 @@ function fetchRss(url, _depth = 0) {
   if (_depth > 3) return Promise.resolve('');
   return new Promise((resolve) => {
     try {
-      // Validate URL
       const parsed = new URL(url);
       const lib = parsed.protocol === 'https:' ? https : http;
       const req = lib.get(url, { headers: { 'User-Agent': 'InvestCompass/1.0', 'Accept': 'application/rss+xml, application/xml, text/xml' } }, res => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          // Handle relative redirects
           let redirectUrl = res.headers.location;
-          try {
-            redirectUrl = new URL(res.headers.location, url).href;
-          } catch { /* already absolute */ }
+          try { redirectUrl = new URL(res.headers.location, url).href; } catch {}
           res.resume();
           return fetchRss(redirectUrl, _depth + 1).then(resolve);
         }
@@ -108,6 +104,40 @@ function fetchRss(url, _depth = 0) {
       req.setTimeout(10000, () => { req.destroy(); resolve(''); });
     } catch (e) {
       log.debug('fetchRss invalid URL', { url, error: e.message });
+      resolve('');
+    }
+  });
+}
+
+// Generic HTML page fetcher with browser-like headers
+function fetchHtml(url, _depth = 0) {
+  if (_depth > 3) return Promise.resolve('');
+  return new Promise((resolve) => {
+    try {
+      const parsed = new URL(url);
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+        },
+      }, res => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          let redirectUrl = res.headers.location;
+          try { redirectUrl = new URL(res.headers.location, url).href; } catch {}
+          res.resume();
+          return fetchHtml(redirectUrl, _depth + 1).then(resolve);
+        }
+        if (res.statusCode !== 200) { res.resume(); return resolve(''); }
+        let body = '';
+        res.on('data', c => { body += c; if (body.length > 500000) { req.destroy(); resolve(body); } });
+        res.on('end', () => resolve(body));
+      });
+      req.on('error', () => resolve(''));
+      req.setTimeout(15000, () => { req.destroy(); resolve(''); });
+    } catch (e) {
+      log.debug('fetchHtml invalid URL', { url, error: e.message });
       resolve('');
     }
   });
@@ -253,12 +283,14 @@ export async function cacheNewsContent(newsId) {
   db.prepare("UPDATE news SET cache_status = 'fetching' WHERE id = ?").run(newsId);
 
   try {
-    const html = await fetchRss(row.url); // reuse fetchRss as generic HTTP GET
-    if (!html || html.length < 50) throw new Error('Empty response');
+    const html = await fetchHtml(row.url);
+    if (!html || html.length < 100) throw new Error('Empty or too short response');
 
-    // Extract text content from HTML
     const content = extractArticleText(html);
+    if (!content || content.length < 50) throw new Error('Could not extract article content');
+
     db.prepare("UPDATE news SET content = ?, cache_status = 'cached' WHERE id = ?").run(content, newsId);
+    log.debug('News cached', { newsId, contentLength: content.length });
     return { id: newsId, content, cache_status: 'cached' };
   } catch (e) {
     db.prepare("UPDATE news SET cache_status = 'failed' WHERE id = ?").run(newsId);

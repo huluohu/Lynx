@@ -142,24 +142,44 @@
       <!-- 通知渠道 -->
       <div class="settings-group">
         <div class="settings-group-header">
-          <span class="settings-group-title">通知渠道</span>
+          <span class="settings-group-title">消息推送</span>
+          <button class="save-btn" :class="{ changed: dirty.push }" @click="saveGroup('push')">
+            {{ saveState.push === 'saved' ? '✓ 已保存' : '保存' }}
+          </button>
         </div>
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
-              <span class="setting-label">微信通知</span>
-              <span class="setting-desc">触发时通过微信推送</span>
+              <span class="setting-label">启用推送</span>
+              <span class="setting-desc">触发通知时推送到外部服务</span>
             </div>
-            <label class="switch"><input type="checkbox" v-model="form.wechat_notify" true-value="true" false-value="false" @change="saveKey('wechat_notify', form.wechat_notify)" /><span class="slider"></span></label>
+            <label class="switch"><input type="checkbox" v-model="form.push_enabled" true-value="true" false-value="false" @change="dirty.push = true" /><span class="slider"></span></label>
           </div>
           <div class="setting-item">
             <div class="setting-info">
-              <span class="setting-label">浏览器通知</span>
-              <span class="setting-desc">触发时浏览器弹窗</span>
+              <span class="setting-label">推送渠道</span>
             </div>
-            <label class="switch"><input type="checkbox" v-model="form.webpush_notify" true-value="true" false-value="false" @change="saveKey('webpush_notify', form.webpush_notify)" /><span class="slider"></span></label>
+            <select class="form-select" v-model="form.push_webhook_type" @change="dirty.push = true" style="width:160px">
+              <option value="wecom">企业微信机器人</option>
+              <option value="serverchan">Server酱</option>
+              <option value="pushplus">PushPlus</option>
+              <option value="bark">Bark</option>
+              <option value="custom">自定义 Webhook</option>
+            </select>
+          </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">Webhook URL</span>
+            <input class="setting-input-full" type="url" v-model="form.push_webhook_url" :placeholder="webhookPlaceholder" @input="dirty.push = true" />
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">测试推送</span>
+              <span class="setting-desc">发送测试消息验证配置</span>
+            </div>
+            <button class="btn btn-sm" @click="testPush" :disabled="testingPush || !form.push_webhook_url">{{ testingPush ? '发送中...' : '发送测试' }}</button>
           </div>
         </div>
+        <div class="settings-group-footer">支持企业微信群机器人、Server酱、PushPlus、Bark 等推送渠道。配置 Webhook URL 后即可接收实时通知。</div>
       </div>
 
       <!-- 通知事件 -->
@@ -243,7 +263,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { api } from '../utils/api.js'
@@ -268,8 +288,9 @@ const form = reactive({
   agent_analysis_model: '',
   agent_search_api_url: '',
   agent_search_api_key: '',
-  wechat_notify: 'true',
-  webpush_notify: 'true',
+  push_enabled: 'true',
+  push_webhook_type: 'wecom',
+  push_webhook_url: '',
   notify_plan_triggered: 'true',
   notify_plan_approaching: 'false',
   notify_stop_loss: 'true',
@@ -277,11 +298,23 @@ const form = reactive({
   notify_trade_executed: 'false',
 })
 
-const dirty = reactive({ market: false, ai: false, news: false })
-const saveState = reactive({ market: '', ai: '', news: '' })
+const dirty = reactive({ market: false, ai: false, news: false, push: false })
+const saveState = reactive({ market: '', ai: '', news: '', push: '' })
 const enabledSources = ref(['coindesk', 'cointelegraph', 'coingecko'])
 const customSources = ref([])
 const newSource = reactive({ name: '', url: '' })
+const testingPush = ref(false)
+
+const webhookPlaceholder = computed(() => {
+  const map = {
+    wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx',
+    serverchan: 'https://sctapi.ftqq.com/xxx.send',
+    pushplus: 'https://www.pushplus.plus/send',
+    bark: 'https://api.day.app/xxx',
+    custom: 'https://your-webhook.example.com/notify',
+  }
+  return map[form.push_webhook_type] || map.custom
+})
 
 const builtinNewsSources = [
   { key: 'coindesk', label: 'CoinDesk' },
@@ -301,6 +334,7 @@ const groupKeys = {
   market: ['refresh_interval', 'market_refresh_interval', 'rate_cache_duration', 'strategy_monitor_interval', 'signal_valid_hours', 'price_alert_threshold', 'plan_approaching_pct'],
   ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_search_api_url', 'agent_search_api_key'],
   news: ['news_refresh_interval', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size'],
+  push: ['push_enabled', 'push_webhook_type', 'push_webhook_url'],
 }
 
 async function load() {
@@ -379,6 +413,19 @@ async function deleteCustomSource(id) {
 function doLogout() {
   authStore.logout()
   router.push('/login')
+}
+
+async function testPush() {
+  testingPush.value = true
+  try {
+    // Save push settings first
+    await saveGroup('push')
+    const res = await api('/api/notifications/test-push', { method: 'POST' })
+    const json = await res.json()
+    if (json.success) alert('✅ 测试推送已发送，请检查接收端')
+    else alert('❌ 推送失败: ' + (json.error || '未知错误'))
+  } catch (e) { alert('❌ 推送失败: ' + e.message) }
+  testingPush.value = false
 }
 
 onMounted(load)

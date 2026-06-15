@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { sendTestPush, pushPendingNotifications } from '../services/push.js';
 
 const router = Router();
 
@@ -140,5 +141,21 @@ export function createNotification(db, { type, title, message, asset_id, plan_id
     status || 'pending',
   );
 }
+
+// POST 测试推送
+router.post('/test-push', async (req, res) => {
+  const result = await sendTestPush();
+  if (result.success) {
+    res.json({ success: true, message: '测试推送已发送' });
+  } else {
+    res.status(400).json({ success: false, error: result.error || '推送失败' });
+  }
+});
+
+// POST 立即推送待发送通知
+router.post('/push-now', async (req, res) => {
+  const count = await pushPendingNotifications();
+  res.json({ success: true, pushed: count });
+});
 
 export default router;
