@@ -180,14 +180,14 @@
 
         <div style="display:flex;gap:12px;margin-top:16px">
           <button type="submit" class="btn btn-primary" :disabled="submitting || selectedAssetIds.length === 0">{{ submitting ? '创建中...' : (isEdit ? '保存修改' : '创建策略') }}</button>
-          <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true">🤖 AI 重新生成</button>
+          <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
           <router-link to="/strategies" class="btn">取消</router-link>
         </div>
       </form>
     </div>
 
     <!-- AI Regenerate Drawer -->
-    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" title="🤖 AI 重新生成策略">
+    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" title="✨ AI 重新生成策略">
       <AIStrategyGenerator :preset-asset-id="selectedAssetIds[0]" :existing-strategy-id="strategyId" @done="onAIRegenDone" />
     </AppDrawer>
   </div>

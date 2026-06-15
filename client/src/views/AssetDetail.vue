@@ -22,7 +22,7 @@
           记录交易
         </div>
         <div class="action-sheet-item" @click="showAIDrawer = true; showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
           AI 策略建议
         </div>
         <div class="action-sheet-item" @click="showEditDrawer = true; showActions = false">
@@ -131,7 +131,7 @@
     />
 
     <!-- AI Drawer -->
-    <AppDrawer v-model="showAIDrawer" title="🤖 AI 策略建议">
+    <AppDrawer v-model="showAIDrawer" title="✨ AI 策略建议">
       <AIStrategyGenerator :preset-asset-id="route.params.id" @done="showAIDrawer = false" />
     </AppDrawer>
   </div>

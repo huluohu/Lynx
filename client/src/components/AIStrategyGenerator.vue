@@ -57,7 +57,7 @@
       </div>
 
       <button class="btn btn-primary" style="width:100%;margin-top:12px" @click="generate" :disabled="generating || selectedAssetIds.length === 0">
-        {{ generating ? '🤖 Agent 工作中...' : '🤖 智能生成策略' }}
+        {{ generating ? '⏳ Agent 工作中...' : '✨ 智能生成策略' }}
       </button>
 
       <!-- Agent Progress -->

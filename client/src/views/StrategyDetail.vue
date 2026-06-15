@@ -3,7 +3,7 @@
     <div class="page-header">
       <h1 class="page-title">{{ strategy.name }}</h1>
       <div class="page-actions hide-on-mobile">
-        <button class="btn" @click="showAIRegenerate = true">🤖 AI 重新生成</button>
+        <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">生成计划</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">编辑</router-link>
         <button class="btn btn-danger" @click="showDeleteConfirm = true">删除</button>
@@ -18,7 +18,7 @@
     <transition name="slide-up">
       <div v-if="showActions" class="action-sheet">
         <div class="action-sheet-item" @click="showAIRegenerate = true; showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
           AI 重新生成
         </div>
         <div class="action-sheet-item" @click="generatePlan(); showActions = false">
@@ -123,7 +123,7 @@
     />
 
     <!-- AI Regenerate Drawer -->
-    <AppDrawer v-model="showAIRegenerate" title="🤖 AI 重新生成策略">
+    <AppDrawer v-model="showAIRegenerate" title="✨ AI 重新生成策略">
       <AIStrategyGenerator :preset-asset-id="strategy.asset_id" :existing-strategy-id="strategy.id" @done="onAIRegenDone" />
     </AppDrawer>
   </div>
