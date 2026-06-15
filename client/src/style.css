@@ -410,9 +410,13 @@ tr:hover td { background: var(--bg-hover); }
 /* ===== Desktop/Mobile visibility ===== */
 .desktop-only { display: flex; gap: 8px; align-items: center; }
 .mobile-only { display: none; }
+.hide-mobile { }
+.show-mobile { display: none; }
 @media (max-width: 768px) {
   .desktop-only { display: none !important; }
   .mobile-only { display: flex !important; gap: 8px; align-items: center; }
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: flex !important; }
 }
 
 /* ===== Icon button ===== */
