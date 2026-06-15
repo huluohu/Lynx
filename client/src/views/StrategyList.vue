@@ -3,10 +3,28 @@
     <div class="page-header">
       <h1 class="page-title">策略管理</h1>
       <div class="page-actions">
-        <button v-if="drafts.length" class="btn btn-draft" @click="showDrafts = true">
-          📝 草稿 <span class="draft-badge">{{ drafts.length }}</span>
+        <button v-if="drafts.length" class="btn btn-draft btn-inline-icon" @click="showDrafts = true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+            <path d="M9 3h6v4H9z" />
+            <path d="M9 12h6" />
+            <path d="M9 16h4" />
+          </svg>
+          <span>草稿</span>
+          <span class="draft-badge">{{ drafts.length }}</span>
         </button>
-        <router-link to="/strategies/compare" class="btn">AI 对比方案</router-link>
+        <router-link to="/strategies/compare" class="btn btn-inline-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6h7" />
+            <path d="M4 12h10" />
+            <path d="M4 18h7" />
+            <path d="M15 6l2-2 2 2" />
+            <path d="M17 4v8" />
+            <path d="M17 20v-8" />
+            <path d="M15 18l2 2 2-2" />
+          </svg>
+          <span>AI 对比方案</span>
+        </router-link>
         <button class="btn btn-primary" @click="showAI = true">AI 生成</button>
         <router-link to="/strategies/create" class="btn">+ 创建</router-link>
       </div>
@@ -132,9 +150,9 @@
             <span v-if="d.elapsed_ms">{{ (d.elapsed_ms / 1000).toFixed(1) }}s</span>
           </div>
           <div class="draft-item-actions">
-            <button class="btn btn-primary btn-sm" @click="adoptDraft(d)">✅ 采用</button>
-            <button class="btn btn-sm" @click="viewDraftDetail(d)">👁️ 查看</button>
-            <button class="btn btn-sm btn-danger" @click="discardDraft(d)">🗑️ 丢弃</button>
+            <button class="btn btn-primary btn-sm" @click="adoptDraft(d)">采用</button>
+            <button class="btn btn-sm" @click="viewDraftDetail(d)">查看</button>
+            <button class="btn btn-sm btn-danger" @click="discardDraft(d)">丢弃</button>
           </div>
         </div>
         <div v-if="!drafts.length" style="text-align:center;color:var(--text-dim);padding:20px">
@@ -294,6 +312,8 @@ onMounted(() => { loadData(); loadDrafts() })
 <style scoped>
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
+.btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
+.btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .strategy-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
 .strategy-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; color: var(--text); transition: background 0.15s; }
 .strategy-card:hover { background: var(--bg-hover); }

@@ -5,36 +5,25 @@
       <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? '清理中...' : '清空已读' }}</button>
     </div>
 
-    <div class="card">
-      <div class="filters">
-        <div class="form-group">
-          <label class="form-label">类型</label>
-          <select class="form-select" v-model="filters.type" @change="applyFilters">
-            <option value="">全部</option>
-            <option value="plan_triggered">计划触发</option>
-            <option value="plan_approaching">接近触发</option>
-            <option value="stop_loss">止损</option>
-            <option value="price_swing">价格波动</option>
-            <option value="trade_executed">交易执行</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">级别</label>
-          <select class="form-select" v-model="filters.severity" @change="applyFilters">
-            <option value="">全部</option>
-            <option value="danger">高</option>
-            <option value="warning">中</option>
-            <option value="info">低</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">资产</label>
-          <select class="form-select" v-model="filters.asset_id" @change="applyFilters">
-            <option value="">全部</option>
-            <option v-for="asset in assets" :key="asset.id" :value="String(asset.id)">{{ asset.name }}</option>
-          </select>
-        </div>
-      </div>
+    <div class="filters">
+      <select class="form-select filter-select" v-model="filters.type" @change="applyFilters">
+        <option value="">全部类型</option>
+        <option value="plan_triggered">计划触发</option>
+        <option value="plan_approaching">接近触发</option>
+        <option value="stop_loss">止损</option>
+        <option value="price_swing">价格波动</option>
+        <option value="trade_executed">交易执行</option>
+      </select>
+      <select class="form-select filter-select" v-model="filters.severity" @change="applyFilters">
+        <option value="">全部级别</option>
+        <option value="danger">高优先级</option>
+        <option value="warning">中优先级</option>
+        <option value="info">低优先级</option>
+      </select>
+      <select class="form-select filter-select" v-model="filters.asset_id" @change="applyFilters">
+        <option value="">全部资产</option>
+        <option v-for="asset in assets" :key="asset.id" :value="String(asset.id)">{{ asset.name }}</option>
+      </select>
     </div>
 
     <div v-if="loading" class="card">
@@ -51,12 +40,10 @@
       <table class="hide-mobile">
         <thead>
           <tr>
-            <th>日期</th>
-            <th>类型</th>
-            <th>标题</th>
-            <th>内容</th>
-            <th>级别</th>
+            <th>时间</th>
+            <th>提醒内容</th>
             <th>资产</th>
+            <th>状态</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -64,18 +51,22 @@
           <tr v-for="item in alerts" :key="item.id">
             <td>{{ fmtDateTime(item.created_at) }}</td>
             <td>
-              <span class="icon-text"><span class="icon">{{ typeIcon(item.type) }}</span>{{ typeLabel(item.type) }}</span>
-            </td>
-            <td>
-              <div style="font-weight:600">{{ item.title }}</div>
-              <div v-if="item.strategy_name" style="font-size:12px;color:var(--text-muted)">{{ item.strategy_name }}</div>
-            </td>
-            <td style="max-width:320px;color:var(--text-dim)">{{ item.message }}</td>
-            <td>
-              <span class="badge" :class="severityBadge(item.severity)">{{ severityLabel(item.severity) }}</span>
-              <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'" style="margin-left:6px">{{ item.status === 'read' ? '已读' : '未读' }}</span>
+              <div class="content-cell">
+                <div class="content-head">
+                  <span class="icon-text content-type"><span class="icon">{{ typeIcon(item.type) }}</span>{{ typeLabel(item.type) }}</span>
+                  <span class="content-title">{{ item.title }}</span>
+                </div>
+                <div v-if="item.strategy_name" class="content-sub">{{ item.strategy_name }}</div>
+                <div class="content-message">{{ item.message }}</div>
+              </div>
             </td>
             <td>{{ item.asset_name || '-' }}</td>
+            <td>
+              <div class="status-cell">
+                <span class="badge" :class="severityBadge(item.severity)">{{ severityLabel(item.severity) }}</span>
+                <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? '已读' : '未读' }}</span>
+              </div>
+            </td>
             <td>
               <div class="actions-cell">
                 <button v-if="item.status !== 'read'" class="btn btn-sm" @click="markAsRead(item)">标已读</button>
@@ -88,19 +79,19 @@
 
       <div class="show-mobile alert-cards">
         <div v-for="item in alerts" :key="item.id" class="alert-card">
-          <div class="alert-card-header">
-            <span class="icon-text"><span class="icon">{{ typeIcon(item.type) }}</span>{{ typeLabel(item.type) }}</span>
+          <div class="alert-card-top">
+            <span class="icon-text content-type"><span class="icon">{{ typeIcon(item.type) }}</span>{{ typeLabel(item.type) }}</span>
             <span class="badge" :class="severityBadge(item.severity)">{{ severityLabel(item.severity) }}</span>
           </div>
           <div class="alert-card-title">{{ item.title }}</div>
           <div class="alert-card-message">{{ item.message }}</div>
+          <div v-if="item.strategy_name" class="alert-card-strategy">{{ item.strategy_name }}</div>
           <div class="alert-card-meta">
             <span>{{ fmtDateTime(item.created_at) }}</span>
             <span>{{ item.asset_name || '未关联资产' }}</span>
-            <span v-if="item.strategy_name">{{ item.strategy_name }}</span>
+            <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? '已读' : '未读' }}</span>
           </div>
           <div class="alert-card-actions">
-            <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? '已读' : '未读' }}</span>
             <button v-if="item.status !== 'read'" class="btn btn-sm" @click="markAsRead(item)">标已读</button>
             <button class="btn btn-sm btn-danger" @click="deleteAlert(item)">删除</button>
           </div>
@@ -247,9 +238,14 @@ onMounted(async () => {
 
 <style scoped>
 .filters {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.filter-select {
+  flex: 1 1 160px;
+  max-width: 220px;
 }
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
@@ -258,38 +254,76 @@ onMounted(async () => {
   gap: 8px;
   flex-wrap: wrap;
 }
+.status-cell {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.content-cell {
+  max-width: 420px;
+}
+.content-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+.content-type {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.content-title {
+  font-weight: 600;
+}
+.content-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.content-message {
+  color: var(--text-dim);
+  line-height: 1.5;
+}
 .severity-danger { background: rgba(239,68,68,0.15); color: var(--red); }
 .severity-warning { background: rgba(240,192,64,0.18); color: var(--gold); }
 .severity-info { background: rgba(59,130,246,0.15); color: var(--blue); }
 .alert-cards {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .alert-card {
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px;
 }
-.alert-card-header {
+.alert-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-bottom: 6px;
 }
 .alert-card-title {
   font-weight: 600;
-  margin: 10px 0 6px;
+  line-height: 1.4;
+  margin-bottom: 4px;
 }
 .alert-card-message {
   font-size: 13px;
   color: var(--text-dim);
   line-height: 1.5;
 }
+.alert-card-strategy {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .alert-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 8px;
@@ -312,7 +346,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
-  .filters { grid-template-columns: 1fr; }
+  .filter-select {
+    flex: 1 1 100%;
+    max-width: none;
+  }
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
   .pagination { justify-content: space-between; }

@@ -8,6 +8,9 @@ const CURRENCY_SYMBOLS = {
   EUR: '€',
   GBP: '£',
   JPY: '¥',
+  USDT: 'USDT',
+  BTC: '₿',
+  ETH: 'Ξ',
 }
 
 /**

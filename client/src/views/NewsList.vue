@@ -2,8 +2,12 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">资讯</h1>
-      <button class="btn btn-sm" @click="refresh" :disabled="refreshing">
-        {{ refreshing ? '刷新中...' : '🔄 刷新' }}
+      <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+          <path d="M21 3v6h-6" />
+        </svg>
+        <span>{{ refreshing ? '刷新中...' : '刷新' }}</span>
       </button>
     </div>
 
@@ -117,6 +121,8 @@ onMounted(loadData)
 </script>
 
 <style scoped>
+.btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
+.btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .news-item {
   padding: 14px 0;
   border-bottom: 1px solid var(--border);

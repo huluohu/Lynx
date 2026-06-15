@@ -5,7 +5,6 @@
       <button class="btn btn-primary" @click="showForm = true">+ 添加记录</button>
     </div>
 
-    <!-- Add form -->
     <div class="card" v-if="showForm" style="max-width:540px;margin-bottom:20px">
       <div class="section-title">记录交易</div>
       <form @submit.prevent="addRecord">
@@ -28,6 +27,13 @@
         <div class="form-row">
           <div class="form-group"><label class="form-label">数量</label><input class="form-input" type="number" step="any" v-model="form.quantity" required /></div>
           <div class="form-group"><label class="form-label">价格</label><input class="form-input" type="number" step="any" v-model="form.price" required /></div>
+        </div>
+        <div v-if="showCurrencyField" class="form-group">
+          <label class="form-label">计价单位</label>
+          <select class="form-select" v-model="form.currency">
+            <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
+          </select>
+          <div class="currency-help">加密货币交易通常使用 USDT 计价，可按实际成交币种调整。</div>
         </div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">总金额</label><input class="form-input" type="number" step="any" v-model="form.total" /></div>
@@ -54,25 +60,28 @@
             <td>{{ h.asset_name }}</td>
             <td><span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span></td>
             <td>{{ h.quantity }}</td>
-            <td>¥{{ h.price }}</td>
-            <td>¥{{ fmt(h.total) }}</td>
-            <td :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl ? (h.pnl>=0?'+':'')+'¥'+fmt(Math.abs(h.pnl)) : '-' }}</td>
+            <td>{{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</td>
+            <td>{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</td>
+            <td :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl ? (h.pnl>=0?'+':'') + moneyPrefix(h.currency) + fmt(Math.abs(h.pnl)) : '-' }}</td>
           </tr>
         </tbody>
       </table>
 
-      <!-- Mobile cards -->
       <div class="show-mobile history-cards">
         <div v-for="h in history" :key="h.id" class="history-card" @click="openDetail(h)">
           <div class="history-card-header">
-            <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
-            <span style="font-weight:600">{{ h.asset_name }}</span>
-            <span style="color:var(--text-muted);font-size:12px;margin-left:auto">{{ h.executed_at?.slice(0,10) }}</span>
+            <div>
+              <div class="history-card-title">
+                <span style="font-weight:600">{{ h.asset_name }}</span>
+                <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
+              </div>
+              <div class="history-card-meta">{{ h.executed_at?.slice(0,10) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
+            </div>
+            <div class="history-card-total">{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</div>
           </div>
           <div class="history-card-body">
-            <span>{{ h.quantity }} × ¥{{ h.price }}</span>
-            <span>= ¥{{ fmt(h.total) }}</span>
-            <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':''}}¥{{ fmt(Math.abs(h.pnl)) }}</span>
+            <span class="history-card-currency">{{ h.currency || 'CNY' }}</span>
+            <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':'' }}{{ moneyPrefix(h.currency) }}{{ fmt(Math.abs(h.pnl)) }}</span>
           </div>
           <div v-if="h.reason" class="history-card-reason">{{ h.reason }}</div>
         </div>
@@ -89,7 +98,6 @@
     </div>
     <div v-else class="card empty"><div class="empty-icon">📝</div><p>暂无历史记录</p></div>
 
-    <!-- Detail Drawer -->
     <AppDrawer v-model="showDetailDrawer" :title="detailRecord ? `${detailRecord.asset_name} - ${detailRecord.type==='buy'?'买入':'卖出'}` : '交易详情'">
       <div v-if="detailRecord" class="detail-drawer-content">
         <div class="detail-section">
@@ -100,9 +108,10 @@
         <div class="detail-section">
           <div class="detail-section-title">交易数据</div>
           <div class="detail-row"><span>数量</span><b>{{ detailRecord.quantity }}</b></div>
-          <div class="detail-row"><span>价格</span><span>¥{{ detailRecord.price }}</span></div>
-          <div class="detail-row"><span>总金额</span><span>¥{{ fmt(detailRecord.total) }}</span></div>
-          <div class="detail-row" v-if="detailRecord.pnl"><span>盈亏</span><span :class="(detailRecord.pnl||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl>=0?'+':'' }}¥{{ fmt(Math.abs(detailRecord.pnl)) }}</span></div>
+          <div class="detail-row"><span>计价单位</span><span>{{ detailRecord.currency || 'CNY' }}</span></div>
+          <div class="detail-row"><span>价格</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.price, 8) }}</span></div>
+          <div class="detail-row"><span>总金额</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.total) }}</span></div>
+          <div class="detail-row" v-if="detailRecord.pnl"><span>盈亏</span><span :class="(detailRecord.pnl||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl>=0?'+':'' }}{{ moneyPrefix(detailRecord.currency) }}{{ fmt(Math.abs(detailRecord.pnl)) }}</span></div>
           <div class="detail-row" v-if="detailRecord.pnl_pct"><span>盈亏率</span><span :class="(detailRecord.pnl_pct||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl_pct>=0?'+':'' }}{{ detailRecord.pnl_pct }}%</span></div>
         </div>
         <div v-if="detailRecord.reason" class="detail-section">
@@ -115,9 +124,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { currencySymbol } from '../utils/currency.js'
 import AppDrawer from '../components/AppDrawer.vue'
 
 const toast = useToast()
@@ -128,7 +138,19 @@ const showForm = ref(false)
 const submitting = ref(false)
 const showDetailDrawer = ref(false)
 const detailRecord = ref(null)
-const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
+const currencyOptions = ['CNY', 'USD', 'USDT', 'BTC', 'ETH']
+const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', currency: 'CNY', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
+
+const selectedAsset = computed(() => assets.value.find(asset => String(asset.id) === String(form.asset_id)) || null)
+const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto')
+
+watch(selectedAsset, (asset) => {
+  if (showCurrencyField.value) {
+    form.currency = currencyOptions.includes(asset?.currency) ? asset.currency : (currencyOptions.includes(form.currency) ? form.currency : 'USDT')
+    return
+  }
+  form.currency = asset?.currency || 'CNY'
+}, { immediate: true })
 
 async function loadData() {
   try {
@@ -138,6 +160,19 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+function resetForm() {
+  form.asset_id = ''
+  form.type = 'buy'
+  form.quantity = ''
+  form.price = ''
+  form.currency = 'CNY'
+  form.total = ''
+  form.pnl = ''
+  form.pnl_pct = ''
+  form.executed_at = new Date().toISOString().slice(0, 10)
+  form.reason = ''
 }
 
 function openDetail(h) {
@@ -153,45 +188,67 @@ async function addRecord() {
       type: form.type,
       quantity: Number(form.quantity),
       price: Number(form.price),
+      currency: form.currency || selectedAsset.value?.currency || 'CNY',
       total: Number(form.total) || Number(form.quantity) * Number(form.price),
       executed_at: form.executed_at,
       reason: form.reason,
       pnl: form.pnl ? Number(form.pnl) : null,
       pnl_pct: form.pnl_pct ? Number(form.pnl_pct) : null,
     }
-    const res = await api('/api/history', { method:'POST', body:JSON.stringify(body) })
+    const res = await api('/api/history', { method: 'POST', body: JSON.stringify(body) })
     const json = await res.json()
-    if (!json.success) { alert('保存失败: ' + (json.error || '未知错误')); return }
+    if (!json.success) {
+      toast.error('保存失败: ' + (json.error || '未知错误'))
+      return
+    }
     showForm.value = false
-    loadData()
-  } catch (e) { alert('保存失败: ' + e.message) }
-  finally { submitting.value = false }
+    resetForm()
+    await loadData()
+    toast.success('交易记录已保存')
+  } catch (e) {
+    toast.error('保存失败: ' + e.message)
+  } finally {
+    submitting.value = false
+  }
 }
-function fmt(n) {
-  if (!n && n!==0) return '0'
-  return Math.round(Number(n)).toLocaleString()
+
+function fmt(n, maxFractionDigits = 2) {
+  if (n === null || n === undefined || n === '') return '0'
+  return Number(n).toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })
 }
+
+function moneyPrefix(currency = 'CNY') {
+  const symbol = currencySymbol(currency)
+  return symbol.length > 1 ? `${symbol} ` : symbol
+}
+
 onMounted(loadData)
 </script>
 
 <style scoped>
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
+.currency-help { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
 .history-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
-.history-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; transition: background 0.15s; }
+.history-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: background 0.15s; }
 .history-card:hover { background: var(--bg-hover); }
 .history-card:active { background: var(--bg-hover); }
-.history-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.history-card-body { display: flex; align-items: center; gap: 12px; font-size: 13px; }
-.history-card-reason { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+.history-card-header { display: flex; justify-content: space-between; gap: 12px; }
+.history-card-title { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.history-card-meta { font-size: 12px; color: var(--text-dim); }
+.history-card-total { font-weight: 600; white-space: nowrap; }
+.history-card-body { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 13px; }
+.history-card-currency { font-size: 12px; color: var(--text-muted); }
+.history-card-reason { margin-top: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
 
 .detail-drawer-content { display: flex; flex-direction: column; gap: 16px; }
 .detail-section { background: var(--bg); border-radius: 10px; padding: 4px 0; }
 .detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); padding: 8px 14px 4px; }
-.detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; }
+.detail-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 14px; gap: 12px; }
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
+  .history-card-header { align-items: flex-start; }
 }
 </style>

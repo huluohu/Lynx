@@ -4,21 +4,29 @@
       <h1 class="page-title">仪表盘</h1>
       <div style="display:flex;align-items:center;gap:12px">
         <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
-        <button class="btn" @click="refresh" :disabled="loading">{{ loading ? '刷新中...' : '🔄 刷新' }}</button>
+        <button class="btn btn-inline-icon" @click="refresh" :disabled="loading">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          <span>{{ loading ? '刷新中...' : '刷新' }}</span>
+        </button>
       </div>
     </div>
 
-    <div v-if="alerts.length" class="alert-section" style="margin-bottom:20px">
+    <div v-if="alerts.length" class="alert-section">
       <div class="alert-section-header">
-        <span>🔔 提醒 ({{ alerts.length }})</span>
-        <span style="font-size:12px;color:var(--text-muted)">
-          <template v-if="alertCounts.danger">🔴 {{ alertCounts.danger }}</template>
-          <template v-if="alertCounts.warning"> 🟡 {{ alertCounts.warning }}</template>
-          <template v-if="alertCounts.info"> 🔵 {{ alertCounts.info }}</template>
-        </span>
+        <div class="alert-section-title">
+          <span>🔔 提醒 ({{ alerts.length }})</span>
+          <span style="font-size:12px;color:var(--text-muted)">
+            <template v-if="alertCounts.danger">🔴 {{ alertCounts.danger }}</template>
+            <template v-if="alertCounts.warning"> 🟡 {{ alertCounts.warning }}</template>
+            <template v-if="alertCounts.info"> 🔵 {{ alertCounts.info }}</template>
+          </span>
+        </div>
       </div>
       <div
-        v-for="a in alerts"
+        v-for="a in alerts.slice(0, 3)"
         :key="a.id"
         :class="['alert-item', `alert-${a.level}`]"
       >
@@ -42,8 +50,11 @@
         </div>
         <div class="alert-action">
           <router-link v-if="a.type === 'plan_triggered' && a.plan_id" :to="`/strategies/${a.plan_id?.toString().split('-')[0] || ''}`" class="btn btn-sm">查看</router-link>
-          <button v-else-if="a.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(a.id)">✓</button>
+          <button v-else-if="a.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(a.id)">完成</button>
         </div>
+      </div>
+      <div v-if="alerts.length > 3" class="alert-section-footer">
+        <router-link to="/alerts" class="alert-view-all">查看全部 →</router-link>
       </div>
     </div>
 
@@ -251,6 +262,79 @@ onMounted(refresh)
   padding: 2px 8px;
   border-radius: 4px;
 }
+.btn-inline-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-inline-icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.alert-section {
+  margin-bottom: 20px;
+}
+.alert-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.alert-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+.alert-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.alert-type {
+  font-size: 14px;
+  line-height: 1.4;
+}
+.alert-body {
+  flex: 1;
+  min-width: 0;
+}
+.alert-message {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.alert-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.alert-action {
+  display: flex;
+  align-items: center;
+}
+.alert-section-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.alert-view-all {
+  font-size: 13px;
+  color: var(--primary);
+  text-decoration: none;
+}
+.alert-view-all:hover {
+  text-decoration: underline;
+}
 .stat-value-wrap {
   white-space: normal;
   word-break: break-all;
@@ -334,6 +418,12 @@ onMounted(refresh)
   }
   .signal-compact-grid {
     grid-template-columns: 1fr;
+  }
+  .alert-item {
+    padding: 8px 10px;
+  }
+  .alert-action {
+    align-self: center;
   }
 }
 </style>
