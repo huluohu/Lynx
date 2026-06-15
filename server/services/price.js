@@ -26,17 +26,21 @@ export async function getUsdCny() {
 // ===== HTTP 工具 =====
 export function httpGet(url, opts = {}) {
   return new Promise((resolve) => {
-    const lib = url.startsWith('https') ? https : http;
-    const reqOpts = {
-      headers: { 'Accept': 'application/json', 'User-Agent': 'InvestTracker/1.0', ...opts.headers }
-    };
-    const req = lib.get(url, reqOpts, res => {
-      let body = '';
-      res.on('data', c => body += c);
-      res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
-    });
-    req.on('error', () => resolve(null));
-    req.setTimeout(opts.timeout || 8000, () => { req.destroy(); resolve(null); });
+    try {
+      const lib = url.startsWith('https') ? https : http;
+      const reqOpts = {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'InvestTracker/1.0', ...opts.headers }
+      };
+      const req = lib.get(url, reqOpts, res => {
+        let body = '';
+        res.on('data', c => body += c);
+        res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
+      });
+      req.on('error', () => resolve(null));
+      req.setTimeout(opts.timeout || 8000, () => { req.destroy(); resolve(null); });
+    } catch {
+      resolve(null);
+    }
   });
 }
 

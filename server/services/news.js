@@ -79,19 +79,33 @@ function normalizeDate(dateStr) {
 import https from 'https';
 import http from 'http';
 
-function fetchRss(url) {
+function fetchRss(url, _depth = 0) {
+  if (_depth > 3) return Promise.resolve('');
   return new Promise((resolve) => {
-    const lib = url.startsWith('https') ? https : http;
-    const req = lib.get(url, { headers: { 'User-Agent': 'InvestCompass/1.0', 'Accept': 'application/rss+xml, application/xml, text/xml' } }, res => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return fetchRss(res.headers.location).then(resolve);
-      }
-      let body = '';
-      res.on('data', c => body += c);
-      res.on('end', () => resolve(body));
-    });
-    req.on('error', () => resolve(''));
-    req.setTimeout(10000, () => { req.destroy(); resolve(''); });
+    try {
+      // Validate URL
+      const parsed = new URL(url);
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.get(url, { headers: { 'User-Agent': 'InvestCompass/1.0', 'Accept': 'application/rss+xml, application/xml, text/xml' } }, res => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          // Handle relative redirects
+          let redirectUrl = res.headers.location;
+          try {
+            redirectUrl = new URL(res.headers.location, url).href;
+          } catch { /* already absolute */ }
+          res.resume();
+          return fetchRss(redirectUrl, _depth + 1).then(resolve);
+        }
+        let body = '';
+        res.on('data', c => body += c);
+        res.on('end', () => resolve(body));
+      });
+      req.on('error', () => resolve(''));
+      req.setTimeout(10000, () => { req.destroy(); resolve(''); });
+    } catch (e) {
+      log.debug('fetchRss invalid URL', { url, error: e.message });
+      resolve('');
+    }
   });
 }
 
@@ -133,33 +147,33 @@ async function fetchFromSource(source) {
   }
 }
 
-// 同时尝试 CoinGecko 新闻（JSON API，无需 key）
+// 同时尝试 CoinGecko 新闻（/api/v3/news 需要 Pro key，降级为搜索 trending）
 async function fetchCoinGeckoNews() {
   try {
-    const data = await httpGet('https://api.coingecko.com/api/v3/news', { timeout: 8000 });
-    if (!data?.data?.length) return 0;
+    // Use trending search which is available on free tier
+    const data = await httpGet('https://api.coingecko.com/api/v3/search/trending', { timeout: 8000 });
+    if (!data?.coins?.length) return 0;
 
     const db = getDb();
     let inserted = 0;
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
-    for (const item of data.data.slice(0, 10)) {
-      if (!item.title) continue;
-      const url = item.url || '';
-      if (url) {
-        const exists = db.prepare('SELECT id FROM news WHERE url = ?').get(url);
-        if (exists) continue;
-      }
-      const publishedAt = item.updated_at
-        ? new Date(item.updated_at * 1000).toISOString().replace('T', ' ').slice(0, 19)
-        : new Date().toISOString().replace('T', ' ').slice(0, 19);
+    for (const coin of data.coins.slice(0, 5)) {
+      const item = coin.item;
+      if (!item?.name) continue;
+      const title = `🔥 Trending: ${item.name} (${item.symbol}) — Market Cap Rank #${item.market_cap_rank || '?'}`;
+      const url = `https://www.coingecko.com/en/coins/${item.id}`;
+
+      const exists = db.prepare('SELECT id FROM news WHERE url = ?').get(url);
+      if (exists) continue;
 
       db.prepare('INSERT OR IGNORE INTO news (title, summary, url, source, published_at) VALUES (?, ?, ?, ?, ?)')
-        .run(item.title.slice(0, 200), (item.description || '').slice(0, 300), url, item.author || 'CoinGecko', publishedAt);
+        .run(title, `Score: ${item.score}, Price BTC: ${item.price_btc?.toFixed(8) || 'N/A'}`, url, 'CoinGecko Trending', now);
       inserted++;
     }
     return inserted;
   } catch (e) {
-    log.debug('CoinGecko news fetch failed', { error: e.message });
+    log.debug('CoinGecko trending fetch failed', { error: e.message });
     return 0;
   }
 }
