@@ -2,7 +2,8 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">策略管理</h1>
-      <div class="page-actions">
+      <!-- Desktop actions -->
+      <div class="page-actions desktop-only">
         <button v-if="drafts.length" class="btn btn-draft btn-inline-icon" @click="showDrafts = true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
@@ -28,7 +29,50 @@
         <button class="btn btn-primary" @click="showAI = true">AI 生成</button>
         <router-link to="/strategies/create" class="btn">+ 创建</router-link>
       </div>
+      <!-- Mobile actions: primary + more -->
+      <div class="page-actions mobile-only">
+        <button class="btn btn-primary btn-sm" @click="showAI = true">AI 生成</button>
+        <button class="btn btn-icon" @click="showPageActions = true" title="更多操作">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        </button>
+      </div>
     </div>
+
+    <!-- Mobile Page Actions Sheet -->
+    <Teleport to="body">
+      <Transition name="slide-up">
+        <div v-if="showPageActions" class="action-sheet-overlay" @click="showPageActions = false">
+          <div class="action-sheet" @click.stop>
+            <div class="action-sheet-item" v-if="drafts.length" @click="showDrafts = true; showPageActions = false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+                <path d="M9 3h6v4H9z" />
+                <path d="M9 12h6" /><path d="M9 16h4" />
+              </svg>
+              草稿
+              <span class="nav-badge" style="margin-left:auto">{{ drafts.length }}</span>
+            </div>
+            <router-link to="/strategies/compare" class="action-sheet-item" @click="showPageActions = false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6h7" /><path d="M4 12h10" /><path d="M4 18h7" />
+                <path d="M15 6l2-2 2 2" /><path d="M17 4v8" />
+                <path d="M17 20v-8" /><path d="M15 18l2 2 2-2" />
+              </svg>
+              AI 对比方案
+            </router-link>
+            <div class="action-sheet-item" @click="showAI = true; showPageActions = false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+              AI 生成策略
+            </div>
+            <router-link to="/strategies/create" class="action-sheet-item" @click="showPageActions = false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              创建策略
+            </router-link>
+            <div class="action-sheet-cancel" @click="showPageActions = false">取消</div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <div class="card" v-if="strategies.length">
       <table class="hide-mobile">
@@ -197,6 +241,7 @@ const drafts = ref([])
 const loading = ref(true)
 const showAI = ref(false)
 const showDrafts = ref(false)
+const showPageActions = ref(false)
 const showDetailDrawer = ref(false)
 const showHistoryDetail = ref(false)
 const detailStrategy = ref(null)
