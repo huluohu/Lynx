@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "better-sqlite3": "^12.10.0",
+    "better-sqlite3": "^12.10.1",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3"
   }
