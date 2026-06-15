@@ -258,29 +258,29 @@ router.post('/ai-agent-generate', async (req, res) => {
     // Auto-save to ai_generation_logs
     const logResult = db.prepare(`
       INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)
-    `).run(
-      JSON.stringify(ids),
-      Number(budget) || 20000,
-      goal || 'recovery',
-      risk_level || 'medium',
-      JSON.stringify(result.analysis || null),
-      JSON.stringify(result.strategy || null),
-      JSON.stringify(result.plans || []),
-      result.reasoning || '',
-      JSON.stringify(result.risk_management || null),
-      result.execution_notes || '',
-      result._meta?.model || '',
-      result._meta?.elapsed_ms || 0,
-      user_feedback || null,
-      parent_id || null,
-    );
+      VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id)
+    `).run({
+      asset_ids: JSON.stringify(ids),
+      budget: Number(budget) || 20000,
+      goal: goal || 'recovery',
+      risk_level: risk_level || 'medium',
+      analysis: JSON.stringify(result.analysis || null),
+      strategy: JSON.stringify(result.strategy || null),
+      plans: JSON.stringify(result.plans || []),
+      reasoning: result.reasoning || '',
+      risk_management: JSON.stringify(result.risk_management || null),
+      execution_notes: result.execution_notes || '',
+      model: result._meta?.model || '',
+      elapsed_ms: result._meta?.elapsed_ms || 0,
+      user_feedback: user_feedback || null,
+      parent_id: parent_id || null,
+    });
 
     const generationId = Number(logResult.lastInsertRowid);
     sendEvent('result', { success: true, data: { ...result, generation_id: generationId } });
     log.info('Agent generate success', { asset_ids: ids, strategy: result.strategy?.name, generation_id: generationId });
   } catch (e) {
-    log.error('Agent generate failed', { asset_ids: ids, error: e.message });
+    log.error('Agent generate failed', { asset_ids: ids, error: e.message, stack: e.stack?.split('\n').slice(0, 4).join(' | ') });
     sendEvent('error', { success: false, error: e.message });
   }
 
