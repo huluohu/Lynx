@@ -106,13 +106,34 @@
         <div class="form-row">
           <div class="form-group"><label class="form-label">类型</label>
             <select class="form-select" v-model="editForm.type">
-              <option value="gold">黄金</option><option value="crypto">加密货币</option><option value="stock">股票</option>
+              <option value="gold">黄金</option><option value="crypto">加密货币</option><option value="stock">股票</option><option value="forex">外汇</option><option value="commodity">大宗商品</option>
             </select>
           </div>
-          <div class="form-group"><label class="form-label">货币</label><input class="form-input" v-model="editForm.currency" /></div>
+          <div class="form-group"><label class="form-label">计价货币</label>
+            <select class="form-select" v-model="editForm.currency">
+              <option value="CNY">CNY</option><option value="USD">USD</option><option value="USDT">USDT</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group"><label class="form-label">图标</label><input class="form-input" v-model="editForm.icon" /></div>
-        <div class="form-group"><label class="form-label">数据源</label><input class="form-input" v-model="editForm.data_source" placeholder="自动" /></div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">图标</label><input class="form-input" v-model="editForm.icon" /></div>
+          <div class="form-group"><label class="form-label">数据源</label><input class="form-input" v-model="editForm.data_source" placeholder="自动" /></div>
+        </div>
+
+        <div class="section-title" style="margin-top:20px">持仓信息</div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">持仓数量</label><input class="form-input" type="number" step="any" v-model="editForm.quantity" /></div>
+          <div class="form-group"><label class="form-label">成本价</label><input class="form-input" type="number" step="any" v-model="editForm.avg_cost" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">总投入</label><input class="form-input" type="number" step="any" v-model="editForm.total_invested" /></div>
+          <div class="form-group"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">目标价</label><input class="form-input" type="number" step="any" v-model="editForm.target_price" /></div>
+          <div class="form-group"><label class="form-label">止损线</label><input class="form-input" type="number" step="any" v-model="editForm.stop_loss" /></div>
+        </div>
+
         <div style="display:flex;gap:10px;margin-top:16px">
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? '保存中...' : '保存' }}</button>
           <button type="button" class="btn" @click="showEditDrawer = false">取消</button>
@@ -138,7 +159,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
@@ -160,7 +181,13 @@ const showDeleteConfirm = ref(false)
 const showActions = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
-const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '' })
+const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '', quantity: '', avg_cost: '', total_invested: '', target_price: '', stop_loss: '' })
+
+watch([() => editForm.quantity, () => editForm.avg_cost], ([qty, cost]) => {
+  if (qty && cost) {
+    editForm.total_invested = (Number(qty) * Number(cost)).toFixed(2)
+  }
+})
 
 async function loadData() {
   const res = await api(`/api/assets/${route.params.id}`)
@@ -168,7 +195,13 @@ async function loadData() {
   if (json.data) {
     asset.value = json.data
     holding.value = json.data.quantity ? json.data : null
-    Object.assign(editForm, { name: json.data.name, symbol: json.data.symbol, type: json.data.type, currency: json.data.currency, icon: json.data.icon || '', data_source: json.data.data_source || '' })
+    Object.assign(editForm, {
+      name: json.data.name, symbol: json.data.symbol, type: json.data.type,
+      currency: json.data.currency, icon: json.data.icon || '', data_source: json.data.data_source || '',
+      quantity: json.data.quantity || '', avg_cost: json.data.avg_cost || '',
+      total_invested: json.data.total_invested || '', target_price: json.data.target_price || '',
+      stop_loss: json.data.stop_loss || '',
+    })
   }
   const tres = await api(`/api/transactions?asset_id=${route.params.id}`)
   const tjson = await tres.json()
@@ -184,10 +217,38 @@ function onTxSuccess() {
 async function saveEdit() {
   saving.value = true
   try {
-    const res = await api(`/api/assets/${route.params.id}`, { method: 'PUT', body: JSON.stringify(editForm) })
+    // Save asset fields
+    const assetPayload = { name: editForm.name, symbol: editForm.symbol, type: editForm.type, currency: editForm.currency, icon: editForm.icon, data_source: editForm.data_source }
+    const res = await api(`/api/assets/${route.params.id}`, { method: 'PUT', body: JSON.stringify(assetPayload) })
     const json = await res.json()
-    if (json.success) { toast.success('已更新'); showEditDrawer.value = false; loadData() }
-    else toast.error(json.error || '保存失败')
+    if (!json.success) { toast.error(json.error || '保存失败'); saving.value = false; return }
+
+    // Save holding fields if we have a holding
+    if (asset.value.holding_id) {
+      const holdingPayload = {
+        quantity: editForm.quantity ? Number(editForm.quantity) : undefined,
+        avg_cost: editForm.avg_cost ? Number(editForm.avg_cost) : undefined,
+        total_invested: editForm.total_invested ? Number(editForm.total_invested) : undefined,
+        target_price: editForm.target_price ? Number(editForm.target_price) : null,
+        stop_loss: editForm.stop_loss ? Number(editForm.stop_loss) : null,
+      }
+      await api(`/api/holdings/${asset.value.holding_id}`, { method: 'PUT', body: JSON.stringify(holdingPayload) })
+    } else if (editForm.quantity && editForm.avg_cost) {
+      // Create new holding if none exists
+      await api('/api/holdings', {
+        method: 'POST',
+        body: JSON.stringify({
+          asset_id: Number(route.params.id),
+          quantity: Number(editForm.quantity),
+          avg_cost: Number(editForm.avg_cost),
+          total_invested: editForm.total_invested ? Number(editForm.total_invested) : undefined,
+          target_price: editForm.target_price ? Number(editForm.target_price) : null,
+          stop_loss: editForm.stop_loss ? Number(editForm.stop_loss) : null,
+        })
+      })
+    }
+
+    toast.success('已更新'); showEditDrawer.value = false; loadData()
   } catch (e) { toast.error(e.message) }
   saving.value = false
 }
