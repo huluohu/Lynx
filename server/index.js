@@ -100,16 +100,26 @@ app.listen(PORT, () => {
   }, 30000);
 });
 
-// 定时拉取新闻（每30分钟）
-const NEWS_INTERVAL = 30 * 60 * 1000;
-setInterval(async () => {
+// 定时拉取新闻（从设置读取间隔）
+let newsTimer = null;
+export async function scheduleNewsFetch() {
   try {
-    const { fetchAllNews } = await import('./services/news.js');
-    await fetchAllNews();
+    const { fetchAllNews, getNewsRefreshInterval } = await import('./services/news.js');
+    const intervalMin = getNewsRefreshInterval();
+    const intervalMs = intervalMin * 60 * 1000;
+    
+    if (newsTimer) clearInterval(newsTimer);
+    newsTimer = setInterval(async () => {
+      try { await fetchAllNews(); } catch (e) {
+        log.warn('Scheduled news fetch failed', { error: e.message });
+      }
+    }, intervalMs);
+    log.info('News scheduler set', { intervalMin });
   } catch (e) {
-    log.warn('Scheduled news fetch failed', { error: e.message });
+    log.warn('News scheduler setup failed', { error: e.message });
   }
-}, NEWS_INTERVAL);
+}
+scheduleNewsFetch();
 
 // 优雅关闭
 process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); closeDb(); process.exit(0); });

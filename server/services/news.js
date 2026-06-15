@@ -4,21 +4,25 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('news');
 
-// RSS 源配置
-const RSS_SOURCES = [
-  {
+// RSS 源配置 (内置)
+const BUILTIN_SOURCES = {
+  coindesk: {
     name: 'CoinDesk',
     url: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
     type: 'crypto',
     assetType: 'crypto',
   },
-  {
+  cointelegraph: {
     name: 'CoinTelegraph',
     url: 'https://cointelegraph.com/rss',
     type: 'crypto',
     assetType: 'crypto',
   },
-];
+  coingecko: {
+    name: 'CoinGecko Trending',
+    type: 'trending',
+  },
+};
 
 // 简易 XML 解析 — 提取 RSS <item> 节点
 function parseRssItems(xml) {
@@ -178,13 +182,48 @@ async function fetchCoinGeckoNews() {
   }
 }
 
+// ===== 获取启用的数据源 =====
+function getEnabledSources() {
+  const db = getDb();
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'news_sources_enabled'").get();
+  const enabledKeys = (row?.value || 'coindesk,cointelegraph,coingecko').split(',').map(s => s.trim()).filter(Boolean);
+  
+  const sources = [];
+  for (const key of enabledKeys) {
+    if (BUILTIN_SOURCES[key]) {
+      sources.push({ ...BUILTIN_SOURCES[key], key });
+    }
+  }
+  
+  // Add custom RSS sources
+  try {
+    const customSources = db.prepare('SELECT name, url FROM custom_news_sources WHERE enabled = 1').all();
+    for (const cs of customSources) {
+      sources.push({ name: cs.name, url: cs.url, type: 'custom', assetType: 'general', key: `custom_${cs.name}` });
+    }
+  } catch { /* table may not exist yet */ }
+  
+  return sources;
+}
+
+// ===== 获取刷新间隔 (分钟) =====
+export function getNewsRefreshInterval() {
+  const db = getDb();
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'news_refresh_interval'").get();
+  return Math.max(5, parseInt(row?.value || '30', 10));
+}
+
 // ===== 主入口：抓取所有源 =====
 export async function fetchAllNews() {
   log.info('Fetching news from all sources...');
-  const results = await Promise.allSettled([
-    ...RSS_SOURCES.map(s => fetchFromSource(s)),
-    fetchCoinGeckoNews(),
-  ]);
+  const sources = getEnabledSources();
+  
+  const tasks = sources.map(s => {
+    if (s.type === 'trending') return fetchCoinGeckoNews();
+    return fetchFromSource(s);
+  });
+  
+  const results = await Promise.allSettled(tasks);
 
   const total = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? r.value : 0), 0);
   log.info('News fetch complete', { newArticles: total });

@@ -5,6 +5,52 @@
     </div>
 
     <div class="settings-container">
+      <!-- 资讯配置 -->
+      <div class="settings-group">
+        <div class="settings-group-header">
+          <span class="settings-group-title">资讯抓取</span>
+          <button class="save-btn" :class="{ changed: dirty.news }" @click="saveGroup('news')">
+            {{ saveState.news === 'saved' ? '✓ 已保存' : '保存' }}
+          </button>
+        </div>
+        <div class="settings-card">
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">刷新间隔</span>
+              <span class="setting-desc">自动抓取新资讯的频率</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="5" v-model="form.news_refresh_interval" @input="dirty.news = true" />
+              <span class="setting-unit">分钟</span>
+            </div>
+          </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">内置数据源</span>
+            <div class="source-chips">
+              <label v-for="src in builtinNewsSources" :key="src.key" class="source-chip" :class="{ active: enabledSources.includes(src.key) }">
+                <input type="checkbox" :value="src.key" v-model="enabledSources" @change="dirty.news = true" />
+                {{ src.label }}
+              </label>
+            </div>
+          </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">自定义 RSS 源</span>
+            <div v-if="customSources.length" class="custom-sources-list">
+              <div v-for="cs in customSources" :key="cs.id" class="custom-source-item">
+                <span class="custom-source-name">{{ cs.name }}</span>
+                <span class="custom-source-url">{{ cs.url }}</span>
+                <button class="btn-tiny danger" @click="deleteCustomSource(cs.id)">✕</button>
+              </div>
+            </div>
+            <div class="add-source-row">
+              <input class="setting-input-full" v-model="newSource.name" placeholder="名称" style="flex:1" />
+              <input class="setting-input-full" v-model="newSource.url" placeholder="RSS URL" style="flex:2" />
+              <button class="btn btn-sm" @click="addCustomSource" :disabled="!newSource.name || !newSource.url">添加</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 行情刷新 -->
       <div class="settings-group">
         <div class="settings-group-header">
@@ -16,11 +62,22 @@
         <div class="settings-card">
           <div class="setting-item">
             <div class="setting-info">
-              <span class="setting-label">刷新间隔</span>
+              <span class="setting-label">自动刷新间隔</span>
+              <span class="setting-desc">前端自动请求最新行情（0=手动刷新）</span>
             </div>
             <div class="setting-control">
-              <input class="setting-input" type="number" inputmode="numeric" v-model="form.refresh_interval" @input="dirty.market = true" />
-              <span class="setting-unit">秒</span>
+              <input class="setting-input" type="number" inputmode="numeric" min="0" v-model="form.market_refresh_interval" @input="dirty.market = true" />
+              <span class="setting-unit">分钟</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">汇率缓存时长</span>
+              <span class="setting-desc">USD/CNY 汇率的缓存有效期</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="1" v-model="form.rate_cache_duration" @input="dirty.market = true" />
+              <span class="setting-unit">分钟</span>
             </div>
           </div>
           <div class="setting-item">
@@ -158,6 +215,10 @@ const router = useRouter()
 const authStore = useAuthStore()
 const form = reactive({
   refresh_interval: '60',
+  market_refresh_interval: '5',
+  rate_cache_duration: '60',
+  news_refresh_interval: '30',
+  news_sources_enabled: 'coindesk,cointelegraph,coingecko',
   price_alert_threshold: '2',
   plan_approaching_pct: '5',
   ai_api_url: '',
@@ -175,8 +236,17 @@ const form = reactive({
   notify_trade_executed: 'false',
 })
 
-const dirty = reactive({ market: false, ai: false })
-const saveState = reactive({ market: '', ai: '' })
+const dirty = reactive({ market: false, ai: false, news: false })
+const saveState = reactive({ market: '', ai: '', news: '' })
+const enabledSources = ref(['coindesk', 'cointelegraph', 'coingecko'])
+const customSources = ref([])
+const newSource = reactive({ name: '', url: '' })
+
+const builtinNewsSources = [
+  { key: 'coindesk', label: 'CoinDesk' },
+  { key: 'cointelegraph', label: 'CoinTelegraph' },
+  { key: 'coingecko', label: 'CoinGecko Trending' },
+]
 
 const notifyEvents = [
   { key: 'notify_plan_triggered', label: '计划触发', desc: '操盘计划价格条件达成' },
@@ -187,8 +257,9 @@ const notifyEvents = [
 ]
 
 const groupKeys = {
-  market: ['refresh_interval', 'price_alert_threshold', 'plan_approaching_pct'],
+  market: ['refresh_interval', 'market_refresh_interval', 'rate_cache_duration', 'price_alert_threshold', 'plan_approaching_pct'],
   ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_search_api_url', 'agent_search_api_key'],
+  news: ['news_refresh_interval', 'news_sources_enabled'],
 }
 
 async function load() {
@@ -198,29 +269,35 @@ async function load() {
     if (!json.success) return
     for (const [k, v] of Object.entries(json.data)) {
       if (k in form) {
-        // Don't overwrite password fields with masked values
-        if ((k === 'ai_api_key' || k === 'agent_search_api_key') && v && v.startsWith('****')) {
-          form[k] = v // show masked placeholder
-        } else {
-          form[k] = v
-        }
+        form[k] = v
       }
     }
+    // Parse enabled sources
+    if (form.news_sources_enabled) {
+      enabledSources.value = form.news_sources_enabled.split(',').map(s => s.trim()).filter(Boolean)
+    }
+  } catch {}
+  // Load custom sources
+  try {
+    const res = await api('/api/news/sources')
+    const json = await res.json()
+    customSources.value = json.data || []
   } catch {}
 }
 
 async function saveGroup(group) {
   const keys = groupKeys[group]
   if (!keys) return
+  // Sync enabledSources back to form for news group
+  if (group === 'news') {
+    form.news_sources_enabled = enabledSources.value.join(',')
+  }
   try {
-    for (const key of keys) {
-      const res = await api(`/api/settings/${key}`, {
-        method: 'PUT',
-        body: JSON.stringify({ value: form[key] })
-      })
-      const json = await res.json()
-      if (!json.success) { alert(`保存失败 (${key}): ` + (json.error || '未知错误')); return }
-    }
+    const payload = {}
+    for (const key of keys) payload[key] = form[key]
+    const res = await api('/api/settings', { method: 'PUT', body: JSON.stringify(payload) })
+    const json = await res.json()
+    if (!json.success) { alert('保存失败'); return }
     dirty[group] = false
     saveState[group] = 'saved'
     setTimeout(() => { saveState[group] = '' }, 2000)
@@ -236,6 +313,26 @@ async function saveKey(key, value) {
     const json = await res.json()
     if (!json.success) { alert(`保存失败: ` + (json.error || '未知错误')) }
   } catch (e) { alert('保存失败: ' + e.message) }
+}
+
+async function addCustomSource() {
+  if (!newSource.name || !newSource.url) return
+  try {
+    const res = await api('/api/news/sources', { method: 'POST', body: JSON.stringify({ name: newSource.name, url: newSource.url }) })
+    const json = await res.json()
+    if (!json.success) { alert(json.error || '添加失败'); return }
+    newSource.name = ''
+    newSource.url = ''
+    const r2 = await api('/api/news/sources')
+    customSources.value = (await r2.json()).data || []
+  } catch (e) { alert(e.message) }
+}
+
+async function deleteCustomSource(id) {
+  try {
+    await api(`/api/news/sources/${id}`, { method: 'DELETE' })
+    customSources.value = customSources.value.filter(s => s.id !== id)
+  } catch {}
 }
 
 function doLogout() {
@@ -403,4 +500,20 @@ onMounted(load)
   .setting-input-full { font-size: 16px; }
   .setting-item { padding: 16px; }
 }
+
+/* Source chips */
+.source-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.source-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 20px; font-size: 13px; cursor: pointer; background: var(--bg); border: 1px solid var(--border); transition: all 0.2s; }
+.source-chip input { display: none; }
+.source-chip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+/* Custom sources */
+.custom-sources-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.custom-source-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg); border-radius: 8px; font-size: 13px; }
+.custom-source-name { font-weight: 500; }
+.custom-source-url { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.btn-tiny { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
+.btn-tiny.danger:hover { color: var(--red); background: rgba(239,68,68,0.1); }
+.add-source-row { display: flex; gap: 8px; align-items: center; }
+.add-source-row .setting-input-full { padding: 8px 10px; font-size: 13px; }
 </style>

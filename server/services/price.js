@@ -1,14 +1,24 @@
 import http from 'http';
 import https from 'https';
 import { createLogger } from '../utils/logger.js';
+import { getDb } from '../db/database.js';
 
 const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
-// ===== 汇率 (缓存1小时) =====
+// ===== 获取汇率缓存时长（分钟） =====
+function getRateCacheDuration() {
+  try {
+    const row = getDb().prepare("SELECT value FROM settings WHERE key = 'rate_cache_duration'").get();
+    return Math.max(1, parseInt(row?.value || '60', 10)) * 60 * 1000;
+  } catch { return 3600000; }
+}
+
+// ===== 汇率 (可配置缓存时长) =====
 export async function getUsdCny() {
   const now = Date.now();
-  if (now - cachedRate.updated < 3600000) return cachedRate.usd_cny;
+  const cacheDuration = getRateCacheDuration();
+  if (now - cachedRate.updated < cacheDuration) return cachedRate.usd_cny;
 
   try {
     const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });

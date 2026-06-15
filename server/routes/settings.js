@@ -42,13 +42,22 @@ router.put('/:key', (req, res) => {
 });
 
 // PUT 批量更新
-router.put('/', (req, res) => {
+router.put('/', async (req, res) => {
   const settings = req.body;
   if (!settings || typeof settings !== 'object') return res.status(400).json({ success: false, error: '无效数据' });
   const db = getDb();
   const stmt = db.prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime(\'now\')');
   for (const [key, value] of Object.entries(settings)) {
+    // Don't save masked secrets back
+    if (SECRET_KEYS.includes(key) && String(value).startsWith('****')) continue;
     stmt.run(key, String(value));
+  }
+  // Reschedule news if interval changed
+  if ('news_refresh_interval' in settings) {
+    try {
+      const { scheduleNewsFetch } = await import('../index.js');
+      await scheduleNewsFetch();
+    } catch {}
   }
   res.json({ success: true });
 });
