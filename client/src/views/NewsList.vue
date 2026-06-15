@@ -40,7 +40,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
+import { useToast } from '../utils/toast.js'
 
+const toast = useToast()
 const news = ref([])
 const total = ref(0)
 const loading = ref(true)
@@ -73,8 +75,17 @@ async function loadMore() {
 async function refresh() {
   refreshing.value = true
   try {
-    await api('/api/news/refresh', { method: 'POST' })
+    const res = await api('/api/news/refresh', { method: 'POST' })
+    const json = await res.json()
     await loadData()
+    if (json.success) {
+      const msg = json.message || '刷新完成'
+      toast.success(msg)
+    } else {
+      toast.error(json.error || '刷新失败')
+    }
+  } catch (e) {
+    toast.error('刷新失败: ' + e.message)
   } finally {
     refreshing.value = false
   }

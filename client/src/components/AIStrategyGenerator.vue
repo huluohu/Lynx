@@ -226,7 +226,8 @@
         <button class="btn btn-primary" style="flex:1" @click="confirmSave" :disabled="saving">
           {{ saving ? '保存中...' : '✅ 确认采用' }}
         </button>
-        <button class="btn" @click="step = 'config'">← 重新配置</button>
+        <button class="btn" @click="generate" :disabled="generating">🔄 重新生成</button>
+        <button class="btn" @click="step = 'config'">⚙️ 改参数</button>
       </div>
     </div>
   </div>
@@ -353,6 +354,7 @@ async function generate() {
   result.value = null
   editablePlans.value = []
   editingPlanIdx.value = -1
+  step.value = 'config' // show progress UI
 
   // Reset progress
   agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = ''; })

@@ -10,17 +10,22 @@ const log = createLogger('market');
 router.get('/prices', async (req, res) => {
   const db = getDb();
   const assets = db.prepare('SELECT * FROM assets').all();
+  const force = req.query.force === '1';
 
   // 分离: 有缓存的直接返回, 无缓存的并行请求
   const cachedResults = [];
   const toFetch = [];
 
   for (const a of assets) {
-    const cached = db.prepare("SELECT * FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-5 minutes') ORDER BY fetched_at DESC LIMIT 1").get(a.id);
-    if (cached) {
-      cachedResults.push({ asset_id: a.id, name: a.name, symbol: a.symbol, type: a.type, price: cached.price, currency: cached.currency, source: cached.source, cached: true });
-    } else {
+    if (force) {
       toFetch.push(a);
+    } else {
+      const cached = db.prepare("SELECT * FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-5 minutes') ORDER BY fetched_at DESC LIMIT 1").get(a.id);
+      if (cached) {
+        cachedResults.push({ asset_id: a.id, name: a.name, symbol: a.symbol, type: a.type, price: cached.price, currency: cached.currency, source: cached.source, cached: true });
+      } else {
+        toFetch.push(a);
+      }
     }
   }
 
