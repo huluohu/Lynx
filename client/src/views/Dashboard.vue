@@ -8,7 +8,6 @@
       </div>
     </div>
 
-    <!-- ===== 提醒模块 ===== -->
     <div v-if="alerts.length" class="alert-section" style="margin-bottom:20px">
       <div class="alert-section-header">
         <span>🔔 提醒 ({{ alerts.length }})</span>
@@ -48,7 +47,6 @@
       </div>
     </div>
 
-    <!-- Summary cards -->
     <div v-if="!initialized" class="grid-4" style="margin-bottom:20px">
       <div class="stat-card" v-for="i in 4" :key="i">
         <div class="skeleton skeleton-text short"></div>
@@ -81,7 +79,6 @@
     </div>
 
     <div class="grid-2" style="margin-bottom:20px">
-      <!-- Asset allocation -->
       <div class="card">
         <div class="section-title">📊 资产配置</div>
         <div v-if="allocation.length">
@@ -103,7 +100,6 @@
         <div v-else class="empty"><div class="empty-icon">📭</div><p>暂无资产</p></div>
       </div>
 
-      <!-- Active plans -->
       <div class="card">
         <div class="section-title">📋 活跃计划</div>
         <div v-if="activePlans.length">
@@ -124,7 +120,25 @@
       </div>
     </div>
 
-    <!-- Recent trades -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="signals-head">
+        <div class="section-title" style="margin:0">📡 市场信号</div>
+        <router-link to="/signals" class="btn btn-sm">查看全部</router-link>
+      </div>
+      <div v-if="heldSignals.length" class="signal-compact-grid">
+        <router-link v-for="signal in heldSignals" :key="signal.id" to="/signals" class="signal-compact-card">
+          <div class="signal-compact-top">
+            <span class="signal-compact-name">{{ signal.icon }} {{ signal.asset_name }}</span>
+            <span class="badge" :class="signalBadgeClass(signal.signal_type)">{{ signalLabel(signal.signal_type) }}</span>
+          </div>
+          <div class="signal-compact-summary">{{ signal.summary }}</div>
+        </router-link>
+      </div>
+      <div v-else class="empty" style="padding:24px">
+        <p>暂无持仓资产的市场信号，前往 <router-link to="/signals">/signals</router-link> 生成分析。</p>
+      </div>
+    </div>
+
     <div class="card">
       <div class="section-title">📝 最近交易</div>
       <table v-if="recentTrades.length">
@@ -154,6 +168,7 @@ const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, tot
 const allocation = ref([])
 const activePlans = ref([])
 const recentTrades = ref([])
+const latestSignals = ref([])
 const alerts = ref([])
 const loading = ref(false)
 const initialized = ref(false)
@@ -164,18 +179,24 @@ const alertCounts = computed(() => {
   alerts.value.forEach(a => { if (c[a.level] !== undefined) c[a.level]++ })
   return c
 })
+const heldSignals = computed(() => {
+  const ids = new Set(allocation.value.map(item => item.asset_id))
+  return latestSignals.value.filter(item => ids.has(item.asset_id))
+})
 
 async function refresh() {
   loading.value = true
   try {
-    const [summaryRes, alertsRes, rateRes] = await Promise.all([
+    const [summaryRes, alertsRes, rateRes, signalsRes] = await Promise.all([
       api('/api/dashboard/summary'),
       api('/api/dashboard/alerts'),
       api('/api/market/rate'),
+      api('/api/signals/latest'),
     ])
     const sJson = await summaryRes.json()
     const aJson = await alertsRes.json()
     const rJson = await rateRes.json()
+    const sigJson = await signalsRes.json()
 
     if (sJson.data) {
       summary.value = sJson.data.summary
@@ -183,12 +204,9 @@ async function refresh() {
       activePlans.value = sJson.data.active_plans || []
       recentTrades.value = sJson.data.recent_trades || []
     }
-    if (aJson.data) {
-      alerts.value = aJson.data
-    }
-    if (rJson.data) {
-      usdCny.value = rJson.data.usd_cny
-    }
+    if (aJson.data) alerts.value = aJson.data
+    if (rJson.data) usdCny.value = rJson.data.usd_cny
+    latestSignals.value = sigJson.data || []
   } catch (e) { console.error(e) }
   loading.value = false
   initialized.value = true
@@ -203,7 +221,7 @@ function fmt(n) {
   const abs = Math.abs(n)
   if (abs >= 100000000) return (n / 100000000).toFixed(2) + '亿'
   if (abs >= 10000) return (n / 10000).toFixed(1) + '万'
-  if (abs < 1) return n.toFixed(2)
+  if (abs < 1) return Number(n).toFixed(2)
   return Math.round(n).toLocaleString()
 }
 function fmtPl(n) {
@@ -216,6 +234,10 @@ function cs(a) { return currencySymbol(a?.currency) }
 function fmtPct(n) {
   if (!n && n !== 0) return '0.0'
   return Number(n).toFixed(1)
+}
+function signalLabel(type) { return { bullish: '看涨', bearish: '看跌', neutral: '中性' }[type] || '中性' }
+function signalBadgeClass(type) {
+  return { bullish: 'badge-buy', bearish: 'badge-sell', neutral: 'badge-pending' }[type] || 'badge-pending'
 }
 
 onMounted(refresh)
@@ -263,10 +285,55 @@ onMounted(refresh)
   font-size: 11px;
   font-style: italic;
 }
+.signals-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.signal-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.signal-compact-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.signal-compact-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.signal-compact-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.signal-compact-summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 @media (max-width: 768px) {
   .stat-value-wrap {
     font-size: 16px;
+  }
+  .signals-head {
+    align-items: flex-start;
+  }
+  .signal-compact-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

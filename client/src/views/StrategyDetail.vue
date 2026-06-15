@@ -8,6 +8,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
           {{ stressTesting ? '测试中...' : '压力测试' }}
         </button>
+        <button class="btn" @click="runReviewAction" :disabled="reviewing">{{ reviewing ? '复盘中...' : '📝 AI 复盘' }}</button>
         <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? '生成中...' : '生成计划' }}</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">编辑</router-link>
@@ -27,7 +28,6 @@
     </div>
 
     <template v-else>
-      <!-- Mobile action sheet -->
       <div v-if="showActions" class="action-sheet-overlay" @click="showActions = false"></div>
       <transition name="slide-up">
         <div v-if="showActions" class="action-sheet">
@@ -38,6 +38,10 @@
           <div class="action-sheet-item" @click="runStressTestAction(); showActions = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
             {{ stressTesting ? '压力测试中...' : '运行压力测试' }}
+          </div>
+          <div class="action-sheet-item" @click="runReviewAction(); showActions = false">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
+            {{ reviewing ? 'AI 复盘中...' : 'AI 复盘' }}
           </div>
           <div class="action-sheet-item" @click="showAIRegenerate = true; showActions = false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
@@ -91,7 +95,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="margin-bottom:16px">
         <div class="section-title">📋 操盘计划 ({{ plans.length }} 步)</div>
         <div v-if="generating" style="text-align:center;padding:24px"><span class="spinner"></span> 生成中...</div>
 
@@ -131,7 +135,7 @@
         <div v-else class="empty" style="padding:24px"><p>点击"生成计划"来创建执行步骤</p></div>
       </div>
 
-      <div class="card">
+      <div class="card" style="margin-bottom:16px">
         <div class="section-title">📊 回测结果</div>
         <div v-if="backtestLoading" class="backtest-loading">
           <div class="stat-card" v-for="i in 5" :key="i">
@@ -198,7 +202,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" style="margin-bottom:16px">
         <div class="section-title">🧪 压力测试</div>
         <div v-if="stressLoading" class="stress-grid">
           <div class="stress-card" v-for="i in 6" :key="i">
@@ -232,6 +236,57 @@
         </div>
         <div v-else class="empty" style="padding:24px">
           <p>点击上方“压力测试”模拟极端行情下的策略表现。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title review-title-row">
+          <span>📝 AI 复盘</span>
+          <span v-if="latestReview" class="review-date">{{ fmtDateTime(latestReview.created_at) }}</span>
+        </div>
+        <div v-if="reviewing" class="review-loading"><span class="spinner"></span> AI 正在生成复盘...</div>
+        <template v-else-if="latestReview">
+          <div class="review-top">
+            <div>
+              <div class="review-summary">{{ latestReview.summary }}</div>
+              <div class="review-meta">最近复盘时间：{{ fmtDateTime(latestReview.created_at) }}</div>
+            </div>
+            <span class="badge review-score" :class="reviewScoreClass(latestReview.performance_score)">评分 {{ latestReview.performance_score || '-' }}/10</span>
+          </div>
+
+          <div v-if="latestReview.recommendations?.length" class="review-section-block">
+            <div class="detail-section-title">调整建议</div>
+            <ul class="review-list">
+              <li v-for="(item, index) in latestReview.recommendations" :key="index">{{ item }}</li>
+            </ul>
+          </div>
+
+          <details v-if="latestReview.deviation_analysis" class="review-details">
+            <summary>偏差分析</summary>
+            <pre class="review-pre">{{ formatReviewBlock(latestReview.deviation_analysis) }}</pre>
+          </details>
+
+          <details v-if="latestReview.market_context" class="review-details">
+            <summary>市场环境</summary>
+            <div class="review-context">{{ latestReview.market_context }}</div>
+          </details>
+
+          <button v-if="olderReviews.length" class="text-link" @click="showReviewHistory = !showReviewHistory">
+            {{ showReviewHistory ? '收起历史复盘' : `查看历史复盘 (${olderReviews.length})` }}
+          </button>
+
+          <div v-if="showReviewHistory" class="review-history">
+            <div v-for="item in olderReviews" :key="item.id" class="review-history-item">
+              <div class="review-history-top">
+                <span class="badge" :class="reviewScoreClass(item.performance_score)">评分 {{ item.performance_score || '-' }}/10</span>
+                <span class="review-date">{{ fmtDateTime(item.created_at) }}</span>
+              </div>
+              <div class="review-history-summary">{{ item.summary }}</div>
+            </div>
+          </div>
+        </template>
+        <div v-else class="empty" style="padding:24px">
+          <p>暂未生成 AI 复盘，点击上方“📝 AI 复盘”开始分析。</p>
         </div>
       </div>
     </template>
@@ -268,20 +323,25 @@ const strategy = ref({})
 const plans = ref([])
 const backtestResults = ref([])
 const stressResults = ref([])
+const reviews = ref([])
 const generating = ref(false)
 const backtesting = ref(false)
 const stressTesting = ref(false)
+const reviewing = ref(false)
 const backtestLoading = ref(false)
 const stressLoading = ref(false)
 const showDeleteConfirm = ref(false)
 const showActions = ref(false)
 const showAIRegenerate = ref(false)
+const showReviewHistory = ref(false)
 const deleting = ref(false)
 
 const parsedParams = computed(() => {
   try { return JSON.parse(strategy.value.parameters || '{}') } catch { return null }
 })
 const latestBacktest = computed(() => backtestResults.value[0] || null)
+const latestReview = computed(() => reviews.value[0] || null)
+const olderReviews = computed(() => reviews.value.slice(1))
 
 function safeParse(value, fallback) {
   try { return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback) } catch { return fallback }
@@ -289,21 +349,31 @@ function safeParse(value, fallback) {
 function normalizeBacktest(row) {
   return { ...row, details: Array.isArray(row?.details) ? row.details : safeParse(row?.details, []) }
 }
+function normalizeReview(row) {
+  return {
+    ...row,
+    deviation_analysis: safeParse(row?.deviation_analysis, row?.deviation_analysis || null),
+    recommendations: Array.isArray(row?.recommendations) ? row.recommendations : safeParse(row?.recommendations, []),
+  }
+}
 
 async function loadData() {
   loading.value = true
   try {
-    const [res, pres, bres] = await Promise.all([
+    const [res, pres, bres, rres] = await Promise.all([
       api(`/api/strategies/${route.params.id}`),
       api(`/api/plans?strategy_id=${route.params.id}`),
       api(`/api/strategies/${route.params.id}/backtest-results`),
+      api(`/api/strategies/${route.params.id}/reviews`),
     ])
     const json = await res.json()
     const pjson = await pres.json()
     const bjson = await bres.json()
+    const rjson = await rres.json()
     if (json.data) strategy.value = json.data
     plans.value = pjson.data || []
     backtestResults.value = (bjson.data || []).map(normalizeBacktest)
+    reviews.value = (rjson.data || []).map(normalizeReview)
     stressResults.value = []
   } catch (e) {
     toast.error(e.message)
@@ -368,6 +438,25 @@ async function runStressTestAction() {
   stressLoading.value = false
 }
 
+async function runReviewAction() {
+  reviewing.value = true
+  try {
+    const res = await api(`/api/strategies/${route.params.id}/review`, { method: 'POST' })
+    const json = await res.json()
+    if (json.success) {
+      const review = normalizeReview(json.data)
+      reviews.value = [review, ...reviews.value.filter(item => item.id !== review.id)]
+      showReviewHistory.value = false
+      toast.success('AI 复盘已生成')
+    } else {
+      toast.error(json.error || 'AI 复盘失败')
+    }
+  } catch (e) {
+    toast.error(e.message)
+  }
+  reviewing.value = false
+}
+
 async function doDelete() {
   deleting.value = true
   try {
@@ -389,6 +478,17 @@ function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂�
 function triggerLabel(t) { return { price_above:'价格 ≥', price_below:'价格 ≤', time:'时间' }[t] || t }
 function planStatusLabel(s) { return { pending:'等待', triggered:'⚡触发', executed:'已执行', cancelled:'取消' }[s] || s }
 function planStatusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
+function reviewScoreClass(score) {
+  const num = Number(score)
+  if (num >= 8) return 'badge-buy'
+  if (num >= 5) return 'badge-executed'
+  return 'badge-sell'
+}
+function formatReviewBlock(value) {
+  if (!value) return '-'
+  if (typeof value === 'string') return value
+  return JSON.stringify(value, null, 2)
+}
 function fmtNumber(n, digits = 2) { return Number.isFinite(Number(n)) ? Number(n).toFixed(digits) : '-' }
 function fmtMoney(n) { return Number.isFinite(Number(n)) ? Math.round(Number(n)).toLocaleString() : '-' }
 function fmtPct(n) { return Number.isFinite(Number(n)) ? `${Number(n).toFixed(2)}%` : '-' }
@@ -432,6 +532,7 @@ onMounted(loadData)
 }
 .info-row:last-child { border-bottom: none; }
 .info-label { color: var(--text-dim); font-size: 13px; }
+.detail-section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 8px; }
 
 .line-tag {
   display: inline-block;
@@ -480,7 +581,8 @@ onMounted(loadData)
   border-top: 1px solid var(--border);
   padding-top: 16px;
 }
-.trade-log summary {
+.trade-log summary,
+.review-details summary {
   cursor: pointer;
   font-weight: 600;
   color: var(--text-dim);
@@ -545,6 +647,92 @@ onMounted(loadData)
   font-size: 13px;
 }
 .stress-label { color: var(--text-muted); }
+.review-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.review-date { font-size: 12px; color: var(--text-muted); }
+.review-loading {
+  text-align: center;
+  padding: 24px;
+}
+.review-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.review-summary {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.review-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+.review-score { white-space: nowrap; }
+.review-section-block { margin-top: 16px; }
+.review-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  line-height: 1.7;
+}
+.review-details {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.review-pre {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-soft, rgba(148, 163, 184, 0.08));
+  border-radius: 10px;
+  padding: 12px;
+}
+.review-context {
+  margin-top: 12px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+.text-link {
+  margin-top: 14px;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 13px;
+}
+.review-history {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.review-history-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+.review-history-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.review-history-summary {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
 
 @media (max-width: 900px) {
   .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr 1fr; }
@@ -556,6 +744,6 @@ onMounted(loadData)
   .hide-on-mobile { display: none !important; }
   .show-on-mobile { display: flex !important; }
   .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr; }
-  .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat { align-items: flex-start; }
+  .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat, .review-top, .review-title-row, .review-history-top { align-items: flex-start; }
 }
 </style>

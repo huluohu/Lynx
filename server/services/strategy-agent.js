@@ -16,7 +16,7 @@ const log = createLogger('strategy-agent');
 // LLM Infrastructure
 // ============================================================
 
-function getAgentConfig(db) {
+export function getAgentConfig(db) {
   const settings = {};
   try {
     const rows = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'ai_%' OR key LIKE 'agent_%'").all();
@@ -33,7 +33,7 @@ function getAgentConfig(db) {
   };
 }
 
-function callLLM(apiUrl, apiKey, model, messages, { temperature = 0.7, maxTokens = 4000, timeout = 60000, retries = 2 } = {}) {
+export function callLLM(apiUrl, apiKey, model, messages, { temperature = 0.7, maxTokens = 4000, timeout = 60000, retries = 2 } = {}) {
   return new Promise(async (resolve) => {
     for (let attempt = 0; attempt <= retries; attempt++) {
       const result = await _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout });

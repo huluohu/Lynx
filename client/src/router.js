@@ -15,6 +15,7 @@ const routes = [
   { path: '/strategies/:id', name: 'StrategyDetail', component: () => import('./views/StrategyDetail.vue') },
   { path: '/plans', name: 'Plans', component: () => import('./views/PlanList.vue') },
   { path: '/market', name: 'Market', component: () => import('./views/MarketView.vue') },
+  { path: '/signals', name: 'MarketSignals', component: () => import('./views/MarketSignals.vue') },
   { path: '/news', name: 'News', component: () => import('./views/NewsList.vue') },
   { path: '/history', name: 'History', component: () => import('./views/HistoryList.vue') },
   { path: '/alerts', name: 'Alerts', component: () => import('./views/AlertHistory.vue') },

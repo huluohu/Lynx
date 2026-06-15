@@ -62,6 +62,10 @@
           <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           行情
         </router-link>
+        <router-link to="/signals" class="nav-item" @click="sidebarOpen=false">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 12h3l2 5 4-10 3 7 2-4h4"/></svg>
+          市场信号
+        </router-link>
         <router-link to="/news" class="nav-item" @click="sidebarOpen=false">
           <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M18 18h-8M18 10h-8"/></svg>
           资讯
@@ -97,6 +101,10 @@
         <router-link to="/market" class="mobile-nav-item">
           <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           <span>行情</span>
+        </router-link>
+        <router-link to="/signals" class="mobile-nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 12h3l2 5 4-10 3 7 2-4h4"/></svg>
+          <span>信号</span>
         </router-link>
         <router-link to="/strategies" class="mobile-nav-item">
           <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>

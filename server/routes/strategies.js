@@ -3,10 +3,18 @@ import { getDb } from '../db/database.js';
 import { generatePlan } from '../services/strategy.js';
 import { runBacktest } from '../services/backtest.js';
 import { runStressTest } from '../services/stress-test.js';
+import { generateStrategyReview } from '../services/ai-review.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('strategies');
 const router = Router();
+
+function normalizeReview(row) {
+  if (!row) return null;
+  try { row.deviation_analysis = row.deviation_analysis ? JSON.parse(row.deviation_analysis) : null; } catch {}
+  try { row.recommendations = row.recommendations ? JSON.parse(row.recommendations) : []; } catch {}
+  return row;
+}
 
 // GET 策略列表
 router.get('/', (req, res) => {
@@ -300,6 +308,25 @@ router.post('/:id/stress-test', (req, res) => {
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
+});
+
+// POST /api/strategies/:id/review — generate AI review
+router.post('/:id/review', async (req, res) => {
+  try {
+    const review = await generateStrategyReview(Number(req.params.id));
+    res.json({ success: true, data: review });
+  } catch (e) {
+    log.warn('Generate review failed', { strategyId: req.params.id, error: e.message });
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/strategies/:id/reviews — get review history
+router.get('/:id/reviews', (req, res) => {
+  const rows = getDb().prepare(`SELECT * FROM strategy_reviews
+    WHERE strategy_id = ?
+    ORDER BY created_at DESC, id DESC`).all(req.params.id).map(normalizeReview);
+  res.json({ success: true, data: rows });
 });
 
 // GET 策略回测结果
