@@ -8,11 +8,10 @@
     <div class="card" v-if="assets.length">
       <!-- Desktop -->
       <table class="hide-mobile">
-        <thead><tr><th>图标</th><th>名称</th><th>代码</th><th>类型</th><th>持仓量</th><th>成本价</th><th>总投入</th></tr></thead>
+        <thead><tr><th>名称</th><th>代码</th><th>类型</th><th>持仓量</th><th>成本价</th><th>总投入</th></tr></thead>
         <tbody>
           <tr v-for="a in assets" :key="a.id" style="cursor:pointer" @click="openDetail(a)">
-            <td style="font-size:20px">{{ a.icon || '💰' }}</td>
-            <td style="font-weight:600">{{ a.name }}</td>
+            <td><span class="icon-text" style="font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span></td>
             <td style="color:var(--text-dim)">{{ a.symbol }}</td>
             <td><span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span></td>
             <td>{{ a.quantity ? a.quantity.toFixed(4) : '-' }}</td>
@@ -26,11 +25,10 @@
       <div class="show-mobile asset-cards">
         <div v-for="a in assets" :key="a.id" class="asset-card" @click="openDetail(a)">
           <div class="asset-card-top">
-            <span class="icon-text" style="font-size:20px"><span class="icon">{{ a.icon || '💰' }}</span></span>
+            <span class="icon-text" style="font-size:16px;font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span>
             <span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span>
           </div>
-          <div style="font-weight:600;margin:4px 0">{{ a.name }}</div>
-          <div style="font-size:12px;color:var(--text-dim)">{{ a.symbol }}</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:4px">{{ a.symbol }}</div>
           <div class="asset-card-meta">
             <span v-if="a.quantity">{{ a.quantity.toFixed(4) }}</span>
             <span v-if="a.total_invested">{{ cs(a) }}{{ fmt(a.total_invested) }}</span>
