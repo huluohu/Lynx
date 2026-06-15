@@ -40,6 +40,15 @@
         </div>
       </div>
     </div>
+    <div v-else-if="loading" class="card">
+      <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="skeleton skeleton-text" style="width:120px"></div>
+          <div class="skeleton skeleton-text short"></div>
+          <div class="skeleton skeleton-badge" style="margin-left:auto"></div>
+        </div>
+      </div>
+    </div>
     <div v-else class="card empty">
       <div class="empty-icon">🎯</div><p>还没有策略，<router-link to="/strategies/create">创建一个</router-link> 或使用 <a href="#" @click.prevent="showAI = true">AI 生成</a></p>
     </div>
@@ -166,6 +175,7 @@ import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 const toast = useToast()
 const strategies = ref([])
 const drafts = ref([])
+const loading = ref(true)
 const showAI = ref(false)
 const showDrafts = ref(false)
 const showDetailDrawer = ref(false)
@@ -177,9 +187,13 @@ const generationHistory = ref([])
 const historyDetail = ref(null)
 
 async function loadData() {
-  const res = await api('/api/strategies')
-  const json = await res.json()
-  strategies.value = json.data || []
+  try {
+    const res = await api('/api/strategies')
+    const json = await res.json()
+    strategies.value = json.data || []
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadDrafts() {

@@ -516,3 +516,37 @@ tr:hover td { background: var(--bg-hover); }
 @media (max-width: 768px) {
   .sidebar-overlay.show { display: block; }
 }
+
+/* ===== Skeleton / Loading States ===== */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-hover) 25%, var(--border) 50%, var(--bg-hover) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: 4px;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-text { height: 14px; margin-bottom: 8px; width: 60%; }
+.skeleton-text.short { width: 40%; }
+.skeleton-text.long { width: 80%; }
+.skeleton-price { height: 32px; width: 120px; margin: 6px 0; border-radius: 6px; }
+.skeleton-badge { height: 20px; width: 50px; border-radius: 10px; }
+.skeleton-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+/* ===== Icon + Text Alignment ===== */
+.icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.icon-text .icon {
+  font-size: 1.1em;
+  flex-shrink: 0;
+}

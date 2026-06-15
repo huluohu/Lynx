@@ -32,7 +32,7 @@
               <span class="gauge-bar"><span class="gauge-fill" :style="{width: Math.min(100 - a.diff_pct * 20, 100) + '%'}" :class="a.diff_pct <= 2 ? 'red' : a.diff_pct <= 5 ? 'orange' : ''"></span></span>
               <span class="gauge-label">{{ a.diff_pct.toFixed(1) }}%</span>
             </span>
-            <span v-if="a.asset_icon">{{ a.asset_icon }} {{ a.symbol }}</span>
+            <span v-if="a.asset_icon" class="icon-text"><span class="icon">{{ a.asset_icon }}</span> {{ a.symbol }}</span>
             <span v-if="a.change_pct" :class="a.change_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ a.change_pct >= 0 ? '+' : '' }}{{ a.change_pct.toFixed(1) }}%</span>
           </div>
         </div>
@@ -44,7 +44,13 @@
     </div>
 
     <!-- Summary cards -->
-    <div class="grid-4" style="margin-bottom:20px">
+    <div v-if="!initialized" class="grid-4" style="margin-bottom:20px">
+      <div class="stat-card" v-for="i in 4" :key="i">
+        <div class="skeleton skeleton-text short"></div>
+        <div class="skeleton skeleton-price" style="height:24px;width:80px"></div>
+      </div>
+    </div>
+    <div v-else class="grid-4" style="margin-bottom:20px">
       <div class="stat-card">
         <div class="stat-label">总投入</div>
         <div class="stat-value stat-value-wrap">¥{{ fmt(summary.total_invested) }}</div>
@@ -76,7 +82,7 @@
         <div v-if="allocation.length">
           <div v-for="a in allocation" :key="a.asset_id" class="alloc-item">
             <div class="alloc-header">
-              <span class="alloc-name">{{ a.icon }} {{ a.name }}</span>
+              <span class="alloc-name icon-text"><span class="icon">{{ a.icon }}</span> {{ a.name }}</span>
               <span class="alloc-weight">{{ fmtPct(a.weight) }}%</span>
             </div>
             <div class="progress-bar"><div class="progress-fill green" :style="{width: Math.max(a.weight || 0, 2)+'%'}"></div></div>
@@ -145,6 +151,7 @@ const activePlans = ref([])
 const recentTrades = ref([])
 const alerts = ref([])
 const loading = ref(false)
+const initialized = ref(false)
 const usdCny = ref(null)
 
 const alertCounts = computed(() => {
@@ -179,6 +186,7 @@ async function refresh() {
     }
   } catch (e) { console.error(e) }
   loading.value = false
+  initialized.value = true
 }
 
 function markDone(id) {

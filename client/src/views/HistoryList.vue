@@ -78,6 +78,15 @@
         </div>
       </div>
     </div>
+    <div v-else-if="loading" class="card">
+      <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="skeleton skeleton-badge"></div>
+          <div class="skeleton skeleton-text" style="width:100px"></div>
+          <div class="skeleton skeleton-text short" style="margin-left:auto"></div>
+        </div>
+      </div>
+    </div>
     <div v-else class="card empty"><div class="empty-icon">📝</div><p>暂无历史记录</p></div>
 
     <!-- Detail Drawer -->
@@ -108,10 +117,13 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { api } from '../utils/api.js'
+import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 
+const toast = useToast()
 const history = ref([])
 const assets = ref([])
+const loading = ref(true)
 const showForm = ref(false)
 const submitting = ref(false)
 const showDetailDrawer = ref(false)
@@ -119,9 +131,13 @@ const detailRecord = ref(null)
 const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
 
 async function loadData() {
-  const [hres, ares] = await Promise.all([api('/api/history'), api('/api/assets')])
-  history.value = (await hres.json()).data || []
-  assets.value = (await ares.json()).data || []
+  try {
+    const [hres, ares] = await Promise.all([api('/api/history'), api('/api/assets')])
+    history.value = (await hres.json()).data || []
+    assets.value = (await ares.json()).data || []
+  } finally {
+    loading.value = false
+  }
 }
 
 function openDetail(h) {

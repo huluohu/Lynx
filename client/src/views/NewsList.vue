@@ -7,8 +7,11 @@
       </button>
     </div>
 
-    <div v-if="loading" class="card" style="text-align:center;padding:40px">
-      <p style="color:var(--text-dim)">加载中...</p>
+    <div v-if="loading" class="card">
+      <div v-for="i in 4" :key="i" style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div class="skeleton skeleton-text long"></div>
+        <div class="skeleton skeleton-text short" style="margin-top:6px"></div>
+      </div>
     </div>
 
     <div class="card" v-else-if="news.length">

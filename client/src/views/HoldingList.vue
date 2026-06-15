@@ -10,7 +10,7 @@
         <thead><tr><th>资产</th><th>数量</th><th>成本价</th><th>总投入</th><th>目标价</th><th>止损</th><th>状态</th></tr></thead>
         <tbody>
           <tr v-for="h in holdings" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
-            <td>{{ h.icon }} {{ h.name }} <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
+            <td><span class="icon-text"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span> <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
             <td style="font-weight:600">{{ h.quantity }}</td>
             <td>{{ cs(h) }}{{ fmt(h.avg_cost) }}</td>
             <td>{{ cs(h) }}{{ fmt(h.total_invested) }}</td>
@@ -25,7 +25,7 @@
       <div class="show-mobile holding-cards">
         <div v-for="h in holdings" :key="h.id" class="holding-card" @click="openDetail(h)">
           <div class="holding-card-top">
-            <span style="font-weight:600">{{ h.icon }} {{ h.name }}</span>
+            <span class="icon-text" style="font-weight:600"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span>
             <span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span>
           </div>
           <div class="holding-card-body">
@@ -39,12 +39,20 @@
     <div v-else-if="!loading" class="card empty">
       <div class="empty-icon">📦</div><p>暂无持仓</p>
     </div>
-    <div v-else class="card empty"><span class="spinner"></span></div>
+    <div v-else class="card">
+      <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="skeleton" style="width:24px;height:24px;border-radius:50%"></div>
+          <div class="skeleton skeleton-text" style="width:100px"></div>
+          <div class="skeleton skeleton-text short" style="margin-left:auto"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Detail Drawer -->
     <AppDrawer v-model="showDetail" :title="currentHolding?.name || '持仓详情'">
       <div v-if="currentHolding" class="info-list">
-        <div class="info-row"><span class="info-label">资产</span><span>{{ currentHolding.icon }} {{ currentHolding.name }}</span></div>
+        <div class="info-row"><span class="info-label">资产</span><span class="icon-text"><span class="icon">{{ currentHolding.icon }}</span> {{ currentHolding.name }}</span></div>
         <div class="info-row"><span class="info-label">数量</span><span style="font-weight:600">{{ currentHolding.quantity }}</span></div>
         <div class="info-row"><span class="info-label">成本价</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.avg_cost) }}</span></div>
         <div class="info-row"><span class="info-label">总投入</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.total_invested) }}</span></div>

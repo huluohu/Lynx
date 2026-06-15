@@ -26,7 +26,7 @@
       <div class="show-mobile asset-cards">
         <div v-for="a in assets" :key="a.id" class="asset-card" @click="openDetail(a)">
           <div class="asset-card-top">
-            <span style="font-size:20px">{{ a.icon || '💰' }}</span>
+            <span class="icon-text" style="font-size:20px"><span class="icon">{{ a.icon || '💰' }}</span></span>
             <span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span>
           </div>
           <div style="font-weight:600;margin:4px 0">{{ a.name }}</div>
@@ -42,7 +42,15 @@
       <div class="empty-icon">📭</div>
       <p>还没有资产，<router-link to="/assets/add">添加一个</router-link></p>
     </div>
-    <div v-else class="card empty"><span class="spinner"></span></div>
+    <div v-else class="card">
+      <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="skeleton" style="width:24px;height:24px;border-radius:50%"></div>
+          <div class="skeleton skeleton-text" style="width:100px"></div>
+          <div class="skeleton skeleton-badge" style="margin-left:auto"></div>
+        </div>
+      </div>
+    </div>
 
     <!-- Detail Drawer -->
     <AppDrawer v-model="showDetailDrawer" :title="detailAsset ? `${detailAsset.icon || '💰'} ${detailAsset.name}` : '资产详情'">
