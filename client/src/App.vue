@@ -16,9 +16,6 @@
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/></svg>
           投资罗盘
         </span>
-        <button class="sidebar-logout" @click="doLogout" title="退出登录">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-        </button>
       </div>
       <nav class="sidebar-nav">
         <div class="nav-section">概览</div>
@@ -78,7 +75,11 @@
         </router-link>
       </nav>
       <div class="sidebar-footer">
-        <span style="font-size:11px;color:var(--text-muted)">{{ authStore.username }}</span>
+        <span class="sidebar-user">{{ authStore.username }}</span>
+        <button class="sidebar-logout" @click="confirmLogout" title="退出登录">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          退出
+        </button>
       </div>
     </aside>
 
@@ -187,6 +188,12 @@ function doLogout() {
   router.push('/login')
 }
 
+function confirmLogout() {
+  if (confirm('确定要退出登录吗？')) {
+    doLogout()
+  }
+}
+
 function startPolling() {
   fetchUnread()
   pollTimer = setInterval(fetchUnread, 30000)
@@ -228,17 +235,28 @@ onUnmounted(() => {
   background: none;
   border: none;
   cursor: pointer;
-  opacity: 0.4;
+  opacity: 0.5;
   transition: opacity 0.15s;
-  color: var(--text);
-  padding: 4px;
+  color: var(--text-muted);
+  padding: 4px 8px;
   display: flex;
   align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-family: inherit;
+  border-radius: 4px;
 }
-.sidebar-logout:hover { opacity: 1; }
+.sidebar-logout:hover { opacity: 1; color: var(--red); }
 .sidebar-footer {
   padding: 12px 20px;
   border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-user {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 .nav-icon {
   width: 18px;

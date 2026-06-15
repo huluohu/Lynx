@@ -252,11 +252,16 @@
               <span class="setting-desc">通过环境变量 AUTH_USERNAME / AUTH_PASSWORD 配置</span>
             </div>
           </div>
-          <div class="setting-item" @click="doLogout" style="cursor:pointer">
+          <div class="setting-item" @click="confirmLogout" style="cursor:pointer">
             <span class="setting-label" style="color:var(--red)">退出登录</span>
             <span style="color:var(--text-muted)">›</span>
           </div>
         </div>
+      </div>
+
+      <!-- 版本信息 -->
+      <div class="version-info">
+        投资罗盘 v{{ appVersion }}
       </div>
     </div>
   </div>
@@ -270,6 +275,7 @@ import { api } from '../utils/api.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
 const form = reactive({
   refresh_interval: '60',
   market_refresh_interval: '5',
@@ -413,6 +419,12 @@ async function deleteCustomSource(id) {
 function doLogout() {
   authStore.logout()
   router.push('/login')
+}
+
+function confirmLogout() {
+  if (confirm('确定要退出登录吗？')) {
+    doLogout()
+  }
 }
 
 async function testPush() {
@@ -610,4 +622,11 @@ onMounted(load)
 .btn-tiny.danger:hover { color: var(--red); background: rgba(239,68,68,0.1); }
 .add-source-row { display: flex; gap: 8px; align-items: center; }
 .add-source-row .setting-input-full { padding: 8px 10px; font-size: 13px; }
+
+.version-info {
+  text-align: center;
+  padding: 24px 0 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 </style>

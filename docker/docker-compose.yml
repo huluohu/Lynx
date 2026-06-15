@@ -1,13 +1,13 @@
 services:
   invest-compass:
-    image: invest-compass:latest
+    image: fooololo/invest-compass:${APP_VERSION:-latest}
     container_name: invest-compass
     restart: unless-stopped
     network_mode: bridge
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "3456:3456"
+      - "3003:3456"
     environment:
       NODE_ENV: production
       PORT: "3456"
@@ -18,9 +18,12 @@ services:
       NODE_OPTIONS: "--max-old-space-size=512"
       # neodata 代理（金价查询需要）
       AUTH_GATEWAY_PORT: "19000"
+      JWT_SECRET: DEUoQFwXHIwS8JZ7spl212BJShlo4mjPITjwMHkMebmETc6k7SaXSoKY7AEMv27u
+      AUTH_USERNAME: admin
+      AUTH_PASSWORD: admin123
     volumes:
       # 持久化 SQLite 数据库
-      - ./data:/app/data:rw
+      - ../data:/app/data:rw
     deploy:
       resources:
         limits:
