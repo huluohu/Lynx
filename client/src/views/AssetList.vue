@@ -8,24 +8,16 @@
     <div class="card" v-if="assets.length">
       <!-- Desktop -->
       <table class="hide-mobile">
-        <thead><tr><th>图标</th><th>名称</th><th>代码</th><th>类型</th><th>持仓量</th><th>成本价</th><th>总投入</th><th>操作</th></tr></thead>
+        <thead><tr><th>图标</th><th>名称</th><th>代码</th><th>类型</th><th>持仓量</th><th>成本价</th><th>总投入</th></tr></thead>
         <tbody>
-          <tr v-for="a in assets" :key="a.id">
+          <tr v-for="a in assets" :key="a.id" style="cursor:pointer" @click="openDetail(a)">
             <td style="font-size:20px">{{ a.icon || '💰' }}</td>
-            <td>
-              <router-link :to="`/assets/${a.id}`" style="font-weight:600">{{ a.name }}</router-link>
-            </td>
+            <td style="font-weight:600">{{ a.name }}</td>
             <td style="color:var(--text-dim)">{{ a.symbol }}</td>
             <td><span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span></td>
             <td>{{ a.quantity ? a.quantity.toFixed(4) : '-' }}</td>
             <td>{{ cs(a) }}{{ fmt(a.avg_cost) }}</td>
             <td>{{ cs(a) }}{{ fmt(a.total_invested) }}</td>
-            <td>
-              <div style="display:flex;gap:6px">
-                <button class="btn btn-sm" @click.prevent="openTx(a)">+ 交易</button>
-                <router-link :to="`/assets/${a.id}`" class="btn btn-sm">详情</router-link>
-              </div>
-            </td>
           </tr>
         </tbody>
       </table>
@@ -52,13 +44,8 @@
     </div>
     <div v-else class="card empty"><span class="spinner"></span></div>
 
-    <!-- Transaction Drawer -->
-    <AppDrawer v-model="showTxDrawer" :title="`记录交易 - ${txAsset?.name || ''}`">
-      <TransactionForm v-if="txAsset" :asset-id="txAsset.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
-    </AppDrawer>
-
-    <!-- Mobile Detail Drawer -->
-    <AppDrawer v-model="showDetailDrawer" :title="detailAsset ? `${detailAsset.icon || '💰'} ${detailAsset.name}` : ''">
+    <!-- Detail Drawer -->
+    <AppDrawer v-model="showDetailDrawer" :title="detailAsset ? `${detailAsset.icon || '💰'} ${detailAsset.name}` : '资产详情'">
       <div v-if="detailAsset" class="detail-drawer-content">
         <div class="detail-section">
           <div class="detail-row"><span>代码</span><span style="color:var(--text-dim)">{{ detailAsset.symbol }}</span></div>
@@ -78,6 +65,11 @@
           <router-link :to="`/assets/${detailAsset.id}`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看详情页</router-link>
         </div>
       </div>
+    </AppDrawer>
+
+    <!-- Transaction Drawer -->
+    <AppDrawer v-model="showTxDrawer" :title="`记录交易 - ${txAsset?.name || ''}`">
+      <TransactionForm v-if="txAsset" :asset-id="txAsset.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
     </AppDrawer>
   </div>
 </template>
@@ -117,11 +109,6 @@ function detailOpenTx() {
   showTxDrawer.value = true
 }
 
-function openTx(a) {
-  txAsset.value = a
-  showTxDrawer.value = true
-}
-
 function onTxSuccess() {
   showTxDrawer.value = false
   toast.success('交易已记录')
@@ -146,6 +133,7 @@ onMounted(loadData)
 
 .asset-cards { flex-direction: column; gap: 8px; }
 .asset-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; color: var(--text); transition: background 0.15s; }
+.asset-card:hover { background: var(--bg-hover); }
 .asset-card:active { background: var(--bg-hover); }
 .asset-card-top { display: flex; justify-content: space-between; align-items: center; }
 .asset-card-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
