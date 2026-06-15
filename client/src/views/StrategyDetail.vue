@@ -3,12 +3,18 @@
     <div class="page-header">
       <h1 class="page-title">{{ loading ? '策略详情' : (strategy.name || '策略详情') }}</h1>
       <div v-if="!loading" class="page-actions hide-on-mobile">
-        <button class="btn" @click="runBacktestAction" :disabled="backtesting">{{ backtesting ? '回测中...' : '📊 回测' }}</button>
+        <button class="btn" @click="runBacktestAction" :disabled="backtesting">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-5"/></svg>
+          {{ backtesting ? '回测中...' : '回测' }}
+        </button>
         <button class="btn" @click="runStressTestAction" :disabled="stressTesting">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
           {{ stressTesting ? '测试中...' : '压力测试' }}
         </button>
-        <button class="btn" @click="runReviewAction" :disabled="reviewing">{{ reviewing ? '复盘中...' : '📝 AI 复盘' }}</button>
+        <button class="btn" @click="runReviewAction" :disabled="reviewing">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
+          {{ reviewing ? '复盘中...' : 'AI 复盘' }}
+        </button>
         <button class="btn" @click="showChatDrawer = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> AI 调整</button>
         <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? '生成中...' : '生成计划' }}</button>
