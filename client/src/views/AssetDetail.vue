@@ -7,7 +7,6 @@
         <button class="btn" @click="showAIDrawer = true">AI 建议</button>
         <button class="btn" @click="showEditDrawer = true">编辑</button>
         <button class="btn btn-danger" @click="showDeleteConfirm = true">删除</button>
-        <router-link to="/assets" class="btn">← 返回</router-link>
       </div>
       <button class="btn btn-icon mobile-only" @click="showActions = !showActions">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
