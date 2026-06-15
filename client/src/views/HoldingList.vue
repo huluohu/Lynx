@@ -7,7 +7,7 @@
     <div class="card" v-if="holdings.length">
       <!-- Desktop table -->
       <table class="hide-mobile">
-        <thead><tr><th>资产</th><th>数量</th><th>成本价</th><th>总投入</th><th>目标价</th><th>止损</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>资产</th><th>数量</th><th>成本价</th><th>总投入</th><th>目标价</th><th>止损</th><th>状态</th></tr></thead>
         <tbody>
           <tr v-for="h in holdings" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
             <td>{{ h.icon }} {{ h.name }} <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
@@ -17,12 +17,6 @@
             <td>{{ h.target_price ? cs(h)+h.target_price : '-' }}</td>
             <td style="color:var(--red)">{{ h.stop_loss ? cs(h)+h.stop_loss : '-' }}</td>
             <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span></td>
-            <td @click.stop>
-              <div style="display:flex;gap:6px">
-                <button class="btn btn-sm" @click="openDetail(h)">详情</button>
-                <button class="btn btn-sm" @click="openTx(h)">+ 交易</button>
-              </div>
-            </td>
           </tr>
         </tbody>
       </table>
@@ -75,10 +69,6 @@
       </div>
     </AppDrawer>
 
-    <!-- Transaction Drawer (from list button) -->
-    <AppDrawer v-model="showTxDrawer" title="记录交易">
-      <TransactionForm v-if="txAssetId" :asset-id="txAssetId" @success="onTxSuccess" @cancel="showTxDrawer = false" />
-    </AppDrawer>
   </div>
 </template>
 
@@ -94,9 +84,7 @@ const toast = useToast()
 const holdings = ref([])
 const loading = ref(true)
 const showDetail = ref(false)
-const showTxDrawer = ref(false)
 const currentHolding = ref(null)
-const txAssetId = ref(null)
 const editHolding = reactive({ target_price: '', stop_loss: '' })
 const savingHolding = ref(false)
 
@@ -115,9 +103,10 @@ function openDetail(h) {
   showDetail.value = true
 }
 
-function openTx(h) {
-  txAssetId.value = h.asset_id
-  showTxDrawer.value = true
+function onTxSuccess() {
+  showDetail.value = false
+  toast.success('交易已记录')
+  loadData()
 }
 
 async function saveHolding() {
@@ -132,13 +121,6 @@ async function saveHolding() {
     else toast.error(json.error || '保存失败')
   } catch (e) { toast.error(e.message) }
   savingHolding.value = false
-}
-
-function onTxSuccess() {
-  showTxDrawer.value = false
-  showDetail.value = false
-  toast.success('交易已记录')
-  loadData()
 }
 
 function cs(h) { return currencySymbol(h?.currency) }
