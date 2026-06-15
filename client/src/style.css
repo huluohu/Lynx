@@ -273,6 +273,7 @@ tr:hover td { background: var(--bg-hover); }
 .alert-body { flex: 1; min-width: 0; }
 .alert-message { font-size: 13px; line-height: 1.4; }
 .alert-meta { display: flex; gap: 12px; margin-top: 4px; font-size: 11px; color: var(--text-muted); align-items: center; }
+.alert-asset-tag { padding: 1px 6px; border-radius: 4px; background: var(--bg-hover); font-size: 11px; }
 .alert-action { flex-shrink: 0; padding-top: 2px; }
 
 /* Gauge for approaching alerts */

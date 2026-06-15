@@ -3,6 +3,7 @@
     <div class="page-header">
       <h1 class="page-title">{{ strategy.name }}</h1>
       <div class="page-actions hide-on-mobile">
+        <button class="btn" @click="showAIRegenerate = true">🤖 AI 重新生成</button>
         <button class="btn btn-primary" @click="generatePlan" :disabled="generating">生成计划</button>
         <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">编辑</router-link>
         <button class="btn btn-danger" @click="showDeleteConfirm = true">删除</button>
@@ -16,6 +17,10 @@
     <div v-if="showActions" class="action-sheet-overlay" @click="showActions = false"></div>
     <transition name="slide-up">
       <div v-if="showActions" class="action-sheet">
+        <div class="action-sheet-item" @click="showAIRegenerate = true; showActions = false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          AI 重新生成
+        </div>
         <div class="action-sheet-item" @click="generatePlan(); showActions = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
           生成计划
@@ -118,6 +123,11 @@
       :loading="deleting"
       @confirm="doDelete"
     />
+
+    <!-- AI Regenerate Drawer -->
+    <AppDrawer v-model="showAIRegenerate" title="🤖 AI 重新生成策略">
+      <AIStrategyGenerator :preset-asset-id="strategy.asset_id" @done="onAIRegenDone" />
+    </AppDrawer>
   </div>
 </template>
 
@@ -127,6 +137,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import AppDrawer from '../components/AppDrawer.vue'
+import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -136,6 +148,7 @@ const plans = ref([])
 const generating = ref(false)
 const showDeleteConfirm = ref(false)
 const showActions = ref(false)
+const showAIRegenerate = ref(false)
 const deleting = ref(false)
 
 const parsedParams = computed(() => {
@@ -180,6 +193,14 @@ function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂�
 function triggerLabel(t) { return { price_above:'价格 ≥', price_below:'价格 ≤', time:'时间' }[t] || t }
 function planStatusLabel(s) { return { pending:'等待', triggered:'⚡触发', executed:'已执行', cancelled:'取消' }[s] || s }
 function planStatusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
+
+function onAIRegenDone(newStrategyId) {
+  showAIRegenerate.value = false
+  toast.success('新策略已生成')
+  if (newStrategyId) {
+    router.push(`/strategies/${newStrategyId}`)
+  }
+}
 
 onMounted(loadData)
 </script>

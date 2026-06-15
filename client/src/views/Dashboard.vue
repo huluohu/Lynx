@@ -12,7 +12,11 @@
     <div v-if="alerts.length" class="alert-section" style="margin-bottom:20px">
       <div class="alert-section-header">
         <span>🔔 提醒 ({{ alerts.length }})</span>
-        <span style="font-size:12px;color:var(--text-muted)">danger {{ alertCounts.danger }} · warning {{ alertCounts.warning }} · info {{ alertCounts.info }}</span>
+        <span style="font-size:12px;color:var(--text-muted)">
+          <template v-if="alertCounts.danger">🔴 {{ alertCounts.danger }}</template>
+          <template v-if="alertCounts.warning"> 🟡 {{ alertCounts.warning }}</template>
+          <template v-if="alertCounts.info"> 🔵 {{ alertCounts.info }}</template>
+        </span>
       </div>
       <div
         v-for="a in alerts"
@@ -24,21 +28,22 @@
           <span v-else-if="a.type === 'plan_approaching'">⏳</span>
           <span v-else-if="a.type === 'stop_loss'">🛑</span>
           <span v-else-if="a.type === 'price_swing'">📊</span>
+          <span v-else>🔔</span>
         </div>
         <div class="alert-body">
           <div class="alert-message">{{ a.message }}</div>
           <div class="alert-meta">
             <span v-if="a.type === 'plan_approaching' && a.diff_pct" class="alert-gauge">
               <span class="gauge-bar"><span class="gauge-fill" :style="{width: Math.min(100 - a.diff_pct * 20, 100) + '%'}" :class="a.diff_pct <= 2 ? 'red' : a.diff_pct <= 5 ? 'orange' : ''"></span></span>
-              <span class="gauge-label">{{ a.diff_pct.toFixed(1) }}%</span>
+              <span class="gauge-label">差{{ a.diff_pct.toFixed(1) }}%</span>
             </span>
-            <span v-if="a.asset_icon" class="icon-text"><span class="icon">{{ a.asset_icon }}</span> {{ a.symbol }}</span>
+            <span v-if="a.symbol" class="alert-asset-tag">{{ a.symbol }}</span>
             <span v-if="a.change_pct" :class="a.change_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ a.change_pct >= 0 ? '+' : '' }}{{ a.change_pct.toFixed(1) }}%</span>
           </div>
         </div>
-        <div class="alert-action" v-if="a.type === 'plan_triggered'">
-          <router-link :to="`/strategies/${a.plan_id?.toString().split('-')[0] || ''}`" class="btn btn-sm" v-if="a.plan_id">查看</router-link>
-          <button v-else class="btn btn-sm btn-primary" @click="markDone(a.id)">✓</button>
+        <div class="alert-action">
+          <router-link v-if="a.type === 'plan_triggered' && a.plan_id" :to="`/strategies/${a.plan_id?.toString().split('-')[0] || ''}`" class="btn btn-sm">查看</router-link>
+          <button v-else-if="a.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(a.id)">✓</button>
         </div>
       </div>
     </div>
