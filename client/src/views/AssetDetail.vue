@@ -167,6 +167,9 @@ import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import { useSwipeBack } from '../composables/useSwipeBack.js'
+
+useSwipeBack()
 
 const route = useRoute()
 const router = useRouter()

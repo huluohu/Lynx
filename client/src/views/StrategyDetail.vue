@@ -374,6 +374,9 @@ import { useToast } from '../utils/toast.js'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import { useSwipeBack } from '../composables/useSwipeBack.js'
+
+useSwipeBack()
 
 const route = useRoute()
 const router = useRouter()

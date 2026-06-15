@@ -90,17 +90,25 @@
 
       <!-- Mobile cards -->
       <div class="show-mobile strategy-cards">
-        <div v-for="s in strategies" :key="s.id" class="strategy-card" @click="openDetail(s)">
-          <div class="strategy-card-header">
-            <span style="font-weight:600">{{ s.name }}</span>
-            <span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span>
+        <SwipeActionItem v-for="s in strategies" :key="s.id" :actionWidth="72">
+          <div class="strategy-card" @click="openDetail(s)">
+            <div class="strategy-card-header">
+              <span style="font-weight:600">{{ s.name }}</span>
+              <span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span>
+            </div>
+            <div class="strategy-card-body">
+              <span>{{ assetDisplay(s) }}</span>
+              <span class="badge badge-buy">{{ typeLabel(s.type) }}</span>
+              <span style="color:var(--text-muted);font-size:12px">{{ s.created_at?.slice(0,10) }}</span>
+            </div>
           </div>
-          <div class="strategy-card-body">
-            <span>{{ assetDisplay(s) }}</span>
-            <span class="badge badge-buy">{{ typeLabel(s.type) }}</span>
-            <span style="color:var(--text-muted);font-size:12px">{{ s.created_at?.slice(0,10) }}</span>
-          </div>
-        </div>
+          <template #actions>
+            <button class="swipe-action-btn danger" @click="deleteStrategy(s)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              删除
+            </button>
+          </template>
+        </SwipeActionItem>
       </div>
     </div>
     <div v-else-if="loading" class="card">
@@ -234,6 +242,7 @@ import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
 const strategies = ref([])
@@ -339,6 +348,19 @@ async function discardDraft(d) {
 }
 
 function onAIDone() { showAI.value = false; loadData(); loadDrafts() }
+
+async function deleteStrategy(s) {
+  if (!confirm(`确定删除策略「${s.name}」？`)) return
+  try {
+    const res = await api(`/api/strategies/${s.id}`, { method: 'DELETE' })
+    const json = await res.json()
+    if (!json.success) throw new Error(json.error)
+    toast.success('已删除')
+    loadData()
+  } catch (e) {
+    toast.error(e.message || '删除失败')
+  }
+}
 function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t }
 function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
@@ -416,6 +438,27 @@ onMounted(() => { loadData(); loadDrafts() })
 .btn-sm { font-size: 12px; padding: 4px 10px; }
 .btn-danger { color: var(--red); border-color: rgba(239,68,68,0.3); }
 .btn-danger:hover { background: rgba(239,68,68,0.1); }
+
+/* Swipe action button */
+.swipe-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: none;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-family: inherit;
+}
+.swipe-action-btn.danger {
+  background: var(--red);
+  color: #fff;
+}
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }

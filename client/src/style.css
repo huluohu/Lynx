@@ -360,7 +360,26 @@ tr:hover td { background: var(--bg-hover); }
   .grid-2 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
   .mobile-nav { display: block; }
-  .page-header { flex-direction: row; align-items: center; padding-left: 44px; min-height: 36px; gap: 8px; }
+  .page-header {
+    flex-direction: row;
+    align-items: center;
+    padding-left: 44px;
+    min-height: 36px;
+    gap: 8px;
+    /* Sticky header on mobile */
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--bg);
+    margin: -14px -16px 16px;
+    padding-top: 14px;
+    padding-bottom: 12px;
+    padding-right: 16px;
+    border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(10, 14, 23, 0.92);
+  }
   .page-title { font-size: 18px; flex: 1; min-width: 0; }
   .form-row { flex-direction: column; }
   table { font-size: 11px; }

@@ -1,4 +1,5 @@
 <template>
+  <PullRefreshView :onRefresh="refresh">
   <div>
     <div class="page-header">
       <h1 class="page-title">资讯</h1>
@@ -49,12 +50,14 @@
       <p style="font-size:12px;color:var(--text-dim);margin-top:8px">点击刷新按钮获取最新资讯</p>
     </div>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const news = ref([])

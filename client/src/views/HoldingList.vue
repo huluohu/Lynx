@@ -1,4 +1,5 @@
 <template>
+  <PullRefreshView :onRefresh="loadData">
   <div>
     <div class="page-header">
       <h1 class="page-title">持仓管理</h1>
@@ -98,6 +99,7 @@
     </AppDrawer>
 
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
@@ -107,6 +109,7 @@ import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const holdings = ref([])

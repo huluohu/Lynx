@@ -1,4 +1,5 @@
 <template>
+  <PullRefreshView :onRefresh="loadAlerts">
   <div>
     <div class="page-header">
       <h1 class="page-title">提醒历史</h1>
@@ -110,12 +111,14 @@
       <p>暂无提醒历史</p>
     </div>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const loading = ref(true)

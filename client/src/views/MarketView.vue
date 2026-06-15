@@ -1,4 +1,5 @@
 <template>
+  <PullRefreshView :onRefresh="() => refresh(true)">
   <div>
     <div class="page-header">
       <h1 class="page-title">实时行情</h1>
@@ -59,12 +60,14 @@
       </div>
     </div>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const prices = ref([])

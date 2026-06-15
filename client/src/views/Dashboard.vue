@@ -1,4 +1,5 @@
 <template>
+  <PullRefreshView :onRefresh="refresh">
   <div>
     <div class="page-header">
       <h1 class="page-title">仪表盘</h1>
@@ -192,12 +193,14 @@
       <div v-if="!recentTrades.length" class="empty" style="padding:24px"><p>暂无交易记录</p></div>
     </div>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { currencySymbol } from '../utils/currency.js'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, total_pl_pct: 0 })
 const allocation = ref([])

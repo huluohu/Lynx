@@ -77,27 +77,32 @@
       </table>
 
       <div class="show-mobile history-cards">
-        <div v-for="h in history" :key="h.id" class="history-card" :class="{ 'reverted-card': h.reverted }" @click="openDetail(h)">
-          <div class="history-card-header">
-            <div>
-              <div class="history-card-title">
-                <span style="font-weight:600">{{ h.asset_name }}</span>
-                <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
-                <span v-if="h.reverted" class="badge badge-sell">已撤销</span>
+        <SwipeActionItem v-for="h in history" :key="h.id" :actionWidth="72">
+          <div class="history-card" :class="{ 'reverted-card': h.reverted }" @click="openDetail(h)">
+            <div class="history-card-header">
+              <div>
+                <div class="history-card-title">
+                  <span style="font-weight:600">{{ h.asset_name }}</span>
+                  <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
+                  <span v-if="h.reverted" class="badge badge-sell">已撤销</span>
+                </div>
+                <div class="history-card-meta">{{ h.executed_at?.slice(0,10) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
               </div>
-              <div class="history-card-meta">{{ h.executed_at?.slice(0,10) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
+              <div class="history-card-total">{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</div>
             </div>
-            <div class="history-card-total">{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</div>
+            <div class="history-card-body">
+              <span class="history-card-currency">{{ h.currency || 'CNY' }}</span>
+              <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':'' }}{{ moneyPrefix(h.currency) }}{{ fmt(Math.abs(h.pnl)) }}</span>
+            </div>
+            <div v-if="h.reason" class="history-card-reason">{{ h.reason }}</div>
           </div>
-          <div class="history-card-body">
-            <span class="history-card-currency">{{ h.currency || 'CNY' }}</span>
-            <span v-if="h.pnl" :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl>=0?'+':'' }}{{ moneyPrefix(h.currency) }}{{ fmt(Math.abs(h.pnl)) }}</span>
-          </div>
-          <div v-if="h.reason" class="history-card-reason">{{ h.reason }}</div>
-          <div v-if="!h.reverted" class="history-card-actions">
-            <button class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">撤销</button>
-          </div>
-        </div>
+          <template #actions>
+            <button v-if="!h.reverted" class="swipe-action-btn danger" @click="openUndoDialog(h)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              撤销
+            </button>
+          </template>
+        </SwipeActionItem>
       </div>
     </div>
     <div v-else-if="loading" class="card">
@@ -167,6 +172,7 @@ import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
 import AppDrawer from '../components/AppDrawer.vue'
+import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
 const history = ref([])
@@ -378,5 +384,25 @@ onMounted(loadData)
   .dialog-header { padding: 16px 16px 0; }
   .dialog-body { padding: 12px 16px 16px; }
   .dialog-actions { padding: 0 16px 16px; }
+}
+
+.swipe-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: none;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-family: inherit;
+}
+.swipe-action-btn.danger {
+  background: var(--red);
+  color: #fff;
 }
 </style>
