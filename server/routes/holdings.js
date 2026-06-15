@@ -6,8 +6,16 @@ const router = Router();
 // GET 持仓列表
 router.get('/', (req, res) => {
   const db = getDb();
-  const rows = db.prepare(`SELECT h.*, a.name, a.symbol, a.type, a.icon
-    FROM holdings h JOIN assets a ON h.asset_id = a.id
+  const rows = db.prepare(`SELECT h.*, a.name, a.symbol, a.type, a.icon, a.currency,
+    pc.price AS current_price, pc.fetched_at AS price_updated_at
+    FROM holdings h
+    JOIN assets a ON h.asset_id = a.id
+    LEFT JOIN (
+      SELECT pc1.asset_id, pc1.price, pc1.fetched_at
+      FROM price_cache pc1
+      JOIN (SELECT asset_id, MAX(fetched_at) AS max_ts FROM price_cache GROUP BY asset_id) pc2
+        ON pc1.asset_id = pc2.asset_id AND pc1.fetched_at = pc2.max_ts
+    ) pc ON pc.asset_id = h.asset_id
     WHERE h.status = 'active' ORDER BY h.id`).all();
   res.json({ success: true, data: rows });
 });

@@ -7,15 +7,16 @@
     <div class="card" v-if="holdings.length">
       <!-- Desktop table -->
       <table class="hide-mobile">
-        <thead><tr><th>资产</th><th>数量</th><th>成本价</th><th>总投入</th><th>目标价</th><th>止损</th><th>状态</th></tr></thead>
+        <thead><tr><th>资产</th><th>数量</th><th>成本价</th><th>总投入</th><th>现价</th><th>市值</th><th>盈亏</th><th>状态</th></tr></thead>
         <tbody>
           <tr v-for="h in holdings" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
             <td><span class="icon-text"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span> <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
             <td style="font-weight:600">{{ h.quantity }}</td>
             <td>{{ cs(h) }}{{ fmt(h.avg_cost) }}</td>
             <td>{{ cs(h) }}{{ fmt(h.total_invested) }}</td>
-            <td>{{ h.target_price ? cs(h)+h.target_price : '-' }}</td>
-            <td style="color:var(--red)">{{ h.stop_loss ? cs(h)+h.stop_loss : '-' }}</td>
+            <td>{{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</td>
+            <td>{{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</td>
+            <td :style="{ color: pnlColor(h), fontWeight: 600 }">{{ pnlText(h) }}</td>
             <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span></td>
           </tr>
         </tbody>
@@ -26,12 +27,13 @@
         <div v-for="h in holdings" :key="h.id" class="holding-card" @click="openDetail(h)">
           <div class="holding-card-top">
             <span class="icon-text" style="font-weight:600"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span>
-            <span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span>
+            <span :style="{ color: pnlColor(h), fontWeight: 600, fontSize: '13px' }">{{ pnlText(h) }}</span>
           </div>
           <div class="holding-card-body">
             <div><span class="meta-label">数量</span> {{ h.quantity }}</div>
             <div><span class="meta-label">成本</span> {{ cs(h) }}{{ fmt(h.avg_cost) }}</div>
-            <div><span class="meta-label">投入</span> {{ cs(h) }}{{ fmt(h.total_invested) }}</div>
+            <div><span class="meta-label">现价</span> {{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</div>
+            <div><span class="meta-label">市值</span> {{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</div>
           </div>
         </div>
       </div>
@@ -56,6 +58,9 @@
         <div class="info-row"><span class="info-label">数量</span><span style="font-weight:600">{{ currentHolding.quantity }}</span></div>
         <div class="info-row"><span class="info-label">成本价</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.avg_cost) }}</span></div>
         <div class="info-row"><span class="info-label">总投入</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.total_invested) }}</span></div>
+        <div class="info-row"><span class="info-label">现价</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.current_price) : '暂无' }}</span></div>
+        <div class="info-row"><span class="info-label">市值</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.quantity * currentHolding.current_price) : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">盈亏</span><span :style="{ color: pnlColor(currentHolding), fontWeight: 600 }">{{ pnlText(currentHolding) }}</span></div>
         <div class="info-row"><span class="info-label">目标价</span><span>{{ currentHolding.target_price ? cs(currentHolding)+currentHolding.target_price : '-' }}</span></div>
         <div class="info-row"><span class="info-label">止损线</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? cs(currentHolding)+currentHolding.stop_loss : '-' }}</span></div>
       </div>
@@ -134,7 +139,27 @@ async function saveHolding() {
 function cs(h) { return currencySymbol(h?.currency) }
 function fmt(n) {
   if (!n && n !== 0) return '0'
-  return Math.round(n).toLocaleString()
+  return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+function pnl(h) {
+  if (!h.current_price || !h.total_invested) return null
+  return h.quantity * h.current_price - h.total_invested
+}
+function pnlPct(h) {
+  if (!h.current_price || !h.total_invested) return null
+  return ((h.quantity * h.current_price - h.total_invested) / h.total_invested) * 100
+}
+function pnlColor(h) {
+  const v = pnl(h)
+  if (v === null) return 'var(--text-dim)'
+  return v >= 0 ? 'var(--green)' : 'var(--red)'
+}
+function pnlText(h) {
+  const v = pnl(h)
+  if (v === null) return '-'
+  const pct = pnlPct(h)
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${fmt(v)} (${sign}${pct.toFixed(1)}%)`
 }
 onMounted(loadData)
 </script>

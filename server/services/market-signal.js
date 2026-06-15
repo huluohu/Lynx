@@ -221,12 +221,12 @@ export async function analyzeMarketSignals(assetId) {
     VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(
       assetId,
-      signal.signal_type,
-      signal.strength,
-      signal.summary,
-      JSON.stringify(indicators),
-      signal.ai_analysis,
-      signal.valid_until
+      signal.signal_type || 'neutral',
+      signal.strength ?? 5,
+      signal.summary || '',
+      JSON.stringify(indicators || null),
+      signal.ai_analysis || '',
+      signal.valid_until || null
     );
 
   const saved = db.prepare(`SELECT ms.*, a.name AS asset_name, a.symbol, a.icon, a.type, a.currency

@@ -212,9 +212,9 @@ export async function generateStrategyReview(strategyId) {
     VALUES (?, 'periodic', ?, ?, ?, ?, ?)`)
     .run(
       strategyId,
-      result.summary,
-      result.performance_score,
-      JSON.stringify(result.deviation_analysis || {}),
+      result.summary || '',
+      result.performance_score ?? 5,
+      JSON.stringify(result.deviation_analysis || null),
       JSON.stringify(result.recommendations || []),
       result.market_context || ''
     );
