@@ -101,7 +101,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
@@ -115,6 +115,12 @@ const showDetail = ref(false)
 const currentHolding = ref(null)
 const editHolding = reactive({ quantity: '', avg_cost: '', total_invested: '', currency: '', target_price: '', stop_loss: '' })
 const savingHolding = ref(false)
+
+watch([() => editHolding.quantity, () => editHolding.avg_cost], ([qty, cost]) => {
+  if (qty && cost) {
+    editHolding.total_invested = (Number(qty) * Number(cost)).toFixed(2)
+  }
+})
 
 async function loadData() {
   try {
