@@ -2,13 +2,9 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">策略管理</h1>
-      <div class="page-actions desktop-only">
+      <div class="page-actions">
         <button class="btn btn-primary" @click="showAI = true">AI 生成</button>
         <router-link to="/strategies/create" class="btn">+ 创建</router-link>
-      </div>
-      <div class="page-actions mobile-only">
-        <button class="btn btn-primary btn-sm" @click="showAI = true">AI 生成</button>
-        <router-link to="/strategies/create" class="btn btn-sm">+ 创建</router-link>
       </div>
     </div>
 
@@ -144,5 +140,6 @@ onMounted(loadData)
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
+  .page-actions .btn { font-size: 13px; padding: 6px 10px; }
 }
 </style>
