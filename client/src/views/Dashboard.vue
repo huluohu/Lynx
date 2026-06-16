@@ -3,55 +3,22 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('dashboard.title') }}</h1>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span v-if="lastUpdated" class="update-time">{{ t('dashboard.updatedAt', { time: fmtUpdateTime(lastUpdated) }) }}</span>
-        <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
-        <button class="btn btn-inline-icon" @click="refresh" :disabled="loading">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-          <span>{{ loading ? t('dashboard.refreshing') : t('dashboard.refresh') }}</span>
-        </button>
-      </div>
-    </div>
-
-    <div v-if="alerts.length" class="alert-section">
-      <div class="alert-section-header">
-        <div class="alert-section-title">
-          <span>🔔 {{ t('dashboard.alertsTitle', { count: alerts.length }) }}</span>
-          <span style="font-size:12px;color:var(--text-muted)">
-            <template v-if="alertCounts.danger">🔴 {{ alertCounts.danger }}</template>
-            <template v-if="alertCounts.warning"> 🟡 {{ alertCounts.warning }}</template>
-            <template v-if="alertCounts.info"> 🔵 {{ alertCounts.info }}</template>
-          </span>
+      <div class="page-header-right">
+        <div class="page-header-meta">
+          <span v-if="lastUpdated" class="page-header-meta-item">{{ t('dashboard.updatedAt', { time: fmtUpdateTime(lastUpdated) }) }}</span>
+          <span v-if="usdCny" class="rate-badge">USD/CNY {{ usdCny.toFixed(4) }}</span>
         </div>
-      </div>
-      <div
-        v-for="a in alerts.slice(0, 2)"
-        :key="a.id"
-        :class="['alert-item', `alert-${a.level}`]"
-      >
-        <div class="alert-type">
-          <span v-if="a.type === 'plan_triggered'">📌</span>
-          <span v-else-if="a.type === 'plan_approaching'">⏳</span>
-          <span v-else-if="a.type === 'stop_loss'">🛑</span>
-          <span v-else-if="a.type === 'price_swing'">📊</span>
-          <span v-else>🔔</span>
-        </div>
-        <div class="alert-body">
-          <div class="alert-message">{{ a.message }}</div>
-          <div class="alert-meta">
-            <span v-if="a.symbol" class="alert-asset-tag">{{ a.symbol }}</span>
+        <div class="desktop-only">
+          <div class="page-header-actions">
+            <button class="btn btn-inline-icon" @click="refresh" :disabled="loading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              <span>{{ loading ? t('dashboard.refreshing') : t('dashboard.refresh') }}</span>
+            </button>
           </div>
         </div>
-        <div class="alert-action">
-          <router-link v-if="a.strategy_id" :to="`/strategies/${a.strategy_id}`" class="btn btn-sm">{{ t('dashboard.view') }}</router-link>
-          <button v-else-if="a.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(a.id)">{{ t('dashboard.complete') }}</button>
-        </div>
-      </div>
-      <div v-if="alerts.length > 2" class="alert-section-footer">
-        <router-link to="/alerts" class="alert-view-all">{{ t('dashboard.viewAllAlerts', { count: alerts.length }) }}</router-link>
       </div>
     </div>
 
@@ -83,6 +50,41 @@
         <div class="stat-label">{{ t('dashboard.assetCount') }}</div>
         <div class="stat-value">{{ allocation.length }}</div>
         <div class="stat-sub">{{ t('dashboard.activeStrategies', { count: activePlans.length }) }}</div>
+      </div>
+    </div>
+
+    <div v-if="alerts.length" class="alert-section">
+      <div class="alert-digest-card">
+        <div class="alert-digest-main">
+          <div class="alert-digest-title">🔔 {{ t('dashboard.alertsSummary') }}</div>
+          <div class="alert-digest-subtitle">{{ t('dashboard.alertsTitle', { count: alerts.length }) }}</div>
+        </div>
+        <div class="alert-digest-stats">
+          <span v-if="alertCounts.danger" class="alert-count-pill danger">{{ t('dashboard.priority.dangerShort') }} {{ alertCounts.danger }}</span>
+          <span v-if="alertCounts.warning" class="alert-count-pill warning">{{ t('dashboard.priority.warningShort') }} {{ alertCounts.warning }}</span>
+          <span v-if="alertCounts.info" class="alert-count-pill info">{{ t('dashboard.priority.infoShort') }} {{ alertCounts.info }}</span>
+        </div>
+        <router-link to="/alerts" class="alert-digest-link">{{ t('dashboard.viewAllAlerts', { count: alerts.length }) }}</router-link>
+      </div>
+
+      <div v-if="primaryAlert" class="alert-primary-card" :class="`alert-primary-${primaryAlert.level}`">
+        <div class="alert-primary-head">
+          <div class="alert-primary-tags">
+            <span class="alert-priority-badge" :class="primaryAlert.level">{{ priorityLabel(primaryAlert.level) }}</span>
+            <span class="alert-type-badge">{{ alertTypeLabel(primaryAlert.type) }}</span>
+            <span v-if="primaryAlert.symbol" class="alert-asset-tag">{{ primaryAlert.symbol }}</span>
+          </div>
+          <span class="alert-primary-icon">{{ alertIcon(primaryAlert.type) }}</span>
+        </div>
+        <div class="alert-primary-message">{{ primaryAlert.message }}</div>
+        <div class="alert-primary-footer">
+          <span v-if="remainingAlertsCount > 0" class="alert-primary-more">{{ t('dashboard.moreAlerts', { count: remainingAlertsCount }) }}</span>
+          <div class="alert-primary-actions">
+            <router-link v-if="primaryAlert.strategy_id" :to="`/strategies/${primaryAlert.strategy_id}`" class="btn btn-sm">{{ t('dashboard.view') }}</router-link>
+            <button v-else-if="primaryAlert.type === 'plan_triggered'" class="btn btn-sm btn-primary" @click="markDone(primaryAlert.id)">{{ t('dashboard.complete') }}</button>
+            <router-link v-else to="/alerts" class="btn btn-sm">{{ t('dashboard.view') }}</router-link>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -192,13 +194,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationsStore } from '../stores/notifications.js'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { currencySymbol } from '../utils/currency.js'
 import { formatDate, formatNumber, formatTime } from '../utils/formatters.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const { t } = useI18n()
@@ -214,6 +217,7 @@ const loading = ref(false)
 const initialized = ref(false)
 const usdCny = ref(null)
 const lastUpdated = ref(null)
+const mobilePageActions = useMobilePageActions()
 let refreshTimer = null
 
 const alertCounts = computed(() => {
@@ -221,6 +225,17 @@ const alertCounts = computed(() => {
   alerts.value.forEach(a => { if (c[a.level] !== undefined) c[a.level]++ })
   return c
 })
+const prioritizedAlerts = computed(() => [...alerts.value].sort((left, right) => {
+  const levelOrder = { danger: 0, warning: 1, info: 2 }
+  const typeOrder = { stop_loss: 0, plan_triggered: 1, plan_approaching: 2, price_swing: 3, trade_executed: 4 }
+  const levelDiff = (levelOrder[left.level] ?? 9) - (levelOrder[right.level] ?? 9)
+  if (levelDiff !== 0) return levelDiff
+  const typeDiff = (typeOrder[left.type] ?? 9) - (typeOrder[right.type] ?? 9)
+  if (typeDiff !== 0) return typeDiff
+  return Number(right.id || 0) - Number(left.id || 0)
+}))
+const primaryAlert = computed(() => prioritizedAlerts.value[0] || null)
+const remainingAlertsCount = computed(() => Math.max(alerts.value.length - 1, 0))
 const heldSignals = computed(() => {
   const ids = new Set(allocation.value.map(item => item.asset_id))
   return latestSignals.value.filter(item => ids.has(item.asset_id))
@@ -229,24 +244,17 @@ const heldSignals = computed(() => {
 async function refresh() {
   loading.value = true
   try {
-    const [summaryRes, rateRes, signalsRes] = await Promise.all([
-      api('/api/dashboard/summary'),
-      api('/api/market/rate'),
-      api('/api/signals/latest'),
-    ])
-    const sJson = await summaryRes.json()
-    const rJson = await rateRes.json()
-    const sigJson = await signalsRes.json()
-
-    if (sJson.data) {
-      summary.value = sJson.data.summary
-      allocation.value = sJson.data.allocation || []
-      activePlans.value = sJson.data.active_plans || []
-      recentTrades.value = sJson.data.recent_trades || []
+    const res = await api('/api/dashboard/overview')
+    const json = await res.json()
+    if (json.data) {
+      summary.value = json.data.summary || summary.value
+      allocation.value = json.data.allocation || []
+      activePlans.value = json.data.active_plans || []
+      recentTrades.value = json.data.recent_trades || []
+      alerts.value = json.data.alerts || []
+      latestSignals.value = json.data.latest_signals || []
+      usdCny.value = json.data.usd_cny || null
     }
-    await refreshAlerts()
-    if (rJson.data) usdCny.value = rJson.data.usd_cny
-    latestSignals.value = sigJson.data || []
     lastUpdated.value = new Date()
   } catch (e) { console.error(e) }
   loading.value = false
@@ -317,6 +325,25 @@ function signalLabel(type) {
 function signalBadgeClass(type) {
   return { bullish: 'badge-market-up', bearish: 'badge-market-down', neutral: 'badge-pending' }[type] || 'badge-pending'
 }
+function alertIcon(type) {
+  return { plan_triggered: '📌', plan_approaching: '⏳', stop_loss: '🛑', price_swing: '📊', trade_executed: '💱' }[type] || '🔔'
+}
+function alertTypeLabel(type) {
+  return {
+    plan_triggered: t('alertHistory.types.planTriggered'),
+    plan_approaching: t('alertHistory.types.planApproaching'),
+    stop_loss: t('alertHistory.types.stopLoss'),
+    price_swing: t('alertHistory.types.priceSwing'),
+    trade_executed: t('alertHistory.types.tradeExecuted'),
+  }[type] || t('dashboard.alertsSummary')
+}
+function priorityLabel(level) {
+  return {
+    danger: t('dashboard.priority.danger'),
+    warning: t('dashboard.priority.warning'),
+    info: t('dashboard.priority.info'),
+  }[level] || t('dashboard.priority.info')
+}
 function fmtDate(value) {
   return formatDate(value)
 }
@@ -334,6 +361,17 @@ watch(() => runtimeSettingsStore.values.refresh_interval, (nextValue, prevValue)
   startAutoRefresh()
 })
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'refresh-dashboard',
+      label: loading.value ? t('dashboard.refreshing') : t('dashboard.refresh'),
+      disabled: loading.value,
+      onSelect: refresh,
+    },
+  ])
+})
+
 onMounted(async () => {
   await ensureRuntimeSettings()
   await refresh()
@@ -342,6 +380,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopAutoRefresh()
+  mobilePageActions.clearActions()
 })
 </script>
 
@@ -368,67 +407,127 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 .alert-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 20px;
 }
-.alert-section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-.alert-section-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-}
-.alert-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 12px;
+.alert-digest-card,
+.alert-primary-card {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  margin-bottom: 8px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  padding: 14px 16px;
 }
-.alert-type {
-  font-size: 14px;
-  line-height: 1.4;
+.alert-digest-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.alert-body {
-  flex: 1;
+.alert-digest-main {
   min-width: 0;
 }
-.alert-message {
-  font-size: 13px;
-  line-height: 1.5;
+.alert-digest-title {
+  font-size: 14px;
+  font-weight: 600;
 }
-.alert-meta {
+.alert-digest-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.alert-digest-stats {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 6px;
-  font-size: 12px;
+  margin-left: auto;
 }
-.alert-action {
-  display: flex;
+.alert-count-pill,
+.alert-priority-badge,
+.alert-type-badge {
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
 }
-.alert-section-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 4px;
+.alert-count-pill.danger,
+.alert-priority-badge.danger {
+  background: var(--danger-soft);
+  color: var(--red);
 }
-.alert-view-all {
+.alert-count-pill.warning,
+.alert-priority-badge.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.alert-count-pill.info,
+.alert-priority-badge.info {
+  background: var(--info-soft);
+  color: var(--blue);
+}
+.alert-type-badge {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+.alert-digest-link {
+  flex-shrink: 0;
   font-size: 13px;
   color: var(--primary);
-  text-decoration: none;
 }
-.alert-view-all:hover {
-  text-decoration: underline;
+.alert-primary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.alert-primary-danger {
+  border-color: var(--danger-border);
+}
+.alert-primary-warning {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.alert-primary-head,
+.alert-primary-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.alert-primary-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.alert-primary-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.alert-primary-message {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.alert-asset-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.alert-primary-more {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.alert-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 .stat-value-wrap {
   white-space: normal;
@@ -529,6 +628,9 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .hide-on-mobile {
+    display: none !important;
+  }
   .stat-value-wrap {
     font-size: 16px;
   }
@@ -538,11 +640,19 @@ onUnmounted(() => {
   .signal-compact-grid {
     grid-template-columns: 1fr;
   }
-  .alert-item {
-    padding: 8px 10px;
+  .alert-digest-card,
+  .alert-primary-card {
+    padding: 12px;
   }
-  .alert-action {
-    align-self: center;
+  .alert-digest-card,
+  .alert-primary-head,
+  .alert-primary-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .alert-digest-stats,
+  .alert-primary-actions {
+    margin-left: 0;
   }
 }
 </style>

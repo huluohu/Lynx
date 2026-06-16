@@ -1,22 +1,19 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { getUsdCny } from '../services/price.js';
+import { getLatestPriceRows } from '../services/latest-price.js';
+import { getLatestSignals } from './signals.js';
 import { normalizeApiTimestamp } from '../utils/datetime.js';
 
 const router = Router();
 
-// GET 仪表盘总览
-router.get('/summary', (req, res) => {
-  const db = getDb();
-
-  // 持仓汇总
+function buildSummary(db) {
   const holdings = db.prepare(`SELECT h.*, a.name, a.symbol, a.type, a.icon, a.currency
     FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'`).all();
 
   // 最新价格
   const prices = {};
-  const priceRows = db.prepare(`SELECT pc.* FROM price_cache pc
-    JOIN (SELECT asset_id, MAX(fetched_at) as max_ts FROM price_cache GROUP BY asset_id) latest
-    ON pc.asset_id = latest.asset_id AND pc.fetched_at = latest.max_ts`).all();
+  const priceRows = getLatestPriceRows(db);
   for (const p of priceRows) prices[p.asset_id] = p.price;
 
   let totalInvested = 0, totalMarketValue = 0, totalPL = 0;
@@ -64,7 +61,7 @@ router.get('/summary', (req, res) => {
     FROM transactions t JOIN assets a ON t.asset_id = a.id
     ORDER BY t.executed_at DESC LIMIT 5`).all();
 
-  res.json({ success: true, data: {
+  return {
     summary: {
       total_invested: totalInvested,
       total_market_value: totalMarketValue,
@@ -74,13 +71,10 @@ router.get('/summary', (req, res) => {
     allocation,
     active_plans: activePlans,
     recent_trades: recentTrades,
-  }});
-});
+  };
+}
 
-// GET 提醒/告警（统一从 notifications 表读取）
-router.get('/alerts', (req, res) => {
-  const db = getDb();
-
+function buildAlerts(db) {
   const rows = db.prepare(`
     SELECT n.*, a.name AS asset_name, a.symbol, a.icon
     FROM notifications n
@@ -93,18 +87,54 @@ router.get('/alerts', (req, res) => {
 
   const levelMap = { danger: 'danger', warning: 'warning', info: 'info' };
 
-  const alerts = rows.map(r => ({
+  return rows.map(r => ({
     id: r.id,
     level: levelMap[r.severity] || 'info',
     type: r.type,
     asset_name: r.asset_name,
     asset_icon: r.icon,
-      symbol: r.symbol,
-      message: r.message,
-      plan_id: r.plan_id,
-      strategy_id: r.strategy_id,
-      time: normalizeApiTimestamp(r.created_at, { assumeUtcWhenNoTimezone: true }),
-    }));
+    symbol: r.symbol,
+    message: r.message,
+    plan_id: r.plan_id,
+    strategy_id: r.strategy_id,
+    time: normalizeApiTimestamp(r.created_at, { assumeUtcWhenNoTimezone: true }),
+  }));
+}
+
+// GET 仪表盘总览
+router.get('/summary', (req, res) => {
+  const db = getDb();
+  const data = buildSummary(db);
+
+  res.json({ success: true, data });
+});
+
+router.get('/overview', async (req, res) => {
+  try {
+    const db = getDb();
+    const [usd_cny, latestSignals] = await Promise.all([
+      getUsdCny(),
+      Promise.resolve(getLatestSignals(db)),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        ...buildSummary(db),
+        alerts: buildAlerts(db),
+        latest_signals: latestSignals,
+        usd_cny,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET 提醒/告警（统一从 notifications 表读取）
+router.get('/alerts', (req, res) => {
+  const db = getDb();
+  const alerts = buildAlerts(db);
 
   res.json({ success: true, data: alerts });
 });

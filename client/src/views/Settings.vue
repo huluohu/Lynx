@@ -329,6 +329,7 @@ import { usePreferencesStore } from '../stores/preferences.js'
 import { api } from '../utils/api.js'
 import { useConfirm } from '../utils/confirm.js'
 import { useToast } from '../utils/toast.js'
+import { appVersion } from '../utils/appVersion.js'
 
 const router = useRouter()
 const authStore = useAuthStore()

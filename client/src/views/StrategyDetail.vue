@@ -2,28 +2,27 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ pageTitle }}</h1>
-      <div v-if="!loading" class="page-actions hide-on-mobile">
-        <button class="btn" @click="runBacktestAction" :disabled="backtesting">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-5"/></svg>
-          {{ backtesting ? t('strategyDetail.backtesting') : t('strategyDetail.backtest') }}
-        </button>
-        <button class="btn" @click="runStressTestAction" :disabled="stressTesting">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
-          {{ stressTesting ? t('strategyDetail.stressTesting') : t('strategyDetail.stressTest') }}
-        </button>
-        <button class="btn" @click="runReviewAction" :disabled="reviewing">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
-          {{ reviewing ? t('strategyDetail.reviewing') : t('strategyDetail.review') }}
-        </button>
-        <button class="btn" @click="showChatDrawer = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> {{ t('strategyDetail.chatAdjust') }}</button>
-        <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyDetail.regenerate') }}</button>
-        <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? t('strategyDetail.generatingPlan') : t('strategyDetail.generatePlan') }}</button>
-        <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">{{ t('strategyDetail.edit') }}</router-link>
-        <button class="btn btn-danger" @click="confirmDelete">{{ t('strategyDetail.delete') }}</button>
+      <div v-if="!loading" class="page-header-right desktop-only">
+        <div class="page-header-actions">
+          <button class="btn" @click="runBacktestAction" :disabled="backtesting">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-5"/></svg>
+            {{ backtesting ? t('strategyDetail.backtesting') : t('strategyDetail.backtest') }}
+          </button>
+          <button class="btn" @click="runStressTestAction" :disabled="stressTesting">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
+            {{ stressTesting ? t('strategyDetail.stressTesting') : t('strategyDetail.stressTest') }}
+          </button>
+          <button class="btn" @click="runReviewAction" :disabled="reviewing">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
+            {{ reviewing ? t('strategyDetail.reviewing') : t('strategyDetail.review') }}
+          </button>
+          <button class="btn" @click="showChatDrawer = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> {{ t('strategyDetail.chatAdjust') }}</button>
+          <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyDetail.regenerate') }}</button>
+          <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? t('strategyDetail.generatingPlan') : t('strategyDetail.generatePlan') }}</button>
+          <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">{{ t('strategyDetail.edit') }}</router-link>
+          <button class="btn btn-danger" @click="confirmDelete">{{ t('strategyDetail.delete') }}</button>
+        </div>
       </div>
-      <button v-if="!loading" class="btn btn-icon show-on-mobile" @click="showActions = !showActions" :title="t('strategyDetail.actionMenu')">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-      </button>
     </div>
 
     <div v-if="loading">
@@ -35,45 +34,6 @@
     </div>
 
     <template v-else>
-      <div v-if="showActions" class="action-sheet-overlay" @click="showActions = false"></div>
-      <transition name="slide-up">
-        <div v-if="showActions" class="action-sheet">
-          <div class="action-sheet-item" @click="runBacktestAction(); showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-5"/></svg>
-            {{ backtesting ? t('strategyDetail.backtesting') : t('strategyDetail.runBacktest') }}
-          </div>
-          <div class="action-sheet-item" @click="runStressTestAction(); showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
-            {{ stressTesting ? t('strategyDetail.stressTestingRunning') : t('strategyDetail.runStressTest') }}
-          </div>
-          <div class="action-sheet-item" @click="runReviewAction(); showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
-            {{ reviewing ? t('strategyDetail.reviewingGenerating') : t('strategyDetail.review') }}
-          </div>
-          <div class="action-sheet-item" @click="showChatDrawer = true; showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            {{ t('strategyDetail.chatAdjust') }}
-          </div>
-          <div class="action-sheet-item" @click="showAIRegenerate = true; showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-            {{ t('strategyDetail.regenerate') }}
-          </div>
-          <div class="action-sheet-item" @click="generatePlan(); showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
-            {{ t('strategyDetail.generatePlan') }}
-          </div>
-          <router-link :to="`/strategies/${route.params.id}/edit`" class="action-sheet-item" @click="showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            {{ t('strategyDetail.editStrategy') }}
-          </router-link>
-          <div class="action-sheet-item danger" @click="confirmDelete(); showActions = false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            {{ t('strategyDetail.deleteStrategy') }}
-          </div>
-          <div class="action-sheet-cancel" @click="showActions = false">{{ t('common.cancel') }}</div>
-        </div>
-      </transition>
-
       <div class="card" style="margin-bottom:16px">
         <div class="section-title">{{ t('strategyDetail.strategyInfo') }}</div>
         <div class="info-list">
@@ -390,7 +350,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
@@ -399,6 +359,7 @@ import AppDrawer from '../components/AppDrawer.vue'
 import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { formatDate, formatDateTime, formatNumber } from '../utils/formatters.js'
 
 useSwipeBack()
@@ -421,7 +382,6 @@ const reviewing = ref(false)
 const backtestLoading = ref(false)
 const stressLoading = ref(false)
 const showDeleteConfirm = ref(false) // kept for legacy; not used by dialog
-const showActions = ref(false)
 const showAIRegenerate = ref(false)
 const showChatDrawer = ref(false)
 const showReviewHistory = ref(false)
@@ -431,6 +391,7 @@ const chatInput = ref('')
 const chatLoading = ref(false)
 const chatApplying = ref(false)
 const chatScrollRef = ref(null)
+const mobilePageActions = useMobilePageActions()
 
 const pageTitle = computed(() => loading.value ? t('strategyDetail.title') : (strategy.value.name || t('strategyDetail.title')))
 const linkedAssetText = computed(() => {
@@ -531,6 +492,61 @@ function buildPerAssetRows(mapEntry) {
   }
   return []
 }
+
+watchEffect(() => {
+  if (loading.value) {
+    mobilePageActions.setActions([])
+    return
+  }
+
+  mobilePageActions.setActions([
+    {
+      key: 'backtest',
+      label: backtesting.value ? t('strategyDetail.backtesting') : t('strategyDetail.runBacktest'),
+      disabled: backtesting.value,
+      onSelect: runBacktestAction,
+    },
+    {
+      key: 'stress-test',
+      label: stressTesting.value ? t('strategyDetail.stressTestingRunning') : t('strategyDetail.runStressTest'),
+      disabled: stressTesting.value,
+      onSelect: runStressTestAction,
+    },
+    {
+      key: 'review',
+      label: reviewing.value ? t('strategyDetail.reviewingGenerating') : t('strategyDetail.review'),
+      disabled: reviewing.value,
+      onSelect: runReviewAction,
+    },
+    {
+      key: 'chat',
+      label: t('strategyDetail.chatAdjust'),
+      onSelect: () => { showChatDrawer.value = true },
+    },
+    {
+      key: 'regenerate',
+      label: t('strategyDetail.regenerate'),
+      onSelect: () => { showAIRegenerate.value = true },
+    },
+    {
+      key: 'generate-plan',
+      label: generating.value ? t('strategyDetail.generatingPlan') : t('strategyDetail.generatePlan'),
+      disabled: generating.value,
+      onSelect: generatePlan,
+    },
+    {
+      key: 'edit',
+      label: t('strategyDetail.editStrategy'),
+      to: `/strategies/${route.params.id}/edit`,
+    },
+    {
+      key: 'delete',
+      label: t('strategyDetail.deleteStrategy'),
+      danger: true,
+      onSelect: confirmDelete,
+    },
+  ])
+})
 function triggerLabel(trigger) {
   return {
     price_above: t('aiStrategyGenerator.triggers.priceAbove'),
@@ -855,17 +871,14 @@ watch(() => [chatMessages.value.length, chatLoading.value, showChatDrawer.value]
   if (showChatDrawer.value) scrollChatToBottom()
 })
 
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
+
 onMounted(loadData)
 </script>
 
 <style scoped>
-.page-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.hide-on-mobile { display: flex; gap: 8px; flex-wrap: wrap; }
-.show-on-mobile { display: none; }
 .info-list { font-size: 14px; }
 .info-row {
   display: flex;
@@ -1224,8 +1237,6 @@ onMounted(loadData)
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .hide-on-mobile { display: none !important; }
-  .show-on-mobile { display: flex !important; }
   .backtest-loading, .backtest-stats, .stress-grid { grid-template-columns: 1fr; }
   .trade-log-top, .backtest-meta, .info-row, .stress-head, .stress-stat, .review-top, .review-title-row, .review-history-top { align-items: flex-start; flex-wrap: wrap; }
   .chat-input { flex-direction: column; align-items: stretch; }

@@ -37,12 +37,12 @@
       <label class="form-label">{{ t('transactionForm.notes') }}</label>
       <textarea class="form-textarea" v-model="form.reason" :placeholder="t('transactionForm.notesPlaceholder')" rows="2"></textarea>
     </div>
-    <div class="form-actions">
+    <MobileActionBar>
       <button type="submit" class="btn btn-primary" :disabled="submitting">
         {{ submitting ? t('transactionForm.submitting') : t('transactionForm.submit') }}
       </button>
       <button type="button" class="btn" @click="$emit('cancel')">{{ t('common.cancel') }}</button>
-    </div>
+    </MobileActionBar>
   </form>
 </template>
 
@@ -51,6 +51,7 @@ import { reactive, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import MobileActionBar from './MobileActionBar.vue'
 
 const props = defineProps({
   assetId: { type: [Number, String], required: true },
@@ -110,12 +111,8 @@ async function submit() {
 }
 
 @media (max-width: 768px) {
-  .transaction-form .form-actions {
-    flex-direction: column;
-  }
-  .transaction-form .form-actions .btn {
-    width: 100%;
-    justify-content: center;
+  .transaction-form {
+    padding-bottom: 120px;
   }
 }
 </style>

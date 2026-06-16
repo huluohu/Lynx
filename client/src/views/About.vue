@@ -1,19 +1,23 @@
 <template>
   <div class="about-page">
-    <div class="page-header">
+    <div class="page-header page-header-mobile-empty">
       <h1 class="page-title">{{ t('settings.about.title') }}</h1>
-      <button
-        class="about-refresh-button"
-        :title="loading ? t('common.refreshing') : t('common.refresh')"
-        @click="loadSystemInfo"
-        :disabled="loading"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-          <path d="M21 3v6h-6" />
-        </svg>
-        <span>{{ loading ? t('common.refreshing') : t('common.refresh') }}</span>
-      </button>
+      <div class="page-header-right">
+        <div class="page-header-actions">
+          <button
+            class="btn btn-inline-icon"
+            :title="loading ? t('common.refreshing') : t('common.refresh')"
+            @click="loadSystemInfo"
+            :disabled="loading"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v6h-6" />
+            </svg>
+            <span>{{ loading ? t('common.refreshing') : t('common.refresh') }}</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -27,17 +31,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePreferencesStore } from '../stores/preferences.js'
 import { api } from '../utils/api.js'
+import { appVersion } from '../utils/appVersion.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const { t } = useI18n()
 const preferencesStore = usePreferencesStore()
-const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev'
 const loading = ref(false)
 const error = ref('')
 const systemInfo = ref(null)
+const mobilePageActions = useMobilePageActions()
 
 const aboutItems = computed(() => [
   { key: 'version', label: t('settings.about.version'), value: appVersion || t('settings.about.unavailable') },
@@ -64,7 +70,22 @@ async function loadSystemInfo() {
   }
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'refresh-about',
+      label: loading.value ? t('common.refreshing') : t('common.refresh'),
+      disabled: loading.value,
+      onSelect: loadSystemInfo,
+    },
+  ])
+})
+
 onMounted(loadSystemInfo)
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
 </script>
 
 <style scoped>
@@ -84,29 +105,13 @@ onMounted(loadSystemInfo)
   border-bottom: none;
 }
 
-.about-refresh-button {
+.btn-inline-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--text);
-  font-size: 12px;
-  font-family: inherit;
-  white-space: nowrap;
-  cursor: pointer;
 }
 
-.about-refresh-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.about-refresh-button svg {
+.btn-inline-icon svg {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
@@ -124,10 +129,4 @@ onMounted(loadSystemInfo)
   word-break: break-all;
 }
 
-@media (max-width: 768px) {
-  .about-refresh-button {
-    min-height: 36px;
-    padding: 0 10px;
-  }
-}
 </style>

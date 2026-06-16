@@ -17,6 +17,12 @@
         <div v-if="selectedAssetIds.length > 0" class="selected-count">
           {{ t('strategyCompare.selectedCount', { count: selectedAssetIds.length }) }}
         </div>
+        <div v-if="selectedAssetIds.length > 0" class="context-status" :class="{ loading: assetContextLoading, error: !!assetContextError, ready: assetContextReady }">
+          <span v-if="assetContextLoading">{{ t('aiStrategyGenerator.contextLoading') }}</span>
+          <span v-else-if="assetContextError">{{ assetContextError }}</span>
+          <span v-else-if="assetContextReady">{{ t('aiStrategyGenerator.contextReady') }}</span>
+          <button v-if="assetContextError && !assetContextLoading" class="btn btn-sm" type="button" @click="loadAssetInfo">{{ t('common.refresh') }}</button>
+        </div>
       </div>
 
       <div v-if="holdingSummaries.length > 0" class="holding-summary">
@@ -58,7 +64,7 @@
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width:100%;margin-top:12px" @click="generate" :disabled="generating || selectedAssetIds.length === 0">
+      <button class="btn btn-primary" style="width:100%;margin-top:12px" @click="generate" :disabled="!canGenerate">
         {{ generating ? t('aiStrategyGenerator.generating') : t('aiStrategyGenerator.generate') }}
       </button>
 
@@ -297,6 +303,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
+import { useConfirm } from '../utils/confirm.js'
 import { useToast } from '../utils/toast.js'
 import { formatNumber } from '../utils/formatters.js'
 import AgentProgressOverlay from './AgentProgressOverlay.vue'
@@ -308,6 +315,7 @@ const props = defineProps({
 const emit = defineEmits(['done'])
 
 const toast = useToast()
+const confirm = useConfirm()
 const { t } = useI18n()
 const assets = ref([])
 const holdingSummaries = ref([])
@@ -350,6 +358,10 @@ const showQualityDetails = ref(false)
 const showTraceInfo = ref(false)
 const showConsistencyWarnings = ref(false)
 const showProgressOverlay = ref(false)
+const assetContextLoading = ref(false)
+const assetContextReady = ref(false)
+const assetContextError = ref('')
+let assetContextRequestId = 0
 
 const selectedAssetNames = computed(() => {
   return selectedAssetIds.value
@@ -365,6 +377,13 @@ const totalBudgetUsed = computed(() => {
     .reduce((sum, p) => sum + (p.amount || 0), 0)
   return formatRounded(total)
 })
+const canGenerate = computed(() => (
+  !generating.value &&
+  selectedAssetIds.value.length > 0 &&
+  assetContextReady.value &&
+  !assetContextLoading.value &&
+  !assetContextError.value
+))
 
 function toggleAsset(id) {
   const idx = selectedAssetIds.value.indexOf(id)
@@ -390,32 +409,79 @@ async function loadAssets() {
 }
 
 async function loadAssetInfo() {
+  const requestId = ++assetContextRequestId
+  const selectedIds = [...selectedAssetIds.value]
   holdingSummaries.value = []
-  if (selectedAssetIds.value.length === 0) return
-  const summaries = []
-  for (const assetId of selectedAssetIds.value) {
-    try {
-      const res = await api(`/api/assets/${assetId}`)
-      const json = await res.json()
-      if (json.data && json.data.quantity) {
-        const h = json.data
-        const asset = assets.value.find(a => a.id === assetId)
-        const priceRes = await api(`/api/market/prices/${assetId}`)
-        const pJson = await priceRes.json()
-        const price = pJson.data?.price
-        const pnlPct = price && h.avg_cost ? Number((((price - h.avg_cost) / h.avg_cost) * 100).toFixed(1)) : null
-        summaries.push({
-          asset_id: assetId,
-          name: asset?.name || t('aiStrategyGenerator.assetNameFallback', { id: assetId }),
-          quantity: h.quantity,
-          avg_cost: h.avg_cost,
-          total_invested: h.total_invested,
-          pnl_pct: pnlPct,
-        })
-      }
-    } catch {}
+  assetContextError.value = ''
+  assetContextReady.value = false
+  if (selectedIds.length === 0) {
+    assetContextLoading.value = false
+    return
   }
+
+  assetContextLoading.value = true
+  const summaries = []
+  const failedIds = []
+  await Promise.all(selectedIds.map(async (assetId) => {
+    try {
+      const [assetRes, priceRes] = await Promise.all([
+        api(`/api/assets/${assetId}`),
+        api(`/api/market/prices/${assetId}`),
+      ])
+      const assetJson = await assetRes.json()
+      const priceJson = await priceRes.json()
+      if (assetJson.data) {
+        const h = assetJson.data
+        const asset = assets.value.find(a => a.id === assetId)
+        const price = priceJson.data?.price
+        const pnlPct = price && h.avg_cost ? Number((((price - h.avg_cost) / h.avg_cost) * 100).toFixed(1)) : null
+        if (h.quantity) {
+          summaries.push({
+            asset_id: assetId,
+            name: asset?.name || t('aiStrategyGenerator.assetNameFallback', { id: assetId }),
+            quantity: h.quantity,
+            avg_cost: h.avg_cost,
+            total_invested: h.total_invested,
+            pnl_pct: pnlPct,
+          })
+        }
+      } else {
+        failedIds.push(assetId)
+      }
+    } catch {
+      failedIds.push(assetId)
+    }
+  }))
+
+  if (requestId !== assetContextRequestId) return
   holdingSummaries.value = summaries
+  assetContextLoading.value = false
+  if (failedIds.length) {
+    assetContextError.value = t('aiStrategyGenerator.contextLoadFailed', { count: failedIds.length })
+    assetContextReady.value = false
+  } else {
+    assetContextReady.value = selectedIds.length > 0
+  }
+}
+
+async function cancelGenerate() {
+  if (!_abortController || !generating.value) return
+  const ok = await confirm({
+    title: t('aiStrategyGenerator.cancelGenerate'),
+    message: t('aiStrategyGenerator.cancelConfirmMessage'),
+    confirmText: t('aiStrategyGenerator.cancelGenerate'),
+    cancelText: t('common.cancel'),
+    danger: true,
+  })
+  if (!ok) return
+  _abortController.abort()
+  _abortController = null
+  generating.value = false
+  showProgressOverlay.value = false
+  agentSteps.value.forEach((s) => {
+    if (s.status !== 'done') s.status = 'pending'
+  })
+  toast.success(t('aiStrategyGenerator.cancelled'))
 }
 
 function updateAgentStep(stepId, status, detail) {
@@ -424,16 +490,6 @@ function updateAgentStep(stepId, status, detail) {
     current.status = status
     if (detail !== undefined) current.detail = detail
   }
-}
-
-function cancelGenerate() {
-  if (_abortController) {
-    _abortController.abort()
-    _abortController = null
-  }
-  generating.value = false
-  showProgressOverlay.value = false
-  agentSteps.value.forEach(s => { if (s.status !== 'done') s.status = 'pending' })
 }
 
 function closeProgressOverlay() {
@@ -458,6 +514,7 @@ function dataQualityColor(score) {
 }
 
 async function generate() {
+  if (!canGenerate.value) return
   error.value = ''
   generating.value = true
   result.value = null
@@ -481,7 +538,6 @@ async function generate() {
     error.value = e.message
   }
   generating.value = false
-  // Overlay stays open on error so user can read it; on success it shows "view result" CTA
 }
 
 async function regenerate() {
@@ -739,6 +795,17 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-dim);
 }
+.context-status {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.context-status.loading { color: var(--text-dim); }
+.context-status.ready { color: var(--green); }
+.context-status.error { color: var(--red); }
 
 .holding-summary {
   background: var(--bg);

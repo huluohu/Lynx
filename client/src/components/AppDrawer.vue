@@ -17,17 +17,22 @@
         </div>
 
         <!-- Mobile: bottom sheet -->
-        <div v-else class="sheet-panel" ref="sheetRef"
-          @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
-          :style="sheetStyle">
-          <div class="sheet-grip-area">
-            <div class="sheet-grip"></div>
+        <div v-else class="sheet-panel" ref="sheetRef" :class="sheetClass" :style="sheetStyle">
+          <div
+            class="sheet-drag-surface"
+            @touchstart="onTouchStart"
+            @touchmove="onTouchMove"
+            @touchend="onTouchEnd"
+          >
+            <div class="sheet-grip-area">
+              <div class="sheet-grip"></div>
+            </div>
+            <div class="panel-header panel-header-mobile">
+              <h3 class="panel-title">{{ title }}</h3>
+              <button class="panel-close" @click="close">✕</button>
+            </div>
           </div>
-          <div class="panel-header">
-            <h3 class="panel-title">{{ title }}</h3>
-            <button class="panel-close" @click="close">✕</button>
-          </div>
-          <div class="panel-body">
+          <div ref="bodyRef" class="panel-body">
             <slot />
           </div>
           <div class="panel-footer" v-if="$slots.footer">
@@ -46,15 +51,16 @@ const props = defineProps({
   modelValue: Boolean,
   title: { type: String, default: '' },
   width: { type: [String, Number], default: '480px' },
+  mobileHeight: { type: String, default: 'auto' },
 })
 const emit = defineEmits(['update:modelValue'])
 
 const isMobile = ref(false)
 const sheetRef = ref(null)
+const bodyRef = ref(null)
 const dragY = ref(0)
 const dragging = ref(false)
 let startY = 0
-let startScrollTop = 0
 
 function checkMobile() {
   isMobile.value = window.innerWidth <= 768
@@ -75,19 +81,16 @@ function close() {
 
 // Touch gesture for bottom sheet
 function onTouchStart(e) {
-  const body = sheetRef.value?.querySelector('.panel-body')
-  startScrollTop = body?.scrollTop || 0
   startY = e.touches[0].clientY
   dragging.value = false
 }
 
 function onTouchMove(e) {
   const deltaY = e.touches[0].clientY - startY
-  // Only start dragging if scrolled to top and pulling down
-  if (startScrollTop <= 0 && deltaY > 0) {
-    dragging.value = true
-    dragY.value = Math.max(0, deltaY)
-    e.preventDefault()
+   if ((bodyRef.value?.scrollTop || 0) <= 0 && deltaY > 0) {
+     dragging.value = true
+     dragY.value = Math.max(0, deltaY)
+     e.preventDefault()
   }
 }
 
@@ -105,11 +108,25 @@ const drawerStyle = computed(() => ({
 }))
 
 const sheetStyle = computed(() => {
-  if (dragY.value > 0) {
-    return { transform: `translateY(${dragY.value}px)`, transition: 'none' }
+  const style = {}
+  if (props.mobileHeight === 'fixed') {
+    style.height = '78vh'
+    style.maxHeight = '78vh'
+  } else if (props.mobileHeight === 'fullscreen') {
+    style.height = 'calc(100dvh - 12px)'
+    style.maxHeight = 'calc(100dvh - 12px)'
   }
-  return {}
+  if (dragY.value > 0) {
+    style.transform = `translateY(${dragY.value}px)`
+    style.transition = 'none'
+  }
+  return style
 })
+
+const sheetClass = computed(() => ({
+  'sheet-panel--fixed': props.mobileHeight === 'fixed',
+  'sheet-panel--fullscreen': props.mobileHeight === 'fullscreen',
+}))
 </script>
 
 <style scoped>
@@ -152,6 +169,11 @@ const sheetStyle = computed(() => {
   padding-bottom: env(safe-area-inset-bottom, 16px);
 }
 
+.sheet-drag-surface {
+  flex-shrink: 0;
+  touch-action: none;
+}
+
 .sheet-grip-area {
   display: flex;
   justify-content: center;
@@ -175,6 +197,9 @@ const sheetStyle = computed(() => {
   padding: 14px 20px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+.panel-header-mobile {
+  padding-top: 8px;
 }
 .panel-title {
   font-size: 17px;
@@ -202,6 +227,7 @@ const sheetStyle = computed(() => {
   overflow-y: auto;
   padding: 20px;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .panel-footer {
   padding: 16px 20px;

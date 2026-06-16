@@ -2,8 +2,10 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('strategyCompare.title') }}</h1>
-      <div class="page-actions">
-        <router-link to="/strategies" class="btn">{{ t('strategyCompare.back') }}</router-link>
+      <div class="page-header-right">
+        <div class="page-header-actions">
+          <router-link to="/strategies" class="btn">{{ t('strategyCompare.back') }}</router-link>
+        </div>
       </div>
     </div>
 
@@ -26,6 +28,12 @@
             </div>
           </div>
           <div v-if="selectedAssetIds.length" class="selected-count">{{ t('strategyCompare.selectedCount', { count: selectedAssetIds.length }) }}</div>
+          <div v-if="selectedAssetIds.length" class="context-status" :class="{ loading: assetContextLoading, error: !!assetContextError, ready: assetContextReady }">
+            <span v-if="assetContextLoading">{{ t('strategyCompare.contextLoading') }}</span>
+            <span v-else-if="assetContextError">{{ assetContextError }}</span>
+            <span v-else-if="assetContextReady">{{ t('strategyCompare.contextReady') }}</span>
+            <button v-if="assetContextError && !assetContextLoading" class="btn btn-sm" type="button" @click="loadAssetInfo">{{ t('common.refresh') }}</button>
+          </div>
         </div>
 
         <div v-if="holdingSummaries.length" class="holding-summary">
@@ -58,7 +66,7 @@
           </div>
         </div>
 
-        <button class="btn btn-primary" style="width:100%" @click="generateCompare" :disabled="comparing || selectedAssetIds.length === 0">
+        <button class="btn btn-primary" style="width:100%" @click="generateCompare" :disabled="!canGenerateCompare">
           {{ comparing ? t('strategyCompare.generating') : t('strategyCompare.generate') }}
         </button>
       </div>
@@ -149,7 +157,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
@@ -168,10 +176,21 @@ const selectedAssetIds = ref([])
 const compareResults = ref([])
 const recommendedRiskLevel = ref(null)
 const savingRiskLevel = ref('')
+const assetContextLoading = ref(false)
+const assetContextReady = ref(false)
+const assetContextError = ref('')
+let assetContextRequestId = 0
 const form = reactive({
   budget: 20000,
   goal: 'recovery',
 })
+const canGenerateCompare = computed(() => (
+  !comparing.value &&
+  selectedAssetIds.value.length > 0 &&
+  assetContextReady.value &&
+  !assetContextLoading.value &&
+  !assetContextError.value
+))
 
 function fmt(n) {
   const value = Number(n)
@@ -210,10 +229,19 @@ async function loadAssets() {
 }
 
 async function loadAssetInfo() {
+  const requestId = ++assetContextRequestId
+  const selectedIds = [...selectedAssetIds.value]
   holdingSummaries.value = []
-  if (!selectedAssetIds.value.length) return
+  assetContextError.value = ''
+  assetContextReady.value = false
+  if (!selectedIds.length) {
+    assetContextLoading.value = false
+    return
+  }
+  assetContextLoading.value = true
   const summaries = []
-  for (const assetId of selectedAssetIds.value) {
+  const failedIds = []
+  await Promise.all(selectedIds.map(async (assetId) => {
     try {
       const [assetRes, priceRes] = await Promise.all([
         api(`/api/assets/${assetId}`),
@@ -221,26 +249,41 @@ async function loadAssetInfo() {
       ])
       const assetJson = await assetRes.json()
       const priceJson = await priceRes.json()
-      if (assetJson.data && assetJson.data.quantity) {
+      if (assetJson.data) {
         const h = assetJson.data
         const asset = assets.value.find(a => a.id === assetId)
         const price = priceJson.data?.price
         const pnlPct = price && h.avg_cost ? ((price - h.avg_cost) / h.avg_cost * 100).toFixed(1) : null
-        summaries.push({
-          asset_id: assetId,
-          name: asset?.name || `Asset #${assetId}`,
-          quantity: h.quantity,
-          avg_cost: h.avg_cost,
-          total_invested: h.total_invested,
-          pnl_pct: pnlPct ? Number(pnlPct) : null,
-        })
+        if (h.quantity) {
+          summaries.push({
+            asset_id: assetId,
+            name: asset?.name || `Asset #${assetId}`,
+            quantity: h.quantity,
+            avg_cost: h.avg_cost,
+            total_invested: h.total_invested,
+            pnl_pct: pnlPct ? Number(pnlPct) : null,
+          })
+        }
+      } else {
+        failedIds.push(assetId)
       }
-    } catch {}
-  }
+    } catch {
+      failedIds.push(assetId)
+    }
+  }))
+  if (requestId !== assetContextRequestId) return
   holdingSummaries.value = summaries
+  assetContextLoading.value = false
+  if (failedIds.length) {
+    assetContextError.value = t('strategyCompare.contextLoadFailed', { count: failedIds.length })
+    assetContextReady.value = false
+  } else {
+    assetContextReady.value = selectedIds.length > 0
+  }
 }
 
 async function generateCompare() {
+  if (!canGenerateCompare.value) return
   comparing.value = true
   compareResults.value = []
   recommendedRiskLevel.value = null
@@ -319,6 +362,17 @@ onMounted(loadAssets)
   font-size: 12px;
   color: var(--text-dim);
 }
+.context-status {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.context-status.loading { color: var(--text-dim); }
+.context-status.ready { color: var(--green); }
+.context-status.error { color: var(--red); }
 .holding-summary {
   background: var(--bg);
   border: 1px solid var(--border);

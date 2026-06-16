@@ -134,19 +134,15 @@
             </label>
           </div>
           <button
-            class="shell-preferences-trigger mobile-only"
-            :title="t('appHeader.theme')"
-            :aria-label="t('appHeader.preferences')"
+            v-if="hasMobilePageActions"
+            class="btn-icon mobile-only"
+            :title="t('appHeader.pageActions')"
+            :aria-label="t('appHeader.pageActions')"
             aria-haspopup="dialog"
-            :aria-expanded="preferencesMenuOpen ? 'true' : 'false'"
-            @click="openPreferencesMenu"
+            :aria-expanded="isMobilePageActionsOpen ? 'true' : 'false'"
+            @click="openMobilePageActions"
           >
-            <span class="theme-preview" :class="`theme-preview--${preferencesStore.theme}`" aria-hidden="true">
-              <span class="theme-preview-pane theme-preview-pane-sidebar"></span>
-              <span class="theme-preview-pane theme-preview-pane-header"></span>
-              <span class="theme-preview-pane theme-preview-pane-body"></span>
-            </span>
-            <span class="shell-preferences-trigger-label">{{ currentMobileThemeLabel }}</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
           </button>
         </div>
       </header>
@@ -228,40 +224,30 @@
 
     <Teleport to="body">
       <Transition name="slide-up">
-        <div v-if="preferencesMenuOpen" class="action-sheet-overlay" @click="preferencesMenuOpen = false">
-          <div class="action-sheet theme-sheet" @click.stop>
-            <div class="action-sheet-header">{{ t('appHeader.preferences') }}</div>
-            <div class="theme-sheet-current">
-              <div class="theme-sheet-current-copy">
-                <span class="theme-sheet-eyebrow">{{ t('appHeader.currentTheme') }}</span>
-                <strong class="theme-sheet-current-name">{{ t(`preferences.themes.${preferencesStore.theme}`) }}</strong>
-                <span class="theme-sheet-current-hint">{{ t('appHeader.themePanelHint') }}</span>
-              </div>
-              <router-link to="/settings" class="theme-sheet-settings-link" @click="preferencesMenuOpen = false">
-                {{ t('appHeader.openDisplaySettings') }}
-              </router-link>
-            </div>
-            <div class="theme-option-grid">
-              <button
-                v-for="option in mobileThemeOptions"
-                :key="`theme-${option.value}`"
-                class="theme-option-card"
-                :class="{ active: preferencesStore.theme === option.value }"
-                @click="applyTheme(option.value, { closeMenu: true })"
+        <div v-if="showMobilePageActionsSheet" class="action-sheet-overlay" @click="closeMobilePageActions">
+          <div class="action-sheet" @click.stop>
+            <div class="action-sheet-header">{{ t('appHeader.pageActions') }}</div>
+            <template v-for="(action, index) in safeMobilePageActions" :key="action.key || `mobile-page-action-${index}`">
+              <router-link
+                v-if="action.to"
+                :to="action.to"
+                class="action-sheet-item"
+                :class="{ danger: action.danger }"
+                @click="closeMobilePageActions"
               >
-                <span class="theme-option-preview" :class="`theme-preview--${option.value}`" aria-hidden="true">
-                  <span class="theme-preview-pane theme-preview-pane-sidebar"></span>
-                  <span class="theme-preview-pane theme-preview-pane-header"></span>
-                  <span class="theme-preview-pane theme-preview-pane-body"></span>
-                </span>
-                <span class="theme-option-meta">
-                  <span class="theme-option-label">{{ option.label }}</span>
-                  <span v-if="preferencesStore.theme === option.value" class="theme-option-check">✓</span>
-                </span>
+                <span>{{ action.label }}</span>
+              </router-link>
+              <button
+                v-else
+                class="action-sheet-item action-sheet-item-button"
+                :class="{ danger: action.danger }"
+                :disabled="action.disabled"
+                @click="handleMobilePageAction(action)"
+              >
+                <span>{{ action.label }}</span>
               </button>
-            </div>
-            <div class="theme-sheet-note">{{ t('appHeader.languageManagedInSettings') }}</div>
-            <div class="action-sheet-cancel" @click="preferencesMenuOpen = false">{{ t('common.cancel') }}</div>
+            </template>
+            <div class="action-sheet-cancel" @click="closeMobilePageActions">{{ t('common.cancel') }}</div>
           </div>
         </div>
       </Transition>
@@ -282,6 +268,7 @@ import { useAuthStore } from './stores/auth.js'
 import { useNotificationsStore } from './stores/notifications.js'
 import { usePreferencesStore } from './stores/preferences.js'
 import { useRuntimeSettingsStore } from './stores/runtime-settings.js'
+import { useMobilePageActionsState } from './composables/useMobilePageActions.js'
 import { useConfirm } from './utils/confirm.js'
 import { useToast } from './utils/toast.js'
 import AppToast from './components/AppToast.vue'
@@ -298,7 +285,14 @@ const toast = useToast()
 const { t } = useI18n()
 const sidebarOpen = ref(false)
 const moreMenuOpen = ref(false)
-const preferencesMenuOpen = ref(false)
+const {
+  actions: mobilePageActionItems,
+  isOpen: isMobilePageActionsOpen,
+  hasActions: hasMobilePageActions,
+  openActions: openMobilePageActions,
+  closeActions: closeMobilePageActions,
+  resetActions: resetMobilePageActions,
+} = useMobilePageActionsState()
 let pollTimer
 
 const mobileHeaderTitle = computed(() => {
@@ -306,14 +300,12 @@ const mobileHeaderTitle = computed(() => {
   return titleKey ? t(titleKey) : 'L¥NX'
 })
 
-const currentMobileThemeLabel = computed(() => t(`appHeader.themeShort.${preferencesStore.theme}`))
+const safeMobilePageActions = computed(() => {
+  const actions = Array.isArray(mobilePageActionItems.value) ? mobilePageActionItems.value : []
+  return actions.filter((action) => action && action.label && (action.to || action.onSelect))
+})
 
-const mobileThemeOptions = computed(() => (
-  preferencesStore.supportedThemes.map((value) => ({
-    value,
-    label: t(`preferences.themes.${value}`),
-  }))
-))
+const showMobilePageActionsSheet = computed(() => isMobilePageActionsOpen.value && safeMobilePageActions.value.length > 0)
 
 async function syncPreferences() {
   try {
@@ -329,20 +321,14 @@ function doLogout() {
 
 function toggleSidebar() {
   moreMenuOpen.value = false
-  preferencesMenuOpen.value = false
+  closeMobilePageActions()
   sidebarOpen.value = !sidebarOpen.value
 }
 
 function openMoreMenu() {
   sidebarOpen.value = false
-  preferencesMenuOpen.value = false
+  closeMobilePageActions()
   moreMenuOpen.value = true
-}
-
-function openPreferencesMenu() {
-  sidebarOpen.value = false
-  moreMenuOpen.value = false
-  preferencesMenuOpen.value = true
 }
 
 async function confirmLogout() {
@@ -357,21 +343,27 @@ async function confirmLogout() {
   if (ok) doLogout()
 }
 
-async function applyTheme(value, { closeMenu = false } = {}) {
+async function applyTheme(value) {
   try {
     await preferencesStore.setTheme(value, { persistServer: true })
-    if (closeMenu) preferencesMenuOpen.value = false
   } catch (error) {
     toast.error(error.message || t('common.saveFailed'))
   }
 }
 
-async function applyLanguage(value, { closeMenu = false } = {}) {
+async function applyLanguage(value) {
   try {
     await preferencesStore.setLanguage(value, { persistServer: true })
-    if (closeMenu) preferencesMenuOpen.value = false
   } catch (error) {
     toast.error(error.message || t('common.saveFailed'))
+  }
+}
+
+async function handleMobilePageAction(action) {
+  if (!action || action.disabled) return
+  closeMobilePageActions()
+  if (action.onSelect) {
+    await action.onSelect()
   }
 }
 
@@ -416,10 +408,11 @@ watch(() => runtimeSettingsStore.values.refresh_interval, (nextValue, prevValue)
 watch(() => route.fullPath, () => {
   sidebarOpen.value = false
   moreMenuOpen.value = false
-  preferencesMenuOpen.value = false
+  resetMobilePageActions()
 })
 
 onMounted(() => {
+  resetMobilePageActions()
   if (authStore.isLoggedIn) {
     syncPreferences()
     startPolling()
@@ -563,19 +556,26 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .action-sheet-header {
-  padding: 12px 24px 8px;
+  padding: 12px calc(24px + var(--safe-right)) 8px calc(24px + var(--safe-left));
   font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
 }
 .action-sheet-group-label {
-  padding: 12px 24px 6px;
+  padding: 12px calc(24px + var(--safe-right)) 6px calc(24px + var(--safe-left));
   font-size: 12px;
   color: var(--text-muted);
 }
 .action-sheet-item.active {
   color: var(--blue);
   font-weight: 600;
+}
+.action-sheet-item-button {
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
 }
 .theme-preview,
 .theme-option-preview {
@@ -653,7 +653,7 @@ onUnmounted(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 24px 16px;
+  padding: 0 calc(24px + var(--safe-right)) 16px calc(24px + var(--safe-left));
 }
 .theme-sheet-current-copy {
   display: flex;
@@ -690,7 +690,7 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  padding: 0 24px 16px;
+  padding: 0 calc(24px + var(--safe-right)) 16px calc(24px + var(--safe-left));
 }
 .theme-option-card {
   display: flex;
@@ -728,7 +728,7 @@ onUnmounted(() => {
   line-height: 1;
 }
 .theme-sheet-note {
-  padding: 0 24px 12px;
+  padding: 0 calc(24px + var(--safe-right)) 12px calc(24px + var(--safe-left));
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
@@ -791,8 +791,16 @@ button.mobile-nav-item {
 }
 @media (max-width: 768px) {
   .app-shell-header {
-    margin: calc(-0px - var(--safe-top)) -16px 16px;
-    padding: calc(10px + var(--safe-top)) 16px 10px;
+    margin:
+      calc(-1 * var(--safe-top))
+      calc(-1 * (16px + var(--safe-right)))
+      16px
+      calc(-1 * (16px + var(--safe-left)));
+    padding:
+      calc(10px + var(--safe-top))
+      calc(16px + var(--safe-right))
+      10px
+      calc(16px + var(--safe-left));
     display: grid;
     grid-template-columns: 84px minmax(0, 1fr) 84px;
     align-items: center;

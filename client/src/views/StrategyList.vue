@@ -1,78 +1,37 @@
 <template>
-  <div>
-    <div class="page-header">
-      <h1 class="page-title">{{ t('strategyList.title') }}</h1>
-      <!-- Desktop actions -->
-      <div class="page-actions desktop-only">
-        <button v-if="drafts.length" class="btn btn-draft btn-inline-icon" @click="showDrafts = true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
-            <path d="M9 3h6v4H9z" />
-            <path d="M9 12h6" />
-            <path d="M9 16h4" />
-          </svg>
-          <span>{{ t('strategyList.drafts') }}</span>
-          <span class="draft-badge">{{ drafts.length }}</span>
-        </button>
-        <router-link to="/strategies/compare" class="btn btn-inline-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 6h7" />
-            <path d="M4 12h10" />
-            <path d="M4 18h7" />
-            <path d="M15 6l2-2 2 2" />
-            <path d="M17 4v8" />
-            <path d="M17 20v-8" />
-            <path d="M15 18l2 2 2-2" />
-          </svg>
-          <span>{{ t('strategyList.compare') }}</span>
-        </router-link>
-        <button class="btn btn-primary" @click="showAI = true">{{ t('strategyList.aiGenerate') }}</button>
-        <router-link to="/strategies/create" class="btn">+ {{ t('strategyList.create') }}</router-link>
-      </div>
-      <!-- Mobile actions: primary + more -->
-      <div class="page-actions mobile-only">
-        <button class="btn btn-primary btn-sm" @click="showAI = true">{{ t('strategyList.aiGenerate') }}</button>
-        <button class="btn btn-icon" @click="showPageActions = true" :title="t('strategyList.moreActions')">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Mobile Page Actions Sheet -->
-    <Teleport to="body">
-      <Transition name="slide-up">
-        <div v-if="showPageActions" class="action-sheet-overlay" @click="showPageActions = false">
-          <div class="action-sheet" @click.stop>
-            <div class="action-sheet-item" v-if="drafts.length" @click="showDrafts = true; showPageActions = false">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <PullRefreshView :onRefresh="refreshPage">
+    <div>
+      <div class="page-header">
+        <h1 class="page-title">{{ t('strategyList.title') }}</h1>
+        <div class="page-header-right desktop-only">
+          <div class="page-header-actions page-actions">
+            <button v-if="drafts.length" class="btn btn-draft btn-inline-icon" @click="showDrafts = true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
                 <path d="M9 3h6v4H9z" />
-                <path d="M9 12h6" /><path d="M9 16h4" />
+                <path d="M9 12h6" />
+                <path d="M9 16h4" />
               </svg>
-              {{ t('strategyList.drafts') }}
-              <span class="nav-badge" style="margin-left:auto">{{ drafts.length }}</span>
-            </div>
-            <router-link to="/strategies/compare" class="action-sheet-item" @click="showPageActions = false">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 6h7" /><path d="M4 12h10" /><path d="M4 18h7" />
-                <path d="M15 6l2-2 2 2" /><path d="M17 4v8" />
-                <path d="M17 20v-8" /><path d="M15 18l2 2 2-2" />
+              <span>{{ t('strategyList.drafts') }}</span>
+              <span class="draft-badge">{{ drafts.length }}</span>
+            </button>
+            <router-link to="/strategies/compare" class="btn btn-inline-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 6h7" />
+                <path d="M4 12h10" />
+                <path d="M4 18h7" />
+                <path d="M15 6l2-2 2 2" />
+                <path d="M17 4v8" />
+                <path d="M17 20v-8" />
+                <path d="M15 18l2 2 2-2" />
               </svg>
-              {{ t('strategyList.compare') }}
+              <span>{{ t('strategyList.compare') }}</span>
             </router-link>
-            <div class="action-sheet-item" @click="showAI = true; showPageActions = false">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-              {{ t('strategyList.aiGenerateStrategy') }}
-            </div>
-            <router-link to="/strategies/create" class="action-sheet-item" @click="showPageActions = false">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-              {{ t('strategyList.create') }}
-            </router-link>
-            <div class="action-sheet-cancel" @click="showPageActions = false">{{ t('common.cancel') }}</div>
+            <button class="btn btn-primary" @click="showAI = true">{{ t('strategyList.aiGenerate') }}</button>
+            <router-link to="/strategies/create" class="btn">+ {{ t('strategyList.create') }}</router-link>
           </div>
         </div>
-      </Transition>
-    </Teleport>
+      </div>
 
     <div class="card" v-if="strategies.length">
       <table class="hide-mobile">
@@ -130,7 +89,7 @@
     </AppDrawer>
 
     <!-- Detail Drawer -->
-    <AppDrawer v-model="showDetailDrawer" :title="detailStrategy?.name || t('strategyList.detailTitle')">
+    <AppDrawer v-model="showDetailDrawer" :title="detailStrategy?.name || t('strategyList.detailTitle')" mobileHeight="fixed">
       <div v-if="detailStrategy" class="detail-drawer-content">
         <!-- Tabs: 详情 / 生成历史 -->
         <div class="drawer-tabs">
@@ -234,10 +193,11 @@
       </div>
     </AppDrawer>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
@@ -245,7 +205,9 @@ import { useConfirm } from '../utils/confirm.js'
 import { formatDate, formatDateTime } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -255,7 +217,6 @@ const drafts = ref([])
 const loading = ref(true)
 const showAI = ref(false)
 const showDrafts = ref(false)
-const showPageActions = ref(false)
 const showDetailDrawer = ref(false)
 const showHistoryDetail = ref(false)
 const detailStrategy = ref(null)
@@ -263,6 +224,7 @@ const detailPlans = ref([])
 const detailTab = ref('info')
 const generationHistory = ref([])
 const historyDetail = ref(null)
+const mobilePageActions = useMobilePageActions()
 
 async function loadData() {
   try {
@@ -280,6 +242,10 @@ async function loadDrafts() {
     const json = await res.json()
     drafts.value = json.data || []
   } catch { drafts.value = [] }
+}
+
+async function refreshPage() {
+  await Promise.all([loadData(), loadDrafts()])
 }
 
 async function openDetail(s) {
@@ -390,7 +356,37 @@ function assetDisplay(s) {
   }
   return s.asset_name || '-'
 }
-onMounted(() => { loadData(); loadDrafts() })
+
+watchEffect(() => {
+  mobilePageActions.setActions([
+    drafts.value.length ? {
+      key: 'drafts',
+      label: `${t('strategyList.drafts')} (${drafts.value.length})`,
+      onSelect: () => { showDrafts.value = true },
+    } : null,
+    {
+      key: 'compare',
+      label: t('strategyList.compare'),
+      to: '/strategies/compare',
+    },
+    {
+      key: 'ai-generate',
+      label: t('strategyList.aiGenerateStrategy'),
+      onSelect: () => { showAI.value = true },
+    },
+    {
+      key: 'create',
+      label: t('strategyList.create'),
+      to: '/strategies/create',
+    },
+  ])
+})
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
+
+onMounted(refreshPage)
 </script>
 
 <style scoped>

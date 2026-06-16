@@ -3,18 +3,24 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('newsList.title') }}</h1>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span v-if="lastUpdated" class="update-hint">{{ t('newsList.updatedAt', { time: fmtUpdateTime(lastUpdated) }) }}</span>
-        <button class="btn btn-sm" @click="cacheAll" :disabled="caching" v-if="pendingCacheCount > 0">
-          {{ caching ? t('newsList.caching') : t('newsList.cacheAction', { count: pendingCacheCount }) }}
-        </button>
-        <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-          <span>{{ refreshing ? t('newsList.refreshing') : t('common.refresh') }}</span>
-        </button>
+      <div class="page-header-right">
+        <div class="page-header-meta">
+          <span v-if="lastUpdated" class="page-header-meta-item">{{ t('newsList.updatedAt', { time: fmtUpdateTime(lastUpdated) }) }}</span>
+        </div>
+        <div class="desktop-only">
+          <div class="page-header-actions">
+            <button class="btn btn-sm" @click="cacheAll" :disabled="caching" v-if="pendingCacheCount > 0">
+              {{ caching ? t('newsList.caching') : t('newsList.cacheAction', { count: pendingCacheCount }) }}
+            </button>
+            <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              <span>{{ refreshing ? t('newsList.refreshing') : t('common.refresh') }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -54,11 +60,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatRelativeTimeFromNow, formatTime as formatClockTime } from '../utils/formatters.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
@@ -71,6 +78,7 @@ const caching = ref(false)
 const page = ref(0)
 const PAGE_SIZE = 20
 const lastUpdated = ref(null)
+const mobilePageActions = useMobilePageActions()
 
 const pendingCacheCount = computed(() => news.value.filter(n => n.cache_status === 'pending' && n.url).length)
 
@@ -162,11 +170,31 @@ function cacheLabel(status) {
   }[status || 'pending'] || t('newsList.cacheStatus.pending')
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    pendingCacheCount.value > 0 ? {
+      key: 'cache-news',
+      label: caching.value ? t('newsList.caching') : t('newsList.cacheAction', { count: pendingCacheCount.value }),
+      disabled: caching.value,
+      onSelect: cacheAll,
+    } : null,
+    {
+      key: 'refresh-news',
+      label: refreshing.value ? t('newsList.refreshing') : t('common.refresh'),
+      disabled: refreshing.value,
+      onSelect: refresh,
+    },
+  ])
+})
+
 onMounted(loadData)
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
 </script>
 
 <style scoped>
-.update-hint { font-size: 11px; color: var(--text-muted); }
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .news-item {

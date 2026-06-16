@@ -1,74 +1,76 @@
 <template>
+  <PullRefreshView :onRefresh="loadData">
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('history.title') }}</h1>
       <button class="btn btn-primary" @click="showForm = true">+ {{ t('history.addRecord') }}</button>
     </div>
 
-    <div class="card history-desktop-filters" style="margin-bottom:20px">
-      <div class="section-title">{{ t('history.filterRecords') }}</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">{{ t('history.asset') }}</label>
-          <select class="form-select" v-model="filters.asset_id">
-            <option value="">{{ t('history.allAssets') }}</option>
-            <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
-          </select>
+    <div class="card page-filter-card desktop-only">
+      <div class="page-filter-grid">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('history.asset') }}</label>
+            <select class="form-select" v-model="filters.asset_id">
+              <option value="">{{ t('history.allAssets') }}</option>
+              <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('history.type') }}</label>
+            <select class="form-select" v-model="filters.type">
+              <option value="">{{ t('history.allTypes') }}</option>
+              <option value="buy">{{ t('history.buy') }}</option>
+              <option value="sell">{{ t('history.sell') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('history.status') }}</label>
+            <select class="form-select" v-model="filters.status">
+              <option value="">{{ t('history.allStatuses') }}</option>
+              <option value="active">{{ t('history.effective') }}</option>
+              <option value="reverted">{{ t('history.reverted') }}</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('history.type') }}</label>
-          <select class="form-select" v-model="filters.type">
-            <option value="">{{ t('history.allTypes') }}</option>
-            <option value="buy">{{ t('history.buy') }}</option>
-            <option value="sell">{{ t('history.sell') }}</option>
-          </select>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('history.currency') }}</label>
+            <select class="form-select" v-model="filters.currency">
+              <option value="">{{ t('history.allCurrencies') }}</option>
+              <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('history.startDate') }}</label>
+            <input class="form-input" type="date" v-model="filters.start_date" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('history.endDate') }}</label>
+            <input class="form-input" type="date" v-model="filters.end_date" />
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('history.status') }}</label>
-          <select class="form-select" v-model="filters.status">
-            <option value="">{{ t('history.allStatuses') }}</option>
-            <option value="active">{{ t('history.effective') }}</option>
-            <option value="reverted">{{ t('history.reverted') }}</option>
-          </select>
+        <div class="page-filter-actions">
+          <button class="btn btn-primary" @click="loadData">{{ t('common.apply') }}</button>
+          <button class="btn" @click="resetFilters">{{ t('common.reset') }}</button>
         </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label class="form-label">{{ t('history.currency') }}</label>
-          <select class="form-select" v-model="filters.currency">
-            <option value="">{{ t('history.allCurrencies') }}</option>
-            <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('history.startDate') }}</label>
-          <input class="form-input" type="date" v-model="filters.start_date" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">{{ t('history.endDate') }}</label>
-          <input class="form-input" type="date" v-model="filters.end_date" />
-        </div>
-      </div>
-      <div class="history-filter-actions">
-        <button class="btn btn-primary" @click="loadData">{{ t('history.applyFilter') }}</button>
-        <button class="btn" @click="resetFilters">{{ t('history.reset') }}</button>
       </div>
     </div>
 
-    <div class="mobile-only history-mobile-toolbar">
-      <div class="history-mobile-toolbar-top">
-        <div class="history-mobile-result">{{ t('history.totalRecords', { count: totalCount }) }}</div>
-        <button class="btn btn-inline-icon" @click="sortDrawerOpen = true">{{ currentSortLabel }}</button>
+    <div class="mobile-only page-mobile-toolbar">
+      <div class="page-mobile-toolbar-row">
+        <div class="page-mobile-summary">{{ t('history.totalRecords', { count: totalCount }) }}</div>
+        <div class="page-mobile-toolbar-actions">
+          <button class="btn btn-inline-icon" @click="sortDrawerOpen = true">{{ currentSortLabel }}</button>
+          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
+            <span>{{ t('common.filter') }}</span>
+            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
+          </button>
+          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
+        </div>
       </div>
-      <div class="history-mobile-toolbar-actions">
-        <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-          <span>{{ t('history.filter') }}</span>
-          <span v-if="activeFilterCount" class="mobile-filter-badge">{{ activeFilterCount }}</span>
-        </button>
-        <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('history.clear') }}</button>
-      </div>
-      <div v-if="activeFilterChips.length" class="history-filter-chips">
-        <button v-for="chip in activeFilterChips" :key="chip.key" class="history-filter-chip" @click="removeFilter(chip.key)">
+      <div v-if="activeFilterChips.length" class="page-filter-chips">
+        <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
           <span>{{ chip.label }}</span>
           <span>×</span>
         </button>
@@ -220,7 +222,7 @@
       </template>
     </AppDrawer>
 
-    <AppDrawer v-model="filterDrawerOpen" :title="t('history.filterRecords')">
+    <AppDrawer v-model="filterDrawerOpen" :title="t('common.filter')">
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">{{ t('history.asset') }}</label>
@@ -267,8 +269,8 @@
       </div>
       <template #footer>
         <div class="history-drawer-actions">
-          <button class="btn" @click="resetDraftFilters">{{ t('history.reset') }}</button>
-          <button class="btn btn-primary" @click="applyMobileFilters">{{ t('history.applyFilter') }}</button>
+          <button class="btn" @click="resetDraftFilters">{{ t('common.reset') }}</button>
+          <button class="btn btn-primary" @click="applyMobileFilters">{{ t('common.apply') }}</button>
         </div>
       </template>
     </AppDrawer>
@@ -311,6 +313,7 @@
       </Transition>
     </Teleport>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
@@ -322,6 +325,7 @@ import { useConfirm } from '../utils/confirm.js'
 import { currencySymbol } from '../utils/currency.js'
 import { formatDateTime, formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
+import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
@@ -584,55 +588,7 @@ watch(filterDrawerOpen, (open) => {
 <style scoped>
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
-.history-desktop-filters { display: block; }
 .currency-help { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
-.history-filter-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-.history-mobile-toolbar {
-  display: none;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.history-mobile-toolbar-top,
-.history-mobile-toolbar-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.history-mobile-result {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-.mobile-filter-badge {
-  min-width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  padding: 0 5px;
-  background: var(--blue);
-  color: #fff;
-  font-size: 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.history-filter-chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.history-filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-dim);
-  font-size: 12px;
-  cursor: pointer;
-}
 .history-drawer-actions {
   display: flex;
   gap: 12px;
@@ -725,13 +681,10 @@ watch(filterDrawerOpen, (open) => {
 .dialog-leave-to .dialog-box { transform: scale(0.95); }
 
 @media (max-width: 768px) {
-  .history-desktop-filters { display: none; }
-  .history-mobile-toolbar { display: flex; }
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .history-mobile-toolbar-actions .btn { flex: 1; }
   .history-card-header { align-items: flex-start; }
-  .history-filter-actions .btn { flex: 1; }
+  .page-filter-actions .btn { flex: 1; }
   .dialog-box { width: 100%; margin: 16px; }
   .dialog-actions { flex-wrap: wrap; gap: 8px; }
   .dialog-actions .btn { flex: 1; min-width: 0; }

@@ -3,15 +3,21 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('marketView.title') }}</h1>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span v-if="lastUpdated" class="update-hint">{{ t('marketView.updatedAt', { time: fmtTime(lastUpdated) }) }}</span>
-        <button class="btn btn-inline-icon" @click="refresh(true)" :disabled="loading">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-          <span>{{ loading ? t('marketView.refreshing') : t('marketView.refresh') }}</span>
-        </button>
+      <div class="page-header-right">
+        <div class="page-header-meta">
+          <span v-if="lastUpdated" class="page-header-meta-item">{{ t('marketView.updatedAt', { time: fmtTime(lastUpdated) }) }}</span>
+        </div>
+        <div class="desktop-only">
+          <div class="page-header-actions">
+            <button class="btn btn-inline-icon" @click="refresh(true)" :disabled="loading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              <span>{{ loading ? t('marketView.refreshing') : t('marketView.refresh') }}</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -65,12 +71,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatNumber, formatTime, parseDateTime } from '../utils/formatters.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
@@ -80,6 +87,7 @@ const prices = ref([])
 const loading = ref(false)
 const initialized = ref(false)
 const lastUpdated = ref(null)
+const mobilePageActions = useMobilePageActions()
 let refreshTimer = null
 
 async function refresh(force = false) {
@@ -148,6 +156,17 @@ watch(() => runtimeSettingsStore.values.market_refresh_interval, (nextValue, pre
   startAutoRefresh()
 })
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'refresh-market',
+      label: loading.value ? t('marketView.refreshing') : t('marketView.refresh'),
+      disabled: loading.value,
+      onSelect: () => refresh(true),
+    },
+  ])
+})
+
 onMounted(async () => {
   await ensureRuntimeSettings()
   await refresh(false)
@@ -156,11 +175,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopAutoRefresh()
+  mobilePageActions.clearActions()
 })
 </script>
 
 <style scoped>
-.update-hint { font-size: 11px; color: var(--text-muted); }
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .market-card { transition: transform 0.15s; }

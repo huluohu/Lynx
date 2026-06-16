@@ -1,24 +1,61 @@
 <template>
+  <PullRefreshView :onRefresh="refreshPage">
   <div>
-    <div class="page-header"><h1 class="page-title">{{ t('plans.title') }}</h1></div>
+    <div class="page-header page-header-mobile-empty"><h1 class="page-title">{{ t('plans.title') }}</h1></div>
 
-    <div class="filter-bar">
-      <select class="form-select filter-select" v-model="filterAsset" @change="loadData">
-        <option value="">{{ t('plans.allAssets') }}</option>
-        <option v-for="a in assets" :key="a.id" :value="a.id">{{ a.icon }} {{ a.name }}</option>
-      </select>
-      <select class="form-select filter-select" v-model="filterStrategy" @change="loadData">
-        <option value="">{{ t('plans.allStrategies') }}</option>
-        <option v-for="s in strategies" :key="s.id" :value="s.id">{{ s.name }}</option>
-      </select>
-      <select class="form-select filter-select" v-model="filterStatus" @change="loadData">
-        <option value="">{{ t('plans.allStatuses') }}</option>
-        <option value="pending">{{ t('plans.pending') }}</option>
-        <option value="triggered">{{ t('plans.triggered') }}</option>
-        <option value="partial">{{ t('plans.partial') }}</option>
-        <option value="executed">{{ t('plans.executed') }}</option>
-        <option value="cancelled">{{ t('plans.cancelled') }}</option>
-      </select>
+    <div class="card page-filter-card desktop-only">
+      <div class="page-filter-grid">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('history.asset') }}</label>
+            <select class="form-select" v-model="draftFilters.assetId">
+              <option value="">{{ t('plans.allAssets') }}</option>
+              <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.icon }} {{ a.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('nav.strategies') }}</label>
+            <select class="form-select" v-model="draftFilters.strategyId">
+              <option value="">{{ t('plans.allStrategies') }}</option>
+              <option v-for="s in strategies" :key="s.id" :value="String(s.id)">{{ s.name }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('history.status') }}</label>
+            <select class="form-select" v-model="draftFilters.status">
+              <option value="">{{ t('plans.allStatuses') }}</option>
+              <option value="pending">{{ t('plans.pending') }}</option>
+              <option value="triggered">{{ t('plans.triggered') }}</option>
+              <option value="partial">{{ t('plans.partial') }}</option>
+              <option value="executed">{{ t('plans.executed') }}</option>
+              <option value="cancelled">{{ t('plans.cancelled') }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="page-filter-actions">
+          <button class="btn btn-primary" @click="applyFilters">{{ t('common.apply') }}</button>
+          <button class="btn" @click="resetFilters">{{ t('common.reset') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-mobile-toolbar">
+      <div class="page-mobile-toolbar-row">
+        <div class="page-mobile-summary">{{ t('history.totalRecords', { count: filteredPlans.length }) }}</div>
+        <div class="page-mobile-toolbar-actions">
+          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
+            <span>{{ t('common.filter') }}</span>
+            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
+          </button>
+          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
+        </div>
+      </div>
+      <div v-if="activeFilterChips.length" class="page-filter-chips">
+        <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
+          <span>{{ chip.label }}</span>
+          <span>×</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="selectedPlan" class="card execute-card">
@@ -54,10 +91,10 @@
           <input type="checkbox" v-model="executeForm.partial" />
           <span>{{ t('plans.partialExecute') }}</span>
         </label>
-        <div class="execute-actions">
+        <MobileActionBar>
           <button type="submit" class="btn btn-primary" :disabled="executeSubmitting">{{ executeSubmitting ? t('plans.executing') : t('plans.confirmExecute') }}</button>
           <button type="button" class="btn" @click="closeExecuteForm">{{ t('common.cancel') }}</button>
-        </div>
+        </MobileActionBar>
       </form>
     </div>
 
@@ -125,16 +162,54 @@
       </div>
     </div>
     <div v-else class="card empty"><div class="empty-icon">📋</div><p>{{ t('plans.noPlans') }}</p></div>
+
+    <AppDrawer v-model="filterDrawerOpen" :title="t('common.filter')">
+      <div class="form-group">
+        <label class="form-label">{{ t('history.asset') }}</label>
+        <select class="form-select" v-model="draftFilters.assetId">
+          <option value="">{{ t('plans.allAssets') }}</option>
+          <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.icon }} {{ a.name }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">{{ t('nav.strategies') }}</label>
+        <select class="form-select" v-model="draftFilters.strategyId">
+          <option value="">{{ t('plans.allStrategies') }}</option>
+          <option v-for="s in strategies" :key="s.id" :value="String(s.id)">{{ s.name }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">{{ t('history.status') }}</label>
+        <select class="form-select" v-model="draftFilters.status">
+          <option value="">{{ t('plans.allStatuses') }}</option>
+          <option value="pending">{{ t('plans.pending') }}</option>
+          <option value="triggered">{{ t('plans.triggered') }}</option>
+          <option value="partial">{{ t('plans.partial') }}</option>
+          <option value="executed">{{ t('plans.executed') }}</option>
+          <option value="cancelled">{{ t('plans.cancelled') }}</option>
+        </select>
+      </div>
+      <template #footer>
+        <div class="plan-filter-actions">
+          <button class="btn" @click="resetDraftFilters">{{ t('common.reset') }}</button>
+          <button class="btn btn-primary" @click="applyFilters">{{ t('common.apply') }}</button>
+        </div>
+      </template>
+    </AppDrawer>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
+import MobileActionBar from '../components/MobileActionBar.vue'
+import AppDrawer from '../components/AppDrawer.vue'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const { t } = useI18n()
@@ -142,20 +217,26 @@ const plans = ref([])
 const assets = ref([])
 const strategies = ref([])
 const loading = ref(true)
-const filterAsset = ref('')
-const filterStrategy = ref('')
-const filterStatus = ref('')
+const filterDrawerOpen = ref(false)
+const filters = reactive({ assetId: '', strategyId: '', status: '' })
+const draftFilters = reactive({ assetId: '', strategyId: '', status: '' })
 const selectedPlanId = ref(null)
 const executeSubmitting = ref(false)
 const executeForm = reactive({ price: '', quantity: '', partial: false, currency: 'CNY' })
 
 const filteredPlans = computed(() => {
   let result = plans.value
-  if (filterStatus.value) {
-    result = result.filter(p => p.status === filterStatus.value)
+  if (filters.status) {
+    result = result.filter(p => p.status === filters.status)
   }
   return result
 })
+const activeFilterCount = computed(() => ['assetId', 'strategyId', 'status'].filter((key) => filters[key]).length)
+const activeFilterChips = computed(() => ([
+  filters.assetId ? { key: 'assetId', label: assets.value.find((asset) => String(asset.id) === filters.assetId)?.name || filters.assetId } : null,
+  filters.strategyId ? { key: 'strategyId', label: strategies.value.find((strategy) => String(strategy.id) === filters.strategyId)?.name || filters.strategyId } : null,
+  filters.status ? { key: 'status', label: statusLabel(filters.status) } : null,
+].filter(Boolean)))
 
 const selectedPlan = computed(() => plans.value.find(p => String(p.id) === String(selectedPlanId.value)) || null)
 
@@ -163,8 +244,8 @@ async function loadData() {
   loading.value = true
   try {
     const params = new URLSearchParams()
-    if (filterAsset.value) params.set('asset_id', filterAsset.value)
-    if (filterStrategy.value) params.set('strategy_id', filterStrategy.value)
+    if (filters.assetId) params.set('asset_id', filters.assetId)
+    if (filters.strategyId) params.set('strategy_id', filters.strategyId)
     const res = await api(`/api/plans?${params.toString()}`)
     const json = await res.json()
     plans.value = json.data || []
@@ -174,6 +255,53 @@ async function loadData() {
   } finally {
     loading.value = false
   }
+}
+
+async function refreshPage() {
+  const [assetRes, strategyRes] = await Promise.all([
+    api('/api/assets'),
+    api('/api/strategies'),
+  ])
+  const assetJson = await assetRes.json()
+  const strategyJson = await strategyRes.json()
+  assets.value = assetJson.data || []
+  strategies.value = strategyJson.data || []
+  await loadData()
+}
+
+function syncDraftFilters() {
+  draftFilters.assetId = filters.assetId
+  draftFilters.strategyId = filters.strategyId
+  draftFilters.status = filters.status
+}
+
+function resetDraftFilters() {
+  draftFilters.assetId = ''
+  draftFilters.strategyId = ''
+  draftFilters.status = ''
+}
+
+async function applyFilters() {
+  filters.assetId = draftFilters.assetId
+  filters.strategyId = draftFilters.strategyId
+  filters.status = draftFilters.status
+  filterDrawerOpen.value = false
+  await loadData()
+}
+
+async function resetFilters() {
+  filters.assetId = ''
+  filters.strategyId = ''
+  filters.status = ''
+  syncDraftFilters()
+  filterDrawerOpen.value = false
+  await loadData()
+}
+
+async function removeFilter(key) {
+  filters[key] = ''
+  syncDraftFilters()
+  await loadData()
 }
 
 function strategyName(id) {
@@ -294,29 +422,15 @@ async function submitExecution() {
 }
 
 onMounted(async () => {
-  const [assetRes, strategyRes] = await Promise.all([
-    api('/api/assets'),
-    api('/api/strategies'),
-  ])
-  const assetJson = await assetRes.json()
-  const strategyJson = await strategyRes.json()
-  assets.value = assetJson.data || []
-  strategies.value = strategyJson.data || []
-  await loadData()
+  syncDraftFilters()
+  await refreshPage()
+})
+watch(filterDrawerOpen, (open) => {
+  if (open) syncDraftFilters()
 })
 </script>
 
 <style scoped>
-.filter-bar {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.filter-select {
-  min-width: 140px;
-  max-width: 200px;
-}
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
 .plan-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
@@ -373,13 +487,19 @@ onMounted(async () => {
   display: flex;
   gap: 12px;
 }
+.plan-filter-actions {
+  display: flex;
+  gap: 12px;
+}
+.plan-filter-actions .btn {
+  flex: 1;
+}
 
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .filter-select { min-width: 0; flex: 1; }
+  .execute-card { margin-bottom: 120px; }
   .execute-grid { grid-template-columns: 1fr; }
   .execute-card-header { flex-direction: column; align-items: stretch; }
-  .execute-actions { flex-direction: column; }
 }
 </style>

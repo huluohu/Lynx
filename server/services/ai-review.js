@@ -1,5 +1,6 @@
 import { getDb } from '../db/database.js';
 import { getAgentConfig, callLLM } from './strategy-agent.js';
+import { getLatestPriceRows } from './latest-price.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('ai-review');
@@ -163,17 +164,7 @@ export async function generateStrategyReview(strategyId) {
       WHERE h.status = 'active' AND h.asset_id IN (${placeholders})`).all(...assetIds)
     : [];
 
-  const latestPrices = assetIds.length
-    ? db.prepare(`SELECT pc.asset_id, pc.price, pc.currency, pc.fetched_at, a.name AS asset_name, a.symbol
-      FROM price_cache pc
-      JOIN (
-        SELECT asset_id, MAX(fetched_at) AS max_ts
-        FROM price_cache
-        WHERE asset_id IN (${placeholders})
-        GROUP BY asset_id
-      ) latest ON latest.asset_id = pc.asset_id AND latest.max_ts = pc.fetched_at
-      LEFT JOIN assets a ON pc.asset_id = a.id`).all(...assetIds)
-    : [];
+  const latestPrices = assetIds.length ? getLatestPriceRows(db, assetIds) : [];
 
   const latestPriceMap = new Map(latestPrices.map(item => [item.asset_id, item]));
   const realizedPnl = trades.reduce((sum, trade) => sum + (Number(trade.pnl) || 0), 0);

@@ -12,15 +12,9 @@
             </div>
             <div class="header-right">
               <div v-if="!isDone && !error" class="header-spinner"></div>
-              <!-- Cancel button (only while running) -->
-              <button v-if="!isDone && !error && !confirmingCancel" class="btn-cancel" @click="confirmingCancel = true">
+              <button v-if="!isDone && !error" class="btn-cancel" @click="$emit('cancel')">
                 {{ t('aiStrategyGenerator.cancelGenerate') }}
               </button>
-              <div v-if="confirmingCancel" class="cancel-confirm">
-                <span class="cancel-confirm-text">{{ t('aiStrategyGenerator.cancelConfirm') }}?</span>
-                <button class="btn-cancel-yes" @click="doCancel">{{ t('common.yes', '是') }}</button>
-                <button class="btn-cancel-no" @click="confirmingCancel = false">{{ t('common.no', '否') }}</button>
-              </div>
             </div>
           </div>
 
@@ -92,7 +86,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -106,13 +100,6 @@ const props = defineProps({
   evalScore: { type: Number, default: null },
   grade: { type: String, default: null },
 })
-
-const confirmingCancel = ref(false)
-
-function doCancel() {
-  confirmingCancel.value = false
-  emit('cancel')
-}
 
 const isDone = computed(() => !props.error && props.steps.length > 0 && props.steps.every(s => s.status === 'done'))
 
@@ -241,36 +228,6 @@ function stepLabel(id) {
 .btn-cancel:hover { border-color: #ef4444; color: #ef4444; }
 .btn-cancel:active { background: rgba(239,68,68,0.08); }
 
-/* Cancel confirm inline */
-.cancel-confirm {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.cancel-confirm-text {
-  font-size: 12px;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-.btn-cancel-yes {
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: #ef4444;
-  color: #fff;
-  border: none;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-cancel-no {
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  cursor: pointer;
-}
 
 /* Error body */
 .error-body {

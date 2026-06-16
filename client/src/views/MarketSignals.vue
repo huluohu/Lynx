@@ -1,8 +1,24 @@
 <template>
+  <PullRefreshView :onRefresh="refreshSignals">
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('signals.title') }}</h1>
-      <button class="btn" @click="refreshSignals" :disabled="loading">{{ loading ? t('signals.refreshing') : t('signals.refresh') }}</button>
+      <div class="page-header-right">
+        <div class="page-header-meta">
+          <span v-if="latestGeneratedAt" class="page-header-meta-item">{{ t('signals.generatedAt') }} {{ fmtTime(latestGeneratedAt) }}</span>
+        </div>
+        <div class="desktop-only">
+          <div class="page-header-actions">
+            <button class="btn btn-inline-icon" @click="refreshSignals" :disabled="loading">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              <span>{{ loading ? t('signals.refreshing') : t('signals.refresh') }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div v-if="!initialized" class="grid-2">
@@ -63,20 +79,33 @@
       <p>{{ t('signals.empty') }}</p>
     </div>
   </div>
+  </PullRefreshView>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatDateTime, parseDateTime } from '../utils/formatters.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
+import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const { t } = useI18n()
 const signals = ref([])
 const loading = ref(false)
 const initialized = ref(false)
+const mobilePageActions = useMobilePageActions()
+const latestGeneratedAt = computed(() => {
+  const dates = signals.value
+    .map((signal) => signal.created_at)
+    .filter(Boolean)
+    .map((value) => parseDateTime(value))
+    .filter((date) => date && !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())
+  return dates[0] || null
+})
 
 async function loadSignals() {
   loading.value = true
@@ -132,7 +161,22 @@ function isExpired(value) {
   return d.getTime() < Date.now()
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'refresh-signals',
+      label: loading.value ? t('signals.refreshing') : t('signals.refresh'),
+      disabled: loading.value,
+      onSelect: refreshSignals,
+    },
+  ])
+})
+
 onMounted(loadSignals)
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
 </script>
 
 <style scoped>
@@ -140,6 +184,16 @@ onMounted(loadSignals)
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+.btn-inline-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-inline-icon svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 .signal-head {
   display: flex;

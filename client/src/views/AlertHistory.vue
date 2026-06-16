@@ -1,33 +1,71 @@
 <template>
   <PullRefreshView :onRefresh="loadAlerts">
   <div>
-    <div class="page-header">
+    <div class="page-header page-header-mobile-empty">
       <h1 class="page-title">{{ t('alertHistory.title') }}</h1>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button v-if="hasUnreadAlerts" class="btn" @click="markAllAsRead" :disabled="bulkReading">{{ bulkReading ? t('alertHistory.markingAllRead') : t('alertHistory.markAllRead') }}</button>
-        <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? t('alertHistory.clearing') : t('alertHistory.clearRead') }}</button>
+      <div class="page-header-right">
+        <div class="page-header-actions">
+          <button v-if="hasUnreadAlerts" class="btn" @click="markAllAsRead" :disabled="bulkReading">{{ bulkReading ? t('alertHistory.markingAllRead') : t('alertHistory.markAllRead') }}</button>
+          <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? t('alertHistory.clearing') : t('alertHistory.clearRead') }}</button>
+        </div>
       </div>
     </div>
 
-    <div class="filters">
-      <select class="form-select filter-select" v-model="filters.type" @change="applyFilters">
-        <option value="">{{ t('alertHistory.filters.allTypes') }}</option>
-        <option value="plan_triggered">{{ t('alertHistory.types.planTriggered') }}</option>
-        <option value="plan_approaching">{{ t('alertHistory.types.planApproaching') }}</option>
-        <option value="stop_loss">{{ t('alertHistory.types.stopLoss') }}</option>
-        <option value="price_swing">{{ t('alertHistory.types.priceSwing') }}</option>
-        <option value="trade_executed">{{ t('alertHistory.types.tradeExecuted') }}</option>
-      </select>
-      <select class="form-select filter-select" v-model="filters.severity" @change="applyFilters">
-        <option value="">{{ t('alertHistory.filters.allSeverities') }}</option>
-        <option value="danger">{{ t('alertHistory.severity.high') }}</option>
-        <option value="warning">{{ t('alertHistory.severity.medium') }}</option>
-        <option value="info">{{ t('alertHistory.severity.low') }}</option>
-      </select>
-      <select class="form-select filter-select" v-model="filters.asset_id" @change="applyFilters">
-        <option value="">{{ t('alertHistory.filters.allAssets') }}</option>
-        <option v-for="asset in assets" :key="asset.id" :value="String(asset.id)">{{ asset.name }}</option>
-      </select>
+    <div class="card page-filter-card desktop-only">
+      <div class="page-filter-grid">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('alertHistory.columns.content') }}</label>
+            <select class="form-select" v-model="filters.type">
+              <option value="">{{ t('alertHistory.filters.allTypes') }}</option>
+              <option value="plan_triggered">{{ t('alertHistory.types.planTriggered') }}</option>
+              <option value="plan_approaching">{{ t('alertHistory.types.planApproaching') }}</option>
+              <option value="stop_loss">{{ t('alertHistory.types.stopLoss') }}</option>
+              <option value="price_swing">{{ t('alertHistory.types.priceSwing') }}</option>
+              <option value="trade_executed">{{ t('alertHistory.types.tradeExecuted') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('alertHistory.filters.severity') }}</label>
+            <select class="form-select" v-model="filters.severity">
+              <option value="">{{ t('alertHistory.filters.allSeverities') }}</option>
+              <option value="danger">{{ t('alertHistory.severity.high') }}</option>
+              <option value="warning">{{ t('alertHistory.severity.medium') }}</option>
+              <option value="info">{{ t('alertHistory.severity.low') }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('alertHistory.columns.asset') }}</label>
+            <select class="form-select" v-model="filters.asset_id">
+              <option value="">{{ t('alertHistory.filters.allAssets') }}</option>
+              <option v-for="asset in assets" :key="asset.id" :value="String(asset.id)">{{ asset.name }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="page-filter-actions">
+          <button class="btn btn-primary" @click="applyFilters">{{ t('common.apply') }}</button>
+          <button class="btn" @click="resetFilters">{{ t('common.reset') }}</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mobile-only page-mobile-toolbar">
+      <div class="page-mobile-toolbar-row">
+        <div class="page-mobile-summary">{{ t('alertHistory.totalRecords', { count: pagination.total || alerts.length }) }}</div>
+        <div class="page-mobile-toolbar-actions">
+          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
+            <span>{{ t('common.filter') }}</span>
+            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
+          </button>
+          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
+        </div>
+      </div>
+      <div v-if="activeFilterChips.length" class="page-filter-chips">
+        <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
+          <span>{{ chip.label }}</span>
+          <span>×</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="card">
@@ -114,17 +152,58 @@
       <p>{{ t('alertHistory.empty') }}</p>
     </div>
   </div>
+  <AppDrawer v-model="filterDrawerOpen" :title="t('common.filter')">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">{{ t('alertHistory.columns.content') }}</label>
+        <select class="form-select" v-model="draftFilters.type">
+          <option value="">{{ t('alertHistory.filters.allTypes') }}</option>
+          <option value="plan_triggered">{{ t('alertHistory.types.planTriggered') }}</option>
+          <option value="plan_approaching">{{ t('alertHistory.types.planApproaching') }}</option>
+          <option value="stop_loss">{{ t('alertHistory.types.stopLoss') }}</option>
+          <option value="price_swing">{{ t('alertHistory.types.priceSwing') }}</option>
+          <option value="trade_executed">{{ t('alertHistory.types.tradeExecuted') }}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">{{ t('alertHistory.filters.severity') }}</label>
+        <select class="form-select" v-model="draftFilters.severity">
+          <option value="">{{ t('alertHistory.filters.allSeverities') }}</option>
+          <option value="danger">{{ t('alertHistory.severity.high') }}</option>
+          <option value="warning">{{ t('alertHistory.severity.medium') }}</option>
+          <option value="info">{{ t('alertHistory.severity.low') }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">{{ t('alertHistory.columns.asset') }}</label>
+        <select class="form-select" v-model="draftFilters.asset_id">
+          <option value="">{{ t('alertHistory.filters.allAssets') }}</option>
+          <option v-for="asset in assets" :key="asset.id" :value="String(asset.id)">{{ asset.name }}</option>
+        </select>
+      </div>
+    </div>
+    <template #footer>
+      <div class="history-drawer-actions">
+        <button class="btn" @click="resetDraftFilters">{{ t('common.reset') }}</button>
+        <button class="btn btn-primary" @click="applyMobileFilters">{{ t('common.apply') }}</button>
+      </div>
+    </template>
+  </AppDrawer>
   </PullRefreshView>
 </template>
 
 <script setup>
-import { computed, reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, watch, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationsStore } from '../stores/notifications.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
 import { formatDateTime } from '../utils/formatters.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
+import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
@@ -138,7 +217,19 @@ const assets = ref([])
 const alerts = ref([])
 const pagination = ref({ page: 1, page_size: 20, total: 0, total_pages: 1 })
 const filters = reactive({ type: '', severity: '', asset_id: '', page: 1, page_size: 20 })
+const draftFilters = reactive({ type: '', severity: '', asset_id: '' })
+const filterDrawerOpen = ref(false)
+const mobilePageActions = useMobilePageActions()
 const hasUnreadAlerts = computed(() => alerts.value.some((item) => item.status !== 'read'))
+const activeFilterCount = computed(() => ['type', 'severity', 'asset_id'].filter(key => filters[key]).length)
+const activeFilterChips = computed(() => {
+  const assetName = assets.value.find(asset => String(asset.id) === filters.asset_id)?.name
+  return [
+    filters.type ? { key: 'type', label: typeLabel(filters.type) } : null,
+    filters.severity ? { key: 'severity', label: severityLabel(filters.severity) } : null,
+    filters.asset_id ? { key: 'asset_id', label: assetName || t('alertHistory.columns.asset') } : null,
+  ].filter(Boolean)
+})
 
 async function loadAssets() {
   const res = await api('/api/assets')
@@ -173,6 +264,44 @@ async function loadAlerts() {
 
 function applyFilters() {
   filters.page = 1
+  syncDraftFilters()
+  loadAlerts()
+}
+
+function resetFilters() {
+  filters.type = ''
+  filters.severity = ''
+  filters.asset_id = ''
+  filters.page = 1
+  syncDraftFilters()
+  loadAlerts()
+}
+
+function syncDraftFilters() {
+  draftFilters.type = filters.type
+  draftFilters.severity = filters.severity
+  draftFilters.asset_id = filters.asset_id
+}
+
+function resetDraftFilters() {
+  draftFilters.type = ''
+  draftFilters.severity = ''
+  draftFilters.asset_id = ''
+}
+
+async function applyMobileFilters() {
+  filters.type = draftFilters.type
+  filters.severity = draftFilters.severity
+  filters.asset_id = draftFilters.asset_id
+  filters.page = 1
+  filterDrawerOpen.value = false
+  await loadAlerts()
+}
+
+function removeFilter(key) {
+  filters[key] = ''
+  filters.page = 1
+  syncDraftFilters()
   loadAlerts()
 }
 
@@ -291,26 +420,43 @@ function fmtDateTime(value) {
   }) : '-'
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    hasUnreadAlerts.value ? {
+      key: 'mark-all-read',
+      label: bulkReading.value ? t('alertHistory.markingAllRead') : t('alertHistory.markAllRead'),
+      disabled: bulkReading.value,
+      onSelect: markAllAsRead,
+    } : null,
+    {
+      key: 'clear-read',
+      label: clearing.value ? t('alertHistory.clearing') : t('alertHistory.clearRead'),
+      disabled: clearing.value,
+      danger: true,
+      onSelect: clearRead,
+    },
+  ])
+})
+
 onMounted(async () => {
   try {
     await Promise.all([loadAssets(), loadAlerts()])
+    syncDraftFilters()
   } catch {
     loading.value = false
   }
 })
+
+watch(filterDrawerOpen, (open) => {
+  if (open) syncDraftFilters()
+})
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
 </script>
 
 <style scoped>
-.filters {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-.filter-select {
-  flex: 1 1 160px;
-  max-width: 220px;
-}
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
 .actions-cell {
@@ -408,15 +554,19 @@ onMounted(async () => {
   font-size: 13px;
   color: var(--text-muted);
 }
+.history-drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
 
 @media (max-width: 768px) {
-  .filter-select {
-    flex: 1 1 100%;
-    max-width: none;
-  }
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
   .pagination { justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   .pagination .btn { min-height: 36px; padding: 8px 12px; }
+  .history-drawer-actions {
+    justify-content: space-between;
+  }
 }
 </style>

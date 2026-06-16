@@ -2,40 +2,15 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ asset.icon }} {{ asset.name }}</h1>
-      <div class="page-actions hide-on-mobile">
-        <button class="btn btn-primary" @click="showTxDrawer = true">+ {{ t('assetDetail.recordTrade') }}</button>
-        <button class="btn" @click="showAIDrawer = true">{{ t('assetDetail.aiAdvice') }}</button>
-        <button class="btn" @click="showEditDrawer = true">{{ t('assetDetail.edit') }}</button>
-        <button class="btn btn-danger" @click="confirmDelete">{{ t('assetDetail.delete') }}</button>
+      <div class="page-header-right desktop-only">
+        <div class="page-header-actions">
+          <button class="btn btn-primary" @click="showTxDrawer = true">+ {{ t('assetDetail.recordTrade') }}</button>
+          <button class="btn" @click="showAIDrawer = true">{{ t('assetDetail.aiAdvice') }}</button>
+          <button class="btn" @click="showEditDrawer = true">{{ t('assetDetail.edit') }}</button>
+          <button class="btn btn-danger" @click="confirmDelete">{{ t('assetDetail.delete') }}</button>
+        </div>
       </div>
-      <button class="btn btn-icon show-on-mobile" @click="showActions = !showActions">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-      </button>
     </div>
-
-    <!-- Mobile action sheet -->
-    <div v-if="showActions" class="action-sheet-overlay" @click="showActions = false"></div>
-    <transition name="slide-up">
-      <div v-if="showActions" class="action-sheet">
-        <div class="action-sheet-item" @click="showTxDrawer = true; showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          {{ t('assetDetail.recordTrade') }}
-        </div>
-        <div class="action-sheet-item" @click="showAIDrawer = true; showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-          {{ t('assetDetail.aiAdviceTitle') }}
-        </div>
-        <div class="action-sheet-item" @click="showEditDrawer = true; showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          {{ t('assetDetail.editAsset') }}
-        </div>
-        <div class="action-sheet-item danger" @click="confirmDelete(); showActions = false">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          {{ t('assetDetail.deleteAsset') }}
-        </div>
-        <div class="action-sheet-cancel" @click="showActions = false">{{ t('common.cancel') }}</div>
-      </div>
-    </transition>
 
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
@@ -94,12 +69,12 @@
     </div>
 
     <!-- Transaction Drawer -->
-    <AppDrawer v-model="showTxDrawer" :title="t('assetDetail.recordTrade')">
+    <AppDrawer v-model="showTxDrawer" :title="t('assetDetail.recordTrade')" mobileHeight="fixed">
       <TransactionForm :asset-id="route.params.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
     </AppDrawer>
 
     <!-- Edit Drawer -->
-    <AppDrawer v-model="showEditDrawer" :title="t('assetDetail.editAsset')">
+    <AppDrawer v-model="showEditDrawer" :title="t('assetDetail.editAsset')" mobileHeight="fixed">
       <form @submit.prevent="saveEdit">
         <div class="form-group"><label class="form-label">{{ t('assets.fields.name') }}</label><input class="form-input" v-model="editForm.name" required /></div>
         <div class="form-group"><label class="form-label">{{ t('assets.fields.symbol') }}</label><input class="form-input" v-model="editForm.symbol" /></div>
@@ -134,10 +109,10 @@
           <div class="form-group"><label class="form-label">{{ t('assetDetail.stopLoss') }}</label><input class="form-input" type="number" step="any" v-model="editForm.stop_loss" /></div>
         </div>
 
-        <div style="display:flex;gap:10px;margin-top:16px">
+        <MobileActionBar>
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? t('assetDetail.saving') : t('assetDetail.save') }}</button>
           <button type="button" class="btn" @click="showEditDrawer = false">{{ t('common.cancel') }}</button>
-        </div>
+        </MobileActionBar>
       </form>
     </AppDrawer>
 
@@ -151,16 +126,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
+import MobileActionBar from '../components/MobileActionBar.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { formatNumber } from '../utils/formatters.js'
 
 useSwipeBack()
@@ -177,10 +154,10 @@ const showTxDrawer = ref(false)
 const showEditDrawer = ref(false)
 const showAIDrawer = ref(false)
 const showDeleteConfirm = ref(false)
-const showActions = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
 const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '', quantity: '', avg_cost: '', total_invested: '', target_price: '', stop_loss: '' })
+const mobilePageActions = useMobilePageActions()
 
 watch([() => editForm.quantity, () => editForm.avg_cost], ([qty, cost]) => {
   if (qty && cost) {
@@ -292,13 +269,40 @@ function fmt(n) {
   return formatNumber(Number(n))
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'record-trade',
+      label: t('assetDetail.recordTrade'),
+      onSelect: () => { showTxDrawer.value = true },
+    },
+    {
+      key: 'ai-advice',
+      label: t('assetDetail.aiAdviceTitle'),
+      onSelect: () => { showAIDrawer.value = true },
+    },
+    {
+      key: 'edit',
+      label: t('assetDetail.editAsset'),
+      onSelect: () => { showEditDrawer.value = true },
+    },
+    {
+      key: 'delete',
+      label: t('assetDetail.deleteAsset'),
+      danger: true,
+      onSelect: confirmDelete,
+    },
+  ])
+})
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
+
 onMounted(loadData)
 </script>
 
 <style scoped>
-.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.hide-on-mobile { display: flex; gap: 8px; flex-wrap: wrap; }
-.show-on-mobile { display: none; }
 .info-list { font-size: 14px; }
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .info-row:last-child { border-bottom: none; }
@@ -315,8 +319,6 @@ onMounted(loadData)
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .hide-on-mobile { display: none !important; }
-  .show-on-mobile { display: flex !important; }
   .info-row { flex-wrap: wrap; gap: 4px; }
   .tx-card-body { flex-wrap: wrap; gap: 4px; font-size: 13px; }
   .tx-card { padding: 12px 14px; }

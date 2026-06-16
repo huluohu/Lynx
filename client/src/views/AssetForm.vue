@@ -76,10 +76,10 @@
           </div>
         </div>
 
-        <div style="display:flex;gap:12px;margin-top:8px">
+        <MobileActionBar>
           <button type="submit" class="btn btn-primary" :disabled="submitting">{{ submitting ? t('assets.creating') : t('assets.createAsset') }}</button>
           <router-link to="/assets" class="btn">{{ t('common.cancel') }}</router-link>
-        </div>
+        </MobileActionBar>
       </form>
     </div>
   </div>
@@ -91,6 +91,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import MobileActionBar from '../components/MobileActionBar.vue'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -167,6 +168,9 @@ async function submit() {
 .preset-icon { font-size: 20px; }
 .preset-name { font-size: 11px; color: var(--text-dim); }
 @media (max-width: 768px) {
+  .card {
+    margin-bottom: 120px;
+  }
   .preset-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
   .preset-btn { padding: 8px 2px; }
   .preset-icon { font-size: 16px; }

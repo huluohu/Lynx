@@ -16,7 +16,7 @@ function normalizeSignal(row) {
   }, ['created_at', 'valid_until'], { assumeUtcWhenNoTimezone: true });
 }
 
-function getLatestSignals(db, assetId = null) {
+export function getLatestSignals(db, assetId = null) {
   const params = [];
   let sql = `SELECT ms.*, a.name AS asset_name, a.symbol, a.icon, a.type, a.currency
     FROM market_signals ms
