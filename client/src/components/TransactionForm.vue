@@ -50,12 +50,14 @@
 import { reactive, ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
+import { useToast } from '../utils/toast.js'
 
 const props = defineProps({
   assetId: { type: [Number, String], required: true },
 })
 const emit = defineEmits(['success', 'cancel'])
 const { t } = useI18n()
+const toast = useToast()
 
 const submitting = ref(false)
 const form = reactive({
@@ -94,7 +96,7 @@ async function submit() {
     if (!json.success) throw new Error(json.error || t('transactionForm.submitFailed'))
     emit('success')
   } catch (e) {
-    alert(e.message)
+    toast.error(e.message)
   }
   submitting.value = false
 }

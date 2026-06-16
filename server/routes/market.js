@@ -1,28 +1,10 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
-import { fetchPrice } from '../services/price.js';
 import { createLogger } from '../utils/logger.js';
-import { normalizeApiTimestamp } from '../utils/datetime.js';
+import { getCachedMarketSnapshot, getMarketSnapshot } from '../services/market-cache.js';
 
 const router = Router();
 const log = createLogger('market');
-const FRESH_CACHE_WINDOW_MS = 5 * 60 * 1000;
-
-function buildCachedResult(asset, cachedRow, { stale = false, emptyCache = false } = {}) {
-  return {
-    asset_id: asset.id,
-    name: asset.name,
-    symbol: asset.symbol,
-    type: asset.type,
-    price: cachedRow?.price || null,
-    currency: cachedRow?.currency || null,
-    source: cachedRow?.source || asset.data_source || null,
-    fetched_at: normalizeApiTimestamp(cachedRow?.fetched_at || null, { assumeUtcWhenNoTimezone: true }),
-    cached: true,
-    stale,
-    empty_cache: emptyCache,
-  };
-}
 
 // GET 所有资产价格
 router.get('/prices', async (req, res) => {
@@ -31,16 +13,7 @@ router.get('/prices', async (req, res) => {
   const force = req.query.force === '1';
 
   if (!force) {
-    const results = assets.map((asset) => {
-      const cached = db.prepare('SELECT * FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(asset.id);
-      if (!cached) {
-        return buildCachedResult(asset, null, { stale: true, emptyCache: true });
-      }
-
-      const fetchedAt = new Date(cached.fetched_at).getTime();
-      const stale = Number.isNaN(fetchedAt) ? true : (Date.now() - fetchedAt > FRESH_CACHE_WINDOW_MS);
-      return buildCachedResult(asset, cached, { stale });
-    });
+    const results = assets.map((asset) => getCachedMarketSnapshot(db, asset));
 
     log.info('Prices served from cache', {
       total: assets.length,
@@ -52,37 +25,12 @@ router.get('/prices', async (req, res) => {
     return;
   }
 
-  const fetched = await Promise.allSettled(assets.map((asset) => fetchPrice(asset)));
-  const freshResults = assets.map((asset, index) => {
-    const result = fetched[index].status === 'fulfilled' ? fetched[index].value : null;
-    if (result) {
-      db.prepare('INSERT INTO price_cache (asset_id, price, currency, source) VALUES (?, ?, ?, ?)')
-        .run(asset.id, result.price, result.currency, result.source);
-      const cached = db.prepare('SELECT * FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(asset.id);
-      return {
-        asset_id: asset.id,
-        name: asset.name,
-        symbol: asset.symbol,
-        type: asset.type,
-        price: result.price,
-        currency: result.currency,
-        source: result.source,
-        details: result.details,
-        fetched_at: normalizeApiTimestamp(cached?.fetched_at || null, { assumeUtcWhenNoTimezone: true }),
-        cached: false,
-        stale: false,
-        empty_cache: false,
-      };
-    }
-
-    const old = db.prepare('SELECT * FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(asset.id);
-    return buildCachedResult(asset, old, { stale: true, emptyCache: !old });
-  });
+  const freshResults = await Promise.all(assets.map((asset) => getMarketSnapshot(db, asset, { forceRefresh: true })));
 
   log.info('Prices fetched', {
     total: assets.length,
     fresh: freshResults.filter((item) => !item.cached).length,
-    fallback: freshResults.filter((item) => item.cached && !item.empty_cache).length,
+    fallback: freshResults.filter((item) => item.cached && item.cache_status !== 'missing').length,
     empty: freshResults.filter((item) => item.empty_cache).length,
   });
 
@@ -106,13 +54,8 @@ router.get('/prices/:assetId', async (req, res) => {
   const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.assetId);
   if (!asset) return res.status(404).json({ success: false, error: 'Not found' });
 
-  const realtime = await fetchPrice(asset);
-  if (realtime) {
-    db.prepare('INSERT INTO price_cache (asset_id, price, currency, source) VALUES (?, ?, ?, ?)')
-      .run(asset.id, realtime.price, realtime.currency, realtime.source);
-  }
-  const price = realtime?.price;
-  res.json({ success: true, data: { ...asset, price, currency: realtime?.currency, details: realtime?.details } });
+  const snapshot = await getMarketSnapshot(db, asset, { forceRefresh: true });
+  res.json({ success: true, data: { ...asset, ...snapshot } });
 });
 
 export default router;

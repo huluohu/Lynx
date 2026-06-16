@@ -98,6 +98,36 @@
               <div v-for="(l,i) in parsedParams.sell_lines" :key="'s'+i" class="line-tag sell">{{ lineText('sell', l) }}</div>
             </div>
           </template>
+          <template v-else-if="strategy.type === 'dca'">
+            <div class="info-row"><span class="info-label">{{ t('strategyForm.frequency') }}</span><span>{{ frequencyLabel(parsedParams.frequency) }}</span></div>
+            <div class="info-row"><span class="info-label">{{ t('strategyForm.periods') }}</span><span>{{ parsedParams.periods || '-' }}</span></div>
+            <div v-if="dcaAssetRows.length" class="param-card-list">
+              <div v-for="item in dcaAssetRows" :key="item.assetKey" class="param-card">
+                <div class="param-card-title">{{ item.assetLabel }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.amountPerPeriod') }} · ¥{{ fmtMoney(item.amount_per) }}</div>
+              </div>
+            </div>
+          </template>
+          <template v-else-if="strategy.type === 'grid'">
+            <div class="info-row"><span class="info-label">{{ t('strategyDetail.budget') }}</span><span>¥{{ fmtMoney(parsedParams.budget) }}</span></div>
+            <div v-if="gridAssetRows.length" class="param-card-list">
+              <div v-for="item in gridAssetRows" :key="item.assetKey" class="param-card">
+                <div class="param-card-title">{{ item.assetLabel }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.lowerBound') }} ¥{{ fmtNumber(item.low) }} · {{ t('strategyForm.upperBound') }} ¥{{ fmtNumber(item.high) }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.gridCount') }} {{ item.grids }}</div>
+              </div>
+            </div>
+          </template>
+          <template v-else-if="strategy.type === 'value_avg'">
+            <div class="info-row"><span class="info-label">{{ t('strategyForm.periods') }}</span><span>{{ parsedParams.periods || '-' }}</span></div>
+            <div v-if="valueAvgAssetRows.length" class="param-card-list">
+              <div v-for="item in valueAvgAssetRows" :key="item.assetKey" class="param-card">
+                <div class="param-card-title">{{ item.assetLabel }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.targetValue') }} · ¥{{ fmtMoney(item.target_value) }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.growthRate') }} · {{ fmtPct(item.growth_rate * 100) }}</div>
+              </div>
+            </div>
+          </template>
           <template v-else>
             <div v-for="(v, k) in parsedParams" :key="k" class="info-row">
               <span class="info-label">{{ k }}</span><span>{{ formatParamValue(v) }}</span>
@@ -408,9 +438,26 @@ const linkedAssetText = computed(() => {
   const symbol = strategy.value.symbol ? ` ${strategy.value.symbol}` : ''
   return `${name}${symbol}`.trim()
 })
+const strategyAssets = computed(() => {
+  if (Array.isArray(strategy.value.assets) && strategy.value.assets.length) {
+    return strategy.value.assets
+  }
+  if (strategy.value.asset_id || strategy.value.asset_name) {
+    return [{
+      id: strategy.value.asset_id,
+      name: strategy.value.asset_name || '-',
+      symbol: strategy.value.symbol || '',
+      icon: strategy.value.icon || '',
+    }]
+  }
+  return []
+})
 const parsedParams = computed(() => {
   try { return JSON.parse(strategy.value.parameters || '{}') } catch { return null }
 })
+const dcaAssetRows = computed(() => buildPerAssetRows((params, assetId) => ({ amount_per: params?.amount_per })))
+const gridAssetRows = computed(() => buildPerAssetRows((params) => ({ low: params?.low, high: params?.high, grids: params?.grids })))
+const valueAvgAssetRows = computed(() => buildPerAssetRows((params) => ({ target_value: params?.target_value, growth_rate: params?.growth_rate })))
 const latestBacktest = computed(() => backtestResults.value[0] || null)
 const latestReview = computed(() => reviews.value[0] || null)
 const olderReviews = computed(() => reviews.value.slice(1))
@@ -456,6 +503,33 @@ function typeLabel(type) {
 }
 function statusLabel(status) {
   return status ? t(`strategyDetail.strategyStatuses.${status}`) : '-'
+}
+function frequencyLabel(value) {
+  return value ? t(`strategyForm.frequencies.${value}`) : '-'
+}
+function assetLabelById(assetId) {
+  const target = strategyAssets.value.find((item) => String(item.id) === String(assetId))
+  if (!target) return `#${assetId}`
+  return [target.icon, target.name, target.symbol].filter(Boolean).join(' ')
+}
+function buildPerAssetRows(mapEntry) {
+  const params = parsedParams.value || {}
+  const perAsset = params.per_asset || {}
+  const rows = Object.entries(perAsset).map(([assetId, assetParams]) => ({
+    assetKey: assetId,
+    assetLabel: assetLabelById(assetId),
+    ...mapEntry(assetParams, assetId),
+  }))
+  if (rows.length) return rows
+  if (strategyAssets.value.length === 1) {
+    const asset = strategyAssets.value[0]
+    return [{
+      assetKey: asset.id || 'primary',
+      assetLabel: assetLabelById(asset.id),
+      ...mapEntry(params, asset.id),
+    }]
+  }
+  return []
 }
 function triggerLabel(trigger) {
   return {
@@ -518,7 +592,8 @@ function formatTriggerValue(value) {
   return Number.isFinite(number) ? fmtNumber(number) : (value ?? '-')
 }
 function lineText(action, line) {
-  return `${action === 'buy' ? t('aiStrategyGenerator.triggers.priceBelow') : t('aiStrategyGenerator.triggers.priceAbove')} ¥${fmtNumber(line.price)} → ${action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell')} ¥${fmtMoney(line.amount)}`
+  const assetPart = line.asset_id ? `${assetLabelById(line.asset_id)} · ` : ''
+  return `${assetPart}${action === 'buy' ? t('aiStrategyGenerator.triggers.priceBelow') : t('aiStrategyGenerator.triggers.priceAbove')} ¥${fmtNumber(line.price)} → ${action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell')} ¥${fmtMoney(line.amount)}`
 }
 function scenarioLabel(item) {
   return item?.scenario_label || (item?.scenario_name ? t(`strategyDetail.scenarios.${item.scenario_name}`) : '-')
@@ -813,6 +888,25 @@ onMounted(loadData)
 }
 .line-tag.buy { background: rgba(34,197,94,0.1); color: var(--green); }
 .line-tag.sell { background: rgba(239,68,68,0.1); color: var(--red); }
+.param-card-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.param-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg);
+}
+.param-card-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.param-card-meta {
+  color: var(--text-dim);
+  font-size: 13px;
+}
 
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }

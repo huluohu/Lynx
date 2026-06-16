@@ -1,11 +1,18 @@
 <template>
-  <div>
+  <div class="strategy-form-page">
     <div class="page-header">
       <h1 class="page-title">{{ isEdit ? t('strategyForm.editTitle') : t('strategyForm.createTitle') }}</h1>
     </div>
 
-    <div class="card" style="max-width:700px">
-      <form @submit.prevent="submit">
+    <form class="strategy-form-shell" @submit.prevent="submit">
+      <div class="card form-section">
+        <div class="form-section-header">
+          <div>
+            <div class="section-kicker">{{ t('strategyForm.sectionBasicsKicker') }}</div>
+            <div class="section-title">{{ t('strategyForm.sectionBasics') }}</div>
+            <p class="section-help">{{ t('strategyForm.sectionBasicsDesc') }}</p>
+          </div>
+        </div>
         <div class="form-group">
           <label class="form-label">{{ t('strategyForm.name') }} *</label>
           <input class="form-input" v-model="form.name" :placeholder="t('strategyForm.namePlaceholder')" required />
@@ -14,113 +21,139 @@
           <label class="form-label">{{ t('strategyForm.description') }}</label>
           <textarea class="form-textarea" v-model="form.description" :placeholder="t('strategyForm.descriptionPlaceholder')"></textarea>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ t('strategyForm.type') }} *</label>
-            <select class="form-select" v-model="form.type" @change="onTypeChange" required>
-              <option value="">{{ t('strategyForm.selectType') }}</option>
-              <option value="dca">{{ t('strategyForm.types.dca') }}</option>
-              <option value="grid">{{ t('strategyForm.types.grid') }}</option>
-              <option value="value_avg">{{ t('strategyForm.types.value_avg') }}</option>
-              <option value="recovery">{{ t('strategyForm.types.recovery') }}</option>
-              <option value="trend">{{ t('strategyForm.types.trend') }}</option>
-              <option value="rebalance">{{ t('strategyForm.types.rebalance') }}</option>
-            </select>
+        <div class="form-group">
+          <label class="form-label">{{ t('strategyForm.type') }} *</label>
+          <select class="form-select" v-model="form.type" @change="onTypeChange" required>
+            <option value="">{{ t('strategyForm.selectType') }}</option>
+            <option v-for="option in strategyTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+          <p v-if="currentStrategyType" class="type-hint">{{ currentStrategyType.description }}</p>
+          <p v-else class="type-hint">{{ t('strategyForm.supportedTypesHint') }}</p>
+        </div>
+      </div>
+
+      <div class="card form-section">
+        <div class="form-section-header">
+          <div>
+            <div class="section-kicker">{{ t('strategyForm.sectionAssetsKicker') }}</div>
+            <div class="section-title">{{ t('strategyForm.sectionAssets') }}</div>
+            <p class="section-help">{{ t('strategyForm.sectionAssetsDesc') }}</p>
+          </div>
+          <div class="selection-pill" v-if="selectedAssetIds.length">
+            {{ t('strategyForm.selectedCount', { count: selectedAssetIds.length }) }}
           </div>
         </div>
+        <div class="asset-multi-select">
+          <div
+            v-for="a in assets"
+            :key="a.id"
+            class="asset-chip"
+            :class="{ selected: selectedAssetIds.includes(a.id) }"
+            @click="toggleAsset(a.id)"
+          >
+            <span class="asset-chip-name">{{ a.icon }} {{ a.name }}</span>
+            <span class="asset-chip-symbol">{{ a.symbol }}</span>
+          </div>
+        </div>
+        <div v-if="selectedAssets.length" class="selected-asset-list">
+          <span v-for="asset in selectedAssets" :key="asset.id" class="selected-asset-pill">{{ asset.icon }} {{ asset.name }}</span>
+        </div>
+      </div>
 
-        <!-- 资产选择 -->
-        <div class="form-group">
-          <label class="form-label">{{ t('strategyForm.relatedAssets') }}</label>
-          <div class="asset-multi-select">
-            <div v-for="a in assets" :key="a.id" class="asset-chip"
-                 :class="{ selected: selectedAssetIds.includes(a.id) }"
-                 @click="toggleAsset(a.id)">
-              {{ a.icon }} {{ a.name }}
+      <div v-if="form.type" class="editor-layout">
+        <div class="card form-section params-card">
+          <div class="form-section-header">
+            <div>
+              <div class="section-kicker">{{ t('strategyForm.sectionParamsKicker') }}</div>
+              <div class="section-title">{{ t('strategyForm.params') }}</div>
+              <p class="section-help">{{ t('strategyForm.sectionParamsDesc') }}</p>
             </div>
           </div>
-          <div v-if="selectedAssetIds.length > 0" class="selected-hint">{{ t('strategyForm.selectedCount', { count: selectedAssetIds.length }) }}</div>
-        </div>
 
-        <!-- 动态参数：按资产分组 -->
-        <div v-if="form.type && selectedAssetIds.length > 0" class="params-section">
-          <div class="section-title">{{ t('strategyForm.params') }}</div>
+          <div v-if="unsupportedStrategyType" class="unsupported-param-box">
+            <div class="unsupported-param-title">{{ t('strategyForm.unsupportedTypeTitle') }}</div>
+            <p class="unsupported-param-desc">{{ t('strategyForm.unsupportedTypeDesc') }}</p>
+            <textarea class="form-textarea raw-params-textarea" v-model="rawParameters"></textarea>
+          </div>
 
           <!-- Recovery: 按资产分组 -->
-          <div v-if="form.type === 'recovery'">
+          <div v-else-if="form.type === 'recovery'">
             <div class="form-group">
-               <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
+              <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
               <input class="form-input" type="number" v-model="globalBudget" placeholder="20000" inputmode="numeric" />
             </div>
 
             <div v-for="assetId in selectedAssetIds" :key="'r-'+assetId" class="asset-param-group">
               <div class="asset-param-header">
-                <span class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</span>
+                <div>
+                  <div class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</div>
+                  <div class="asset-param-summary">{{ t('strategyForm.recoveryAssetSummary', { buyCount: getAssetBuyLines(assetId).length, sellCount: getAssetSellLines(assetId).length }) }}</div>
+                </div>
                 <span class="asset-param-symbol">{{ getAsset(assetId)?.symbol }}</span>
               </div>
 
               <div class="sub-section">
-                 <div class="sub-section-title">📉 {{ t('strategyForm.buyLines') }}</div>
+                <div class="sub-section-title">📉 {{ t('strategyForm.buyLines') }}</div>
                 <div class="lines-editor">
                   <div v-for="(line, i) in getAssetBuyLines(assetId)" :key="'b'+assetId+'-'+i" class="line-row">
                     <div class="line-field">
                       <span class="line-prefix">≤</span>
-                       <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
+                      <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
                     </div>
                     <div class="line-field">
                       <span class="line-prefix">¥</span>
-                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.buyAmount')" inputmode="numeric" />
+                      <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.buyAmount')" inputmode="numeric" />
                     </div>
                     <button type="button" class="btn btn-sm btn-danger" @click="removeAssetBuyLine(assetId, i)">✕</button>
                   </div>
-                   <button type="button" class="btn btn-sm" @click="addAssetBuyLine(assetId)">+ {{ t('strategyForm.addBuyLine') }}</button>
+                  <button type="button" class="btn btn-sm" @click="addAssetBuyLine(assetId)">+ {{ t('strategyForm.addBuyLine') }}</button>
                 </div>
               </div>
 
               <div class="sub-section">
-                 <div class="sub-section-title">📈 {{ t('strategyForm.sellLines') }}</div>
+                <div class="sub-section-title">📈 {{ t('strategyForm.sellLines') }}</div>
                 <div class="lines-editor">
                   <div v-for="(line, i) in getAssetSellLines(assetId)" :key="'s'+assetId+'-'+i" class="line-row">
                     <div class="line-field">
                       <span class="line-prefix">≥</span>
-                       <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
+                      <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
                     </div>
                     <div class="line-field">
                       <span class="line-prefix">¥</span>
-                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.sellAmount')" inputmode="numeric" />
+                      <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.sellAmount')" inputmode="numeric" />
                     </div>
                     <button type="button" class="btn btn-sm btn-danger" @click="removeAssetSellLine(assetId, i)">✕</button>
                   </div>
-                   <button type="button" class="btn btn-sm" @click="addAssetSellLine(assetId)">+ {{ t('strategyForm.addSellLine') }}</button>
+                  <button type="button" class="btn btn-sm" @click="addAssetSellLine(assetId)">+ {{ t('strategyForm.addSellLine') }}</button>
                 </div>
               </div>
             </div>
 
             <!-- 预算汇总 -->
             <div class="budget-summary" :class="{ over: allocatedBudget > Number(globalBudget) }">
-               <span>{{ t('strategyForm.allocated') }}: ¥{{ formatNumber(allocatedBudget) }}</span>
-               <span>/</span>
-               <span>{{ t('strategyForm.totalBudget') }}: ¥{{ formatNumber(Number(globalBudget || 0)) }}</span>
-               <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn">⚠️ {{ t('strategyForm.overBudget') }}</span>
+              <span>{{ t('strategyForm.allocated') }}: ¥{{ formatNumber(allocatedBudget) }}</span>
+              <span>/</span>
+              <span>{{ t('strategyForm.totalBudget') }}: ¥{{ formatNumber(Number(globalBudget || 0)) }}</span>
+              <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn">⚠️ {{ t('strategyForm.overBudget') }}</span>
             </div>
           </div>
 
           <!-- DCA: 按资产分组 -->
-          <div v-if="form.type === 'dca'">
+          <div v-else-if="form.type === 'dca'">
             <div class="form-row">
               <div class="form-group">
-                 <label class="form-label">{{ t('strategyForm.frequency') }}</label>
-                 <select class="form-select" v-model="globalFrequency">
-                   <option value="daily">{{ t('strategyForm.frequencies.daily') }}</option>
-                   <option value="weekly">{{ t('strategyForm.frequencies.weekly') }}</option>
-                   <option value="monthly">{{ t('strategyForm.frequencies.monthly') }}</option>
-                 </select>
-               </div>
-               <div class="form-group">
-                 <label class="form-label">{{ t('strategyForm.periods') }}</label>
-                 <input class="form-input" type="number" v-model="globalPeriods" placeholder="10" />
-               </div>
-            </div>
+                <label class="form-label">{{ t('strategyForm.frequency') }}</label>
+                <select class="form-select" v-model="globalFrequency">
+                  <option value="daily">{{ t('strategyForm.frequencies.daily') }}</option>
+                  <option value="weekly">{{ t('strategyForm.frequencies.weekly') }}</option>
+                  <option value="monthly">{{ t('strategyForm.frequencies.monthly') }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">{{ t('strategyForm.periods') }}</label>
+                <input class="form-input" type="number" v-model="globalPeriods" placeholder="10" />
+              </div>
+             </div>
 
             <div v-for="assetId in selectedAssetIds" :key="'d-'+assetId" class="asset-param-group compact">
               <div class="asset-param-header">
@@ -128,7 +161,7 @@
               </div>
               <div class="form-row">
                 <div class="form-group">
-                   <label class="form-label">{{ t('strategyForm.amountPerPeriod') }} (¥)</label>
+                  <label class="form-label">{{ t('strategyForm.amountPerPeriod') }} (¥)</label>
                   <input class="form-input" type="number" v-model="getAssetDCA(assetId).amount_per" placeholder="1000" inputmode="numeric" />
                 </div>
               </div>
@@ -136,9 +169,9 @@
           </div>
 
           <!-- Grid: 按资产分组 -->
-          <div v-if="form.type === 'grid'">
+          <div v-else-if="form.type === 'grid'">
             <div class="form-group">
-               <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
+              <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
               <input class="form-input" type="number" v-model="globalBudget" placeholder="20000" inputmode="numeric" />
             </div>
 
@@ -147,17 +180,17 @@
                 <span class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</span>
               </div>
               <div class="form-row">
-                 <div class="form-group"><label class="form-label">{{ t('strategyForm.lowerBound') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).low" :placeholder="t('strategyForm.lowerBound')" inputmode="decimal" /></div>
-                 <div class="form-group"><label class="form-label">{{ t('strategyForm.upperBound') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).high" :placeholder="t('strategyForm.upperBound')" inputmode="decimal" /></div>
-                 <div class="form-group"><label class="form-label">{{ t('strategyForm.gridCount') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).grids" placeholder="5" /></div>
-               </div>
-            </div>
-          </div>
+                <div class="form-group"><label class="form-label">{{ t('strategyForm.lowerBound') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).low" :placeholder="t('strategyForm.lowerBound')" inputmode="decimal" /></div>
+                <div class="form-group"><label class="form-label">{{ t('strategyForm.upperBound') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).high" :placeholder="t('strategyForm.upperBound')" inputmode="decimal" /></div>
+                <div class="form-group"><label class="form-label">{{ t('strategyForm.gridCount') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).grids" placeholder="5" /></div>
+              </div>
+             </div>
+           </div>
 
           <!-- Value Avg: 按资产分组 -->
-          <div v-if="form.type === 'value_avg'">
+          <div v-else-if="form.type === 'value_avg'">
             <div class="form-group">
-               <label class="form-label">{{ t('strategyForm.periods') }}</label>
+              <label class="form-label">{{ t('strategyForm.periods') }}</label>
               <input class="form-input" type="number" v-model="globalPeriods" placeholder="10" />
             </div>
 
@@ -166,25 +199,38 @@
                 <span class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</span>
               </div>
               <div class="form-row">
-                 <div class="form-group"><label class="form-label">{{ t('strategyForm.targetValue') }} (¥)</label><input class="form-input" type="number" v-model="getAssetValueAvg(assetId).target_value" placeholder="50000" inputmode="numeric" /></div>
-                 <div class="form-group"><label class="form-label">{{ t('strategyForm.growthRate') }} (%)</label><input class="form-input" type="number" step="0.1" v-model="getAssetValueAvg(assetId).growth_rate_val" placeholder="2" /></div>
-               </div>
-             </div>
-           </div>
-         </div>
+                <div class="form-group"><label class="form-label">{{ t('strategyForm.targetValue') }} (¥)</label><input class="form-input" type="number" v-model="getAssetValueAvg(assetId).target_value" placeholder="50000" inputmode="numeric" /></div>
+                <div class="form-group"><label class="form-label">{{ t('strategyForm.growthRate') }} (%)</label><input class="form-input" type="number" step="0.1" v-model="getAssetValueAvg(assetId).growth_rate_val" placeholder="2" /></div>
+              </div>
+            </div>
+          </div>
 
-        <!-- No assets selected hint -->
-        <div v-if="form.type && selectedAssetIds.length === 0" class="empty-hint">
-          {{ t('strategyForm.selectAssetHint') }}
+          <div v-if="selectedAssetIds.length === 0" class="empty-hint">
+            {{ t('strategyForm.selectAssetHint') }}
+          </div>
         </div>
 
-        <div style="display:flex;gap:12px;margin-top:16px">
-          <button type="submit" class="btn btn-primary" :disabled="submitting || selectedAssetIds.length === 0">{{ submitting ? t('strategyForm.creating') : (isEdit ? t('strategyForm.save') : t('strategyForm.create')) }}</button>
-          <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyForm.aiRegenerate') }}</button>
-          <router-link to="/strategies" class="btn">{{ t('strategyForm.cancel') }}</router-link>
+        <div class="card summary-card">
+          <div class="section-kicker">{{ t('strategyForm.sectionSummaryKicker') }}</div>
+          <div class="section-title">{{ t('strategyForm.sectionSummary') }}</div>
+          <div class="summary-list">
+            <div v-for="item in strategySummaryRows" :key="item.label" class="summary-row">
+              <span class="summary-label">{{ item.label }}</span>
+              <span class="summary-value">{{ item.value }}</span>
+            </div>
+          </div>
+          <div v-if="selectedAssets.length" class="selected-asset-list compact">
+            <span v-for="asset in selectedAssets" :key="asset.id" class="selected-asset-pill">{{ asset.icon }} {{ asset.name }}</span>
+          </div>
         </div>
-      </form>
-    </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary" :disabled="submitting || (!unsupportedStrategyType && selectedAssetIds.length === 0)">{{ submitting ? t('strategyForm.creating') : (isEdit ? t('strategyForm.save') : t('strategyForm.create')) }}</button>
+        <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyForm.aiRegenerate') }}</button>
+        <router-link to="/strategies" class="btn">{{ t('strategyForm.cancel') }}</router-link>
+      </div>
+    </form>
 
     <!-- AI Regenerate Drawer -->
     <AppDrawer v-if="isEdit" v-model="showAIRegenerate" :title="`✨ ${t('strategyForm.aiRegenerateTitle')}`">
@@ -214,6 +260,7 @@ const isEdit = ref(false)
 const strategyId = ref(null)
 const selectedAssetIds = ref([])
 const form = reactive({ name: '', description: '', type: '' })
+const rawParameters = ref('{}')
 
 // Global params shared across assets
 const globalBudget = ref(20000)
@@ -226,6 +273,55 @@ const perAssetSellLines = reactive({})  // { [assetId]: [{price, amount}] }
 const perAssetDCA = reactive({})        // { [assetId]: {amount_per} }
 const perAssetGrid = reactive({})       // { [assetId]: {low, high, grids} }
 const perAssetValueAvg = reactive({})   // { [assetId]: {target_value, growth_rate_val} }
+const supportedStrategyTypes = ['recovery', 'dca', 'grid', 'value_avg']
+const strategyTypeOptions = computed(() => {
+  const options = supportedStrategyTypes.map((value) => ({
+    value,
+    label: t(`strategyForm.types.${value}`),
+    description: t(`strategyForm.typeDescriptions.${value}`),
+  }))
+  if (form.type && !supportedStrategyTypes.includes(form.type)) {
+    options.push({
+      value: form.type,
+      label: t('strategyForm.unsupportedTypeOption', { type: form.type }),
+      description: t('strategyForm.unsupportedTypeDesc'),
+    })
+  }
+  return options
+})
+const unsupportedStrategyType = computed(() => !!form.type && !supportedStrategyTypes.includes(form.type))
+const selectedAssets = computed(() => selectedAssetIds.value.map((id) => getAsset(id)).filter(Boolean))
+const currentStrategyType = computed(() => strategyTypeOptions.value.find((option) => option.value === form.type) || null)
+const strategySummaryRows = computed(() => {
+  const rows = [
+    { label: t('strategyForm.type'), value: currentStrategyType.value?.label || '-' },
+    { label: t('strategyForm.relatedAssets'), value: selectedAssets.value.length ? t('strategyForm.selectedCount', { count: selectedAssets.value.length }) : t('strategyForm.selectAssetHint') },
+  ]
+  if (form.type === 'recovery') {
+    rows.push(
+      { label: t('strategyForm.budget'), value: `¥${formatNumber(Number(globalBudget.value || 0))}` },
+      { label: t('strategyForm.allocated'), value: `¥${formatNumber(allocatedBudget.value)}` },
+    )
+  } else if (form.type === 'dca') {
+    rows.push(
+      { label: t('strategyForm.frequency'), value: t(`strategyForm.frequencies.${globalFrequency.value}`) },
+      { label: t('strategyForm.periods'), value: `${globalPeriods.value || 0}` },
+    )
+  } else if (form.type === 'grid') {
+    rows.push(
+      { label: t('strategyForm.budget'), value: `¥${formatNumber(Number(globalBudget.value || 0))}` },
+      { label: t('strategyForm.gridCount'), value: selectedAssetIds.value.length ? selectedAssetIds.value.map((id) => getAssetGrid(id).grids || 0).join(' / ') : '-' },
+    )
+  } else if (form.type === 'value_avg') {
+    rows.push(
+      { label: t('strategyForm.periods'), value: `${globalPeriods.value || 0}` },
+      { label: t('strategyForm.targetValue'), value: selectedAssetIds.value.length ? selectedAssetIds.value.map((id) => `¥${formatNumber(Number(getAssetValueAvg(id).target_value || 0))}`).join(' / ') : '-' },
+    )
+  } else if (unsupportedStrategyType.value) {
+    rows.push({ label: t('strategyForm.unsupportedTypeTitle'), value: form.type })
+  }
+  return rows
+})
 
 function getAsset(id) {
   return assets.value.find(a => a.id === id)
@@ -296,6 +392,9 @@ function onTypeChange() {}
 
 function buildParameters() {
   const p = {}
+  if (unsupportedStrategyType.value) {
+    return JSON.parse(rawParameters.value || '{}')
+  }
   
   if (form.type === 'recovery') {
     p.budget = Number(globalBudget.value) || 20000
@@ -362,6 +461,13 @@ async function submit() {
         toast.error(t('strategyForm.validationBudget'))
         return
       }
+  } else if (unsupportedStrategyType.value) {
+    try {
+      JSON.parse(rawParameters.value || '{}')
+    } catch {
+      toast.error(t('strategyForm.validationParamsJson'))
+      return
+    }
   } else if (form.type === 'grid') {
     for (const id of selectedAssetIds.value) {
       const g = getAssetGrid(id)
@@ -439,6 +545,7 @@ onMounted(async () => {
       form.name = s.name
       form.description = s.description || ''
       form.type = s.type
+      rawParameters.value = s.parameters || '{}'
 
       if (s.asset_ids) {
         try { selectedAssetIds.value = JSON.parse(s.asset_ids) } catch { selectedAssetIds.value = s.asset_id ? [s.asset_id] : [] }
@@ -517,26 +624,104 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.asset-multi-select {
+.strategy-form-page {
+  max-width: 980px;
+}
+.strategy-form-shell {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 16px;
+}
+.editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(260px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+.form-section {
+  margin-bottom: 0;
+}
+.form-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.section-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.section-help {
+  margin-top: -8px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.type-hint {
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.selection-pill {
+  align-self: flex-start;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+.asset-multi-select {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 8px;
-  margin-top: 6px;
 }
 .asset-chip {
-  padding: 8px 12px;
-  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 12px;
   border: 1px solid var(--border);
-  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
+  background: var(--bg);
 }
 .asset-chip:hover { border-color: var(--primary); }
 .asset-chip.selected {
-  background: var(--primary);
-  color: #fff;
+  background: rgba(59, 130, 246, 0.12);
   border-color: var(--primary);
+  color: var(--text);
+}
+.asset-chip-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.asset-chip-symbol {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.selected-asset-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.selected-asset-list.compact {
+  margin-top: 16px;
+}
+.selected-asset-pill {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
 }
 .selected-hint {
   margin-top: 6px;
@@ -562,6 +747,7 @@ onMounted(async () => {
 .asset-param-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 12px;
   padding-bottom: 8px;
@@ -577,6 +763,11 @@ onMounted(async () => {
   background: var(--bg-card);
   padding: 2px 6px;
   border-radius: 4px;
+}
+.asset-param-summary {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .sub-section {
@@ -596,12 +787,12 @@ onMounted(async () => {
   gap: 8px;
 }
 .line-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
 }
 .line-field {
-  flex: 1;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -639,12 +830,83 @@ onMounted(async () => {
 }
 
 .empty-hint {
-  margin-top: 16px;
+  margin-top: 4px;
   padding: 20px;
   text-align: center;
   color: var(--text-muted);
   font-size: 14px;
   border: 1px dashed var(--border);
   border-radius: 8px;
+}
+.summary-card {
+  position: sticky;
+  top: calc(var(--header-h) + var(--safe-top) + 8px);
+}
+.summary-list {
+  display: grid;
+  gap: 10px;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.summary-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.summary-label {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.summary-value {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 600;
+}
+.unsupported-param-box {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--bg);
+}
+.unsupported-param-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.unsupported-param-desc {
+  margin-bottom: 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.raw-params-textarea {
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .editor-layout {
+    grid-template-columns: 1fr;
+  }
+  .summary-card {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .asset-multi-select {
+    grid-template-columns: 1fr 1fr;
+  }
+  .line-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

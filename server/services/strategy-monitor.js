@@ -204,3 +204,11 @@ export function startMonitor(intervalMs) {
   log.info('Strategy monitor started', { intervalMs });
   return monitorTimer;
 }
+
+export function stopMonitor() {
+  if (monitorTimer) {
+    clearInterval(monitorTimer);
+    monitorTimer = null;
+    log.info('Strategy monitor stopped');
+  }
+}

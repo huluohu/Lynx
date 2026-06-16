@@ -8,13 +8,43 @@ const log = createLogger('news');
 const BUILTIN_SOURCES = {
   coindesk: {
     name: 'CoinDesk',
-    url: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
+    url: 'https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml',
     type: 'crypto',
     assetType: 'crypto',
   },
   cointelegraph: {
     name: 'CoinTelegraph',
     url: 'https://cointelegraph.com/rss',
+    type: 'crypto',
+    assetType: 'crypto',
+  },
+  decrypt: {
+    name: 'Decrypt',
+    url: 'https://decrypt.co/feed',
+    type: 'crypto',
+    assetType: 'crypto',
+  },
+  crypto_news: {
+    name: 'crypto.news',
+    url: 'https://crypto.news/feed',
+    type: 'crypto',
+    assetType: 'crypto',
+  },
+  yahoo_finance: {
+    name: 'Yahoo Finance',
+    url: 'https://finance.yahoo.com/news/rssindex',
+    type: 'markets',
+    assetType: 'general',
+  },
+  blockchain_news: {
+    name: 'Blockchain.News',
+    url: 'https://blockchain.news/rss',
+    type: 'crypto',
+    assetType: 'crypto',
+  },
+  panews: {
+    name: 'PANews',
+    url: 'https://www.panewslab.com/rss.xml',
     type: 'crypto',
     assetType: 'crypto',
   },
@@ -216,7 +246,7 @@ async function fetchCoinGeckoNews() {
 function getEnabledSources() {
   const db = getDb();
   const row = db.prepare("SELECT value FROM settings WHERE key = 'news_sources_enabled'").get();
-  const enabledKeys = (row?.value || 'coindesk,cointelegraph,coingecko').split(',').map(s => s.trim()).filter(Boolean);
+  const enabledKeys = (row?.value || 'coindesk,cointelegraph,decrypt,panews,coingecko').split(',').map(s => s.trim()).filter(Boolean);
   
   const sources = [];
   for (const key of enabledKeys) {
@@ -243,6 +273,15 @@ export function getNewsRefreshInterval() {
   return Math.max(5, parseInt(row?.value || '30', 10));
 }
 
+export function getNewsAutoCacheSettings() {
+  const db = getDb();
+  const enabledRow = db.prepare("SELECT value FROM settings WHERE key = 'news_auto_cache'").get();
+  const batchRow = db.prepare("SELECT value FROM settings WHERE key = 'news_cache_batch_size'").get();
+  const enabled = String(enabledRow?.value ?? 'true') === 'true';
+  const batchSize = Math.max(1, Math.min(20, parseInt(batchRow?.value || '5', 10)));
+  return { enabled, batchSize };
+}
+
 // ===== 主入口：抓取所有源 =====
 export async function fetchAllNews() {
   log.info('Fetching news from all sources...');
@@ -263,6 +302,19 @@ export async function fetchAllNews() {
   const deleted = db.prepare("DELETE FROM news WHERE published_at < datetime('now', '-30 days')").run();
   if (deleted.changes > 0) {
     log.info('Cleaned old news', { removed: deleted.changes });
+  }
+
+  const autoCache = getNewsAutoCacheSettings();
+  if (autoCache.enabled) {
+    cachePendingNews(autoCache.batchSize)
+      .then((cached) => {
+        if (cached > 0) {
+          log.info('News details auto-cached', { cached });
+        }
+      })
+      .catch((error) => {
+        log.warn('News auto-cache failed', { error: error.message });
+      });
   }
 
   return total;

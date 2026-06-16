@@ -3,7 +3,10 @@
   <div>
     <div class="page-header">
       <h1 class="page-title">{{ t('alertHistory.title') }}</h1>
-      <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? t('alertHistory.clearing') : t('alertHistory.clearRead') }}</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button v-if="hasUnreadAlerts" class="btn" @click="markAllAsRead" :disabled="bulkReading">{{ bulkReading ? t('alertHistory.markingAllRead') : t('alertHistory.markAllRead') }}</button>
+        <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? t('alertHistory.clearing') : t('alertHistory.clearRead') }}</button>
+      </div>
     </div>
 
     <div class="filters">
@@ -115,8 +118,9 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useNotificationsStore } from '../stores/notifications.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
@@ -125,13 +129,16 @@ import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const confirm = useConfirm()
+const notificationsStore = useNotificationsStore()
 const { t } = useI18n()
 const loading = ref(true)
 const clearing = ref(false)
+const bulkReading = ref(false)
 const assets = ref([])
 const alerts = ref([])
 const pagination = ref({ page: 1, page_size: 20, total: 0, total_pages: 1 })
 const filters = reactive({ type: '', severity: '', asset_id: '', page: 1, page_size: 20 })
+const hasUnreadAlerts = computed(() => alerts.value.some((item) => item.status !== 'read'))
 
 async function loadAssets() {
   const res = await api('/api/assets')
@@ -180,9 +187,26 @@ async function markAsRead(item) {
     const json = await res.json()
     if (!json.success) return toast.error(json.error || t('alertHistory.actionFailed'))
     item.status = 'read'
+    await notificationsStore.notifyChanged()
     toast.success(t('alertHistory.markReadSuccess'))
   } catch (e) {
     toast.error(e.message)
+  }
+}
+
+async function markAllAsRead() {
+  bulkReading.value = true
+  try {
+    const res = await api('/api/notifications/read-all', { method: 'PUT' })
+    const json = await res.json()
+    if (!json.success) return toast.error(json.error || t('alertHistory.actionFailed'))
+    await loadAlerts()
+    await notificationsStore.notifyChanged()
+    toast.success(t('alertHistory.markAllReadSuccess'))
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    bulkReading.value = false
   }
 }
 
@@ -205,6 +229,7 @@ async function deleteAlert(item) {
       filters.page = pagination.value.page - 1
     }
     await loadAlerts()
+    await notificationsStore.notifyChanged()
   } catch (e) {
     toast.error(e.message)
   }
@@ -226,6 +251,7 @@ async function clearRead() {
     if (!json.success) return toast.error(json.error || t('alertHistory.clearFailed'))
     toast.success(t('alertHistory.clearReadSuccess'))
     await loadAlerts()
+    await notificationsStore.notifyChanged()
   } catch (e) {
     toast.error(e.message)
   } finally {

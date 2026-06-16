@@ -3,6 +3,8 @@ dist/
 *.db
 data/*.db
 .env
+.env.local
 .DS_Store
 /.idea/vcs.xml
 /data/
+docker/.env.local

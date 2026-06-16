@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { createNotification } from './notifications.js';
 
 const router = Router();
 
@@ -94,22 +95,35 @@ router.post('/', (req, res) => {
             message: `${asset.name} ${plan.action === 'buy' ? '跌至' : '涨至'} ${triggerVal}，建议${plan.action === 'buy' ? '买入' : '卖出'} ${plan.quantity || '-'}`,
             asset_id: asset.id,
             plan_id: plan.id,
+            strategy_id: plan.strategy_id || null,
           });
         }
       }
 
       // 批量插入通知
       for (const n of notifications) {
-        db.prepare('INSERT INTO notifications (type, title, message, asset_id, plan_id, channel) VALUES (?, ?, ?, ?, ?, ?)')
-          .run(n.type, n.title, n.message, n.asset_id, n.plan_id, 'all');
+        createNotification(db, {
+          type: n.type,
+          title: n.title,
+          message: n.message,
+          asset_id: n.asset_id,
+          plan_id: n.plan_id,
+          strategy_id: n.strategy_id || null,
+          severity: 'danger',
+          channel: 'all',
+        });
       }
 
       // 交易本身也记一条通知
       const currSymbol = asset.currency === 'USD' ? '$' : '¥';
-      db.prepare('INSERT INTO notifications (type, title, message, asset_id, channel) VALUES (?, ?, ?, ?, ?)')
-        .run('trade_executed', `${type === 'buy' ? '买入' : '卖出'} ${asset.name}`,
-          `${type === 'buy' ? '买入' : '卖出'} ${quantity} ${asset.symbol} @ ${currSymbol}${price}，金额 ${currSymbol}${Math.round(total)}`,
-          asset_id, 'all');
+      createNotification(db, {
+        type: 'trade_executed',
+        title: `${type === 'buy' ? '买入' : '卖出'} ${asset.name}`,
+        message: `${type === 'buy' ? '买入' : '卖出'} ${quantity} ${asset.symbol} @ ${currSymbol}${price}，金额 ${currSymbol}${Math.round(total)}`,
+        asset_id,
+        severity: 'info',
+        channel: 'all',
+      });
     }
 
     return info.lastInsertRowid;

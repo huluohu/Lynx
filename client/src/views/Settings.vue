@@ -16,16 +16,20 @@
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">{{ t('settings.appearance.theme') }}</span>
-              <span class="setting-desc">{{ t('settings.appearance.manageInHeader') }}</span>
+              <span class="setting-desc">{{ t('settings.appearance.themeDesc') }}</span>
             </div>
-            <span class="setting-inline-value">{{ t(`preferences.themes.${preferencesStore.theme}`) }}</span>
+            <select class="form-select inline-select" v-model="form.theme" @change="dirty.appearance = true">
+              <option v-for="value in preferencesStore.supportedThemes" :key="value" :value="value">{{ t(`preferences.themes.${value}`) }}</option>
+            </select>
           </div>
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">{{ t('settings.appearance.language') }}</span>
-              <span class="setting-desc">{{ t('settings.appearance.manageInHeader') }}</span>
+              <span class="setting-desc">{{ t('settings.appearance.languageDesc') }}</span>
             </div>
-            <span class="setting-inline-value">{{ t(`preferences.languages.${preferencesStore.language}`) }}</span>
+            <select class="form-select inline-select" v-model="form.language" @change="dirty.appearance = true">
+              <option v-for="value in preferencesStore.supportedLanguages" :key="value" :value="value">{{ t(`preferences.languages.${value}`) }}</option>
+            </select>
           </div>
           <div class="setting-item">
             <div class="setting-info">
@@ -109,6 +113,16 @@
           </button>
         </div>
         <div class="settings-card">
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">{{ t('settings.market.dashboardRefreshInterval') }}</span>
+              <span class="setting-desc">{{ t('settings.market.dashboardRefreshIntervalDesc') }}</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="0" v-model="form.refresh_interval" @input="dirty.market = true" />
+              <span class="setting-unit">{{ t('common.secondUnit') }}</span>
+            </div>
+          </div>
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">{{ t('settings.market.refreshInterval') }}</span>
@@ -310,14 +324,18 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
+import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { usePreferencesStore } from '../stores/preferences.js'
 import { api } from '../utils/api.js'
 import { useConfirm } from '../utils/confirm.js'
+import { useToast } from '../utils/toast.js'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const runtimeSettingsStore = useRuntimeSettingsStore()
 const preferencesStore = usePreferencesStore()
 const confirm = useConfirm()
+const toast = useToast()
 const { t } = useI18n()
 const form = reactive({
   theme: preferencesStore.theme,
@@ -329,7 +347,7 @@ const form = reactive({
   strategy_monitor_interval: '5',
   signal_valid_hours: '24',
   news_refresh_interval: '30',
-  news_sources_enabled: 'coindesk,cointelegraph,coingecko',
+  news_sources_enabled: 'coindesk,cointelegraph,decrypt,panews,coingecko',
   news_auto_cache: 'true',
   news_cache_batch_size: '5',
   price_alert_threshold: '2',
@@ -352,7 +370,7 @@ const form = reactive({
 
 const dirty = reactive({ appearance: false, market: false, ai: false, news: false, push: false })
 const saveState = reactive({ appearance: '', market: '', ai: '', news: '', push: '' })
-const enabledSources = ref(['coindesk', 'cointelegraph', 'coingecko'])
+const enabledSources = ref(['coindesk', 'cointelegraph', 'decrypt', 'panews', 'coingecko'])
 const customSources = ref([])
 const newSource = reactive({ name: '', url: '' })
 const testingPush = ref(false)
@@ -367,11 +385,16 @@ const webhookPlaceholder = computed(() => {
   return map[form.push_webhook_type] || map.custom
 })
 
-const builtinNewsSources = [
-  { key: 'coindesk', label: 'CoinDesk' },
-  { key: 'cointelegraph', label: 'CoinTelegraph' },
-  { key: 'coingecko', label: 'CoinGecko Trending' },
-]
+const builtinNewsSources = computed(() => [
+  { key: 'coindesk', label: t('settings.news.builtinSourceLabels.coindesk') },
+  { key: 'cointelegraph', label: t('settings.news.builtinSourceLabels.cointelegraph') },
+  { key: 'decrypt', label: t('settings.news.builtinSourceLabels.decrypt') },
+  { key: 'crypto_news', label: t('settings.news.builtinSourceLabels.crypto_news') },
+  { key: 'yahoo_finance', label: t('settings.news.builtinSourceLabels.yahoo_finance') },
+  { key: 'blockchain_news', label: t('settings.news.builtinSourceLabels.blockchain_news') },
+  { key: 'panews', label: t('settings.news.builtinSourceLabels.panews') },
+  { key: 'coingecko', label: t('settings.news.builtinSourceLabels.coingecko') },
+])
 
 const pushTypeOptions = computed(() => [
   { value: 'wecom', label: t('settings.push.wecom') },
@@ -410,7 +433,7 @@ function markSaved(group) {
 }
 
 function showSaveError(error) {
-  alert(t('settings.alerts.saveFailed', { message: error?.message || t('common.unknownError') }))
+  toast.error(t('settings.alerts.saveFailed', { message: error?.message || t('common.unknownError') }))
 }
 
 async function load() {
@@ -418,6 +441,7 @@ async function load() {
     const res = await api('/api/settings')
     const json = await res.json()
     if (json.success) {
+      runtimeSettingsStore.mergeValues(json.data)
       preferencesStore.applyServerSettings(json.data)
       for (const [key, value] of Object.entries(json.data)) {
         if (key in form) form[key] = value
@@ -447,7 +471,12 @@ async function saveGroup(group) {
   }
   try {
     if (group === 'appearance') {
+      await preferencesStore.setTheme(form.theme, { persistServer: true })
+      await preferencesStore.setLanguage(form.language, { persistServer: true })
       await preferencesStore.setMarketColorScheme(form.market_color_scheme, { persistServer: true })
+      form.theme = preferencesStore.theme
+      form.language = preferencesStore.language
+      form.market_color_scheme = preferencesStore.marketColorScheme
       dirty.appearance = false
       markSaved(group)
       return
@@ -459,6 +488,7 @@ async function saveGroup(group) {
     if (!json.success) {
       throw new Error(json.error || t('common.unknownError'))
     }
+    runtimeSettingsStore.mergeValues(payload)
     dirty[group] = false
     markSaved(group)
   } catch (error) {
@@ -476,6 +506,7 @@ async function saveKey(key, value) {
     if (!json.success) {
       throw new Error(json.error || t('common.unknownError'))
     }
+    runtimeSettingsStore.mergeValues({ [key]: value })
   } catch (error) {
     showSaveError(error)
   }
@@ -494,7 +525,7 @@ async function addCustomSource() {
     const refreshRes = await api('/api/news/sources')
     customSources.value = (await refreshRes.json()).data || []
   } catch (error) {
-    alert(error.message)
+    toast.error(error.message)
   }
 }
 
@@ -529,12 +560,12 @@ async function testPush() {
     const res = await api('/api/notifications/test-push', { method: 'POST' })
     const json = await res.json()
     if (json.success) {
-      alert(t('settings.push.testSuccess'))
+      toast.success(t('settings.push.testSuccess'))
     } else {
-      alert(t('settings.push.testFailed', { message: json.error || t('common.unknownError') }))
+      toast.error(t('settings.push.testFailed', { message: json.error || t('common.unknownError') }))
     }
   } catch (error) {
-    alert(t('settings.push.testFailed', { message: error.message }))
+    toast.error(t('settings.push.testFailed', { message: error.message }))
   }
   testingPush.value = false
 }

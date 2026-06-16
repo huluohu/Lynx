@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
-import { refreshNews, cacheNewsContent, cachePendingNews } from '../services/news.js';
+import { refreshNews, cacheNewsContent, cachePendingNews, getNewsAutoCacheSettings } from '../services/news.js';
 
 const router = Router();
 
@@ -17,8 +17,6 @@ router.get('/', (req, res) => {
 router.post('/refresh', async (req, res) => {
   try {
     const count = await refreshNews();
-    // Trigger background caching
-    cachePendingNews(5).catch(() => {});
     res.json({ success: true, message: `已获取 ${count} 条新资讯` });
   } catch (e) {
     res.status(500).json({ success: false, error: '刷新失败' });
@@ -43,8 +41,10 @@ router.get('/:id/content', async (req, res) => {
 
 // POST 批量缓存待处理新闻
 router.post('/cache-batch', async (req, res) => {
-  const { limit = 10 } = req.body || {};
-  const cached = await cachePendingNews(Math.min(limit, 20));
+  const requestedLimit = req.body?.limit;
+  const autoCache = getNewsAutoCacheSettings();
+  const limit = requestedLimit == null ? autoCache.batchSize : Math.min(Number(requestedLimit) || autoCache.batchSize, 20);
+  const cached = await cachePendingNews(limit);
   res.json({ success: true, cached });
 });
 

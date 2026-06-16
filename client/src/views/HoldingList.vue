@@ -66,8 +66,9 @@
         <div class="info-row"><span class="info-label">{{ t('holdings.stopLoss') }}</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? cs(currentHolding)+currentHolding.stop_loss : '-' }}</span></div>
       </div>
 
-      <div style="margin-top:20px">
-        <div class="section-title">{{ t('holdings.edit') }}</div>
+      <div class="holding-drawer-section">
+        <div class="section-title">{{ t('holdings.editSectionTitle') }}</div>
+        <div class="section-subtitle">{{ t('holdings.editSectionDesc') }}</div>
         <form @submit.prevent="saveHolding">
           <div class="form-row">
             <div class="form-group"><label class="form-label">{{ t('holdings.quantity') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.quantity" /></div>
@@ -92,8 +93,9 @@
         </form>
       </div>
 
-      <div style="margin-top:20px">
+      <div class="holding-drawer-section">
         <div class="section-title">+ {{ t('holdings.quickRecord') }}</div>
+        <div class="section-subtitle">{{ t('holdings.quickRecordDesc') }}</div>
         <TransactionForm v-if="currentHolding" :asset-id="currentHolding.asset_id" @success="onTxSuccess" @cancel="showDetail = false" />
       </div>
     </AppDrawer>
@@ -207,6 +209,16 @@ onMounted(loadData)
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .info-row:last-child { border-bottom: none; }
 .info-label { color: var(--text-dim); font-size: 13px; }
+.holding-drawer-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.section-subtitle {
+  margin: -8px 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
 
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }

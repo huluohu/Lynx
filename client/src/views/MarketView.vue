@@ -65,8 +65,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatNumber, formatTime, parseDateTime } from '../utils/formatters.js'
@@ -74,10 +75,12 @@ import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const { t } = useI18n()
+const runtimeSettingsStore = useRuntimeSettingsStore()
 const prices = ref([])
 const loading = ref(false)
 const initialized = ref(false)
 const lastUpdated = ref(null)
+let refreshTimer = null
 
 async function refresh(force = false) {
   loading.value = true
@@ -115,7 +118,45 @@ function typeBadge(t) {
 function fmtTime(d) {
   return formatTime(d, { second: '2-digit' })
 }
-onMounted(() => refresh(false))
+
+async function ensureRuntimeSettings() {
+  if (Object.keys(runtimeSettingsStore.values || {}).length > 0) return
+  try {
+    await runtimeSettingsStore.syncFromServer()
+  } catch {}
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  const minutes = Math.max(0, runtimeSettingsStore.getNumber('market_refresh_interval', 5))
+  if (minutes > 0) {
+    refreshTimer = setInterval(() => {
+      refresh(true).catch(() => {})
+    }, minutes * 60 * 1000)
+  }
+}
+
+watch(() => runtimeSettingsStore.values.market_refresh_interval, (nextValue, prevValue) => {
+  if (!initialized.value || nextValue === prevValue) return
+  startAutoRefresh()
+})
+
+onMounted(async () => {
+  await ensureRuntimeSettings()
+  await refresh(false)
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 </script>
 
 <style scoped>

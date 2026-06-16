@@ -4,9 +4,35 @@ import { sendTestPush, pushPendingNotifications } from '../services/push.js';
 import { normalizeApiTimestampFields } from '../utils/datetime.js';
 
 const router = Router();
+const NOTIFICATION_SETTING_KEYS = {
+  plan_triggered: 'notify_plan_triggered',
+  plan_approaching: 'notify_plan_approaching',
+  stop_loss: 'notify_stop_loss',
+  price_swing: 'notify_price_swing',
+  trade_executed: 'notify_trade_executed',
+};
+const NOTIFICATION_DEFAULTS = {
+  notify_plan_triggered: true,
+  notify_plan_approaching: false,
+  notify_stop_loss: true,
+  notify_price_swing: true,
+  notify_trade_executed: false,
+};
 
 function normalizeNotification(row) {
   return normalizeApiTimestampFields(row, ['created_at', 'sent_at'], { assumeUtcWhenNoTimezone: true });
+}
+
+function parseBooleanSetting(value, fallback) {
+  if (value == null) return fallback;
+  return String(value) === 'true';
+}
+
+export function isNotificationTypeEnabled(db, type) {
+  const settingKey = NOTIFICATION_SETTING_KEYS[type];
+  if (!settingKey) return true;
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(settingKey);
+  return parseBooleanSetting(row?.value, NOTIFICATION_DEFAULTS[settingKey] ?? true);
 }
 
 // GET 未读通知列表
@@ -131,6 +157,9 @@ router.post('/send-wechat', (req, res) => {
 
 // 插入通知（被其他模块调用）
 export function createNotification(db, { type, title, message, asset_id, plan_id, strategy_id, severity, channel, status }) {
+  if (!isNotificationTypeEnabled(db, type)) {
+    return { changes: 0, skipped: true };
+  }
   return db.prepare(
     `INSERT INTO notifications (type, title, message, asset_id, plan_id, strategy_id, severity, channel, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`

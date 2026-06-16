@@ -13,6 +13,7 @@ import http from 'http';
 import https from 'https';
 import { createLogger } from '../utils/logger.js';
 import { httpGet } from './price.js';
+import { getCachedMarketSnapshot } from './market-cache.js';
 import {
   scoreDataQuality,
   computeIndicators,
@@ -209,9 +210,7 @@ async function collectData(db, assetIds, config) {
       "SELECT price, currency, fetched_at FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-30 days') ORDER BY fetched_at ASC"
     ).all(id);
 
-    const latestPriceRow = db.prepare(
-      'SELECT price, fetched_at FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1'
-    ).get(id);
+    const latestPriceSnapshot = getCachedMarketSnapshot(db, asset);
 
     const existingStrategies = db.prepare(
       "SELECT name, type, status, parameters FROM strategies WHERE (asset_id = ? OR asset_ids LIKE ?) AND status IN ('active', 'draft')"
@@ -230,9 +229,9 @@ async function collectData(db, assetIds, config) {
     // PnL calculation
     let pnl = null;
     let pnlPct = null;
-    if (holding && latestPriceRow?.price && holding.avg_cost) {
-      pnl = (latestPriceRow.price - holding.avg_cost) * holding.quantity;
-      pnlPct = ((latestPriceRow.price - holding.avg_cost) / holding.avg_cost * 100);
+    if (holding && latestPriceSnapshot.price && holding.avg_cost) {
+      pnl = (latestPriceSnapshot.price - holding.avg_cost) * holding.quantity;
+      pnlPct = ((latestPriceSnapshot.price - holding.avg_cost) / holding.avg_cost * 100);
     }
 
     result.assets.push({
@@ -240,8 +239,9 @@ async function collectData(db, assetIds, config) {
       holding,
       transactions,
       priceHistory,
-      latestPrice: latestPriceRow?.price || null,
-      latestPriceTime: latestPriceRow?.fetched_at || null,
+      latestPrice: latestPriceSnapshot.price || null,
+      latestPriceTime: latestPriceSnapshot.fetched_at || null,
+      latestPriceQuality: latestPriceSnapshot.data_quality,
       existingStrategies,
       indicators,
       tradePatterns,
@@ -358,10 +358,15 @@ function buildAnalystPrompt(collectedData) {
   const { assets, recentNews, macroIndicators, triggeredPlans } = collectedData;
 
   const portfolioSection = assets.map(a => {
-    const { asset, holding, transactions, priceHistory, latestPrice, existingStrategies, indicators, tradePatterns, pnlPct } = a;
+    const { asset, holding, transactions, priceHistory, latestPrice, latestPriceQuality, existingStrategies, indicators, tradePatterns, pnlPct } = a;
+    const latestPriceHint = latestPriceQuality === 'stale'
+      ? '（陈旧缓存）'
+      : latestPriceQuality === 'missing'
+        ? '（暂无缓存）'
+        : '';
 
     const holdingStr = holding
-      ? `持仓: ${holding.quantity}单位, 成本¥${holding.avg_cost}, 总投入¥${holding.total_invested}, 当前价¥${latestPrice || '未知'}, 盈亏: ${pnlPct != null ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : '未知'}`
+      ? `持仓: ${holding.quantity}单位, 成本¥${holding.avg_cost}, 总投入¥${holding.total_invested}, 当前价¥${latestPrice || '未知'}${latestPriceHint}, 盈亏: ${pnlPct != null ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : '未知'}`
       : '暂无持仓';
 
     const trendStr = priceHistory.length >= 2
@@ -636,7 +641,7 @@ ${typeGuidance}
 ${triggeredSection}
 ## 当前持仓
 ${assets.map(a => a.holding
-  ? `- ${a.asset.name}: ${a.holding.quantity}单位, 成本¥${a.holding.avg_cost}, 现价¥${a.latestPrice || '未知'}${a.pnlPct != null ? ', 盈亏' + (a.pnlPct >= 0 ? '+' : '') + a.pnlPct.toFixed(1) + '%' : ''}`
+  ? `- ${a.asset.name}: ${a.holding.quantity}单位, 成本¥${a.holding.avg_cost}, 现价¥${a.latestPrice || '未知'}${a.latestPriceQuality === 'stale' ? '（陈旧缓存）' : a.latestPriceQuality === 'missing' ? '（暂无缓存）' : ''}${a.pnlPct != null ? ', 盈亏' + (a.pnlPct >= 0 ? '+' : '') + a.pnlPct.toFixed(1) + '%' : ''}`
   : `- ${a.asset.name}: 暂无持仓`).join('\n')}
 
 ## 输出要求

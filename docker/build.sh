@@ -42,6 +42,19 @@ read_env_value() {
     fi
 }
 
+upsert_env_value() {
+    local key="$1"
+    local value="$2"
+    local file="$3"
+    mkdir -p "$(dirname "$file")"
+    if [ -f "$file" ] && grep -q "^${key}=" "$file"; then
+        sed -i '' "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+        touch "$file"
+        printf '%s=%s\n' "$key" "$value" >> "$file"
+    fi
+}
+
 sync_dockerhub_description() {
     local repository="$1"
     local short_description="$2"
@@ -100,14 +113,20 @@ EOF
 }
 
 # 镜像名称和仓库地址
-REGISTRY="docker.io"
-IMAGE_NAME="fooololo/lynx"
+REGISTRY="${IMAGE_REGISTRY:-docker.io}"
+IMAGE_REPOSITORY="${IMAGE_REPOSITORY:-lynx}"
 LATEST_TAG="latest"
 
 # 获取脚本所在目录的绝对路径
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${SCRIPT_DIR}/.env"
+LOCAL_ENV_FILE="${SCRIPT_DIR}/.env.local"
+
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE:-$(read_env_value IMAGE_NAMESPACE "$LOCAL_ENV_FILE")}"
+if [ -z "$IMAGE_NAMESPACE" ] && [ -n "$DOCKERHUB_USERNAME" ]; then
+    IMAGE_NAMESPACE="$DOCKERHUB_USERNAME"
+fi
 
 DOCKERHUB_DESCRIPTION_SYNC="${DOCKERHUB_DESCRIPTION_SYNC:-$(read_env_value DOCKERHUB_DESCRIPTION_SYNC "$ENV_FILE")}"
 DOCKERHUB_REPOSITORY="${DOCKERHUB_REPOSITORY:-$(read_env_value DOCKERHUB_REPOSITORY "$ENV_FILE")}"
@@ -155,7 +174,7 @@ echo ""
 # ============================================
 # 步骤 1: 获取版本信息
 # ============================================
-print_step "1" "$TOTAL_STEPS" "配置版本信息"
+print_step "1" "$TOTAL_STEPS" "配置发布信息"
 
 # 从 .env 获取上一个版本号
 LATEST_VERSION=""
@@ -163,11 +182,31 @@ if [ -f "$ENV_FILE" ] && grep -q "^APP_VERSION=" "$ENV_FILE"; then
     LATEST_VERSION=$(grep "^APP_VERSION=" "$ENV_FILE" | cut -d'=' -f2)
 fi
 
+if [ -n "$IMAGE_NAMESPACE" ]; then
+    print_success "当前命名空间：$IMAGE_NAMESPACE"
+fi
 if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "latest" ]; then
     print_success "当前版本号：$LATEST_VERSION"
 fi
 
 echo ""
+echo -n "请输入 Docker Hub namespace"
+if [ -n "$IMAGE_NAMESPACE" ]; then
+    echo -n " (默认：$IMAGE_NAMESPACE)"
+fi
+echo -n ": "
+read IMAGE_NAMESPACE_INPUT
+IMAGE_NAMESPACE="${IMAGE_NAMESPACE_INPUT:-$IMAGE_NAMESPACE}"
+
+if [ -z "$IMAGE_NAMESPACE" ]; then
+    print_error "Docker Hub namespace 不能为空"
+    exit 1
+fi
+
+IMAGE_NAME="${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}"
+print_info "镜像目标：${REGISTRY}/${IMAGE_NAME}"
+echo ""
+
 echo -n "请输入版本号"
 if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "latest" ] && [ "$IS_BETA_VERSION" = false ]; then
     echo -n " (必须大于或等于 $LATEST_VERSION)"
@@ -288,13 +327,10 @@ echo ""
 # ============================================
 print_step "5" "$TOTAL_STEPS" "更新版本号"
 
-# 写入 .env
-if [ -f "$ENV_FILE" ] && grep -q "^APP_VERSION=" "$ENV_FILE"; then
-    sed -i '' "s/^APP_VERSION=.*/APP_VERSION=${VERSION_TAG_BASE}/" "$ENV_FILE"
-else
-    echo "APP_VERSION=${VERSION_TAG_BASE}" > "$ENV_FILE"
-fi
+upsert_env_value APP_VERSION "${VERSION_TAG_BASE}" "$ENV_FILE"
+upsert_env_value IMAGE_NAMESPACE "${IMAGE_NAMESPACE}" "$LOCAL_ENV_FILE"
 print_success "版本号已写入: docker/.env → APP_VERSION=${VERSION_TAG_BASE}"
+print_success "命名空间已记忆: docker/.env.local → IMAGE_NAMESPACE=${IMAGE_NAMESPACE}"
 
 echo ""
 
@@ -304,6 +340,8 @@ echo ""
 print_step "✓" "$TOTAL_STEPS" "构建完成"
 print_success "所有步骤已完成!"
 print_info "版本类型：$([ "$IS_BETA_VERSION" = true ] && echo "Beta 版本" || echo "正常版本")"
+print_info "镜像命名空间：${IMAGE_NAMESPACE}"
+print_info "镜像仓库：${IMAGE_REPOSITORY}"
 print_info "最终版本号：${VERSION_TAG}"
 if [ "$IS_BETA_VERSION" = false ]; then
     print_info "latest 同步状态：$([[ "${CONFIRM_LATEST:-Y}" =~ ^[Yy]$ ]] && echo "已同步" || echo "未同步")"

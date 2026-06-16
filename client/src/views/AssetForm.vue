@@ -5,6 +5,7 @@
     </div>
     <div class="card" style="max-width:600px">
       <form @submit.prevent="submit">
+        <div class="section-title">{{ t('assets.sections.basic') }}</div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">{{ t('assets.nameLabel') }} *</label>
@@ -37,6 +38,7 @@
           </div>
         </div>
 
+        <div class="section-title" style="margin-top:8px">{{ t('assets.sections.market') }}</div>
         <div v-if="form.type === 'crypto'" class="crypto-presets">
           <label class="form-label">{{ t('assets.cryptoPresets') }}</label>
           <div class="preset-grid">
@@ -88,9 +90,11 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
+import { useToast } from '../utils/toast.js'
 
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToast()
 const submitting = ref(false)
 const form = reactive({ name: '', symbol: '', type: '', currency: 'CNY', icon: '', data_source: '' })
 const holding = reactive({ quantity: '', avg_cost: '' })
@@ -125,7 +129,7 @@ async function submit() {
       body: JSON.stringify(form)
     })
     const json = await res.json()
-    if (!json.success) { alert(t('assets.createFailed', { message: json.error })); return }
+    if (!json.success) { toast.error(t('assets.createFailed', { message: json.error })); return }
 
     // Create holding if provided
     if (holding.quantity && holding.avg_cost) {
@@ -138,11 +142,12 @@ async function submit() {
         })
       })
       const hJson = await hRes.json()
-      if (!hJson.success) { alert(t('assets.holdingInitFailed', { message: hJson.error })); }
+      if (!hJson.success) { toast.error(t('assets.holdingInitFailed', { message: hJson.error })); }
     }
+    toast.success(t('assets.createdSuccess'))
     router.push('/assets')
   } catch (e) {
-    alert(t('assets.createFailed', { message: e.message }))
+    toast.error(t('assets.createFailed', { message: e.message }))
   } finally {
     submitting.value = false
   }

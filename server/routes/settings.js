@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { cachePendingNews, getNewsAutoCacheSettings } from '../services/news.js';
+import { startMonitor } from '../services/strategy-monitor.js';
+import { createLogger } from '../utils/logger.js';
 
 const router = Router();
+const log = createLogger('settings');
 
 // Keys that should be masked when reading
 const SECRET_KEYS = ['ai_api_key', 'agent_search_api_key'];
+const NEWS_EFFECT_KEYS = new Set(['news_refresh_interval', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size']);
 
 function maskValue(key, value) {
   if (SECRET_KEYS.includes(key) && value) {
@@ -12,6 +17,32 @@ function maskValue(key, value) {
     return value.length > 4 ? '****' + value.slice(-4) : '****';
   }
   return value;
+}
+
+async function applySettingsSideEffects(changedKeys) {
+  const keySet = new Set(changedKeys);
+
+  if (keySet.has('strategy_monitor_interval')) {
+    startMonitor();
+    log.info('Strategy monitor restarted after settings change');
+  }
+
+  if ([...NEWS_EFFECT_KEYS].some((key) => keySet.has(key))) {
+    try {
+      const { scheduleNewsFetch } = await import('../index.js');
+      await scheduleNewsFetch();
+      log.info('News scheduler updated after settings change');
+    } catch (error) {
+      log.warn('Failed to reschedule news fetch', { error: error.message });
+    }
+
+    const autoCache = getNewsAutoCacheSettings();
+    if (autoCache.enabled) {
+      cachePendingNews(autoCache.batchSize).catch((error) => {
+        log.warn('Failed to trigger news auto-cache after settings change', { error: error.message });
+      });
+    }
+  }
 }
 
 // GET 所有设置
@@ -30,7 +61,7 @@ router.get('/:key', (req, res) => {
 });
 
 // PUT 更新设置
-router.put('/:key', (req, res) => {
+router.put('/:key', async (req, res) => {
   const { value } = req.body;
   if (value === undefined) return res.status(400).json({ success: false, error: 'value 不能为空' });
   // Don't save masked values back
@@ -38,6 +69,7 @@ router.put('/:key', (req, res) => {
     return res.json({ success: true, data: { [req.params.key]: String(value) } });
   }
   getDb().prepare('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\')) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime(\'now\')').run(req.params.key, String(value));
+  await applySettingsSideEffects([req.params.key]);
   res.json({ success: true, data: { [req.params.key]: maskValue(req.params.key, String(value)) } });
 });
 
@@ -52,13 +84,7 @@ router.put('/', async (req, res) => {
     if (SECRET_KEYS.includes(key) && String(value).startsWith('****')) continue;
     stmt.run(key, String(value));
   }
-  // Reschedule news if interval changed
-  if ('news_refresh_interval' in settings) {
-    try {
-      const { scheduleNewsFetch } = await import('../index.js');
-      await scheduleNewsFetch();
-    } catch {}
-  }
+  await applySettingsSideEffects(Object.keys(settings));
   res.json({ success: true });
 });
 

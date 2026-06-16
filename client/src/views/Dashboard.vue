@@ -192,14 +192,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useNotificationsStore } from '../stores/notifications.js'
+import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { currencySymbol } from '../utils/currency.js'
 import { formatDate, formatNumber, formatTime } from '../utils/formatters.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const { t } = useI18n()
+const notificationsStore = useNotificationsStore()
+const runtimeSettingsStore = useRuntimeSettingsStore()
 const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, total_pl_pct: 0 })
 const allocation = ref([])
 const activePlans = ref([])
@@ -210,6 +214,7 @@ const loading = ref(false)
 const initialized = ref(false)
 const usdCny = ref(null)
 const lastUpdated = ref(null)
+let refreshTimer = null
 
 const alertCounts = computed(() => {
   const c = { danger: 0, warning: 0, info: 0 }
@@ -224,14 +229,12 @@ const heldSignals = computed(() => {
 async function refresh() {
   loading.value = true
   try {
-    const [summaryRes, alertsRes, rateRes, signalsRes] = await Promise.all([
+    const [summaryRes, rateRes, signalsRes] = await Promise.all([
       api('/api/dashboard/summary'),
-      api('/api/dashboard/alerts'),
       api('/api/market/rate'),
       api('/api/signals/latest'),
     ])
     const sJson = await summaryRes.json()
-    const aJson = await alertsRes.json()
     const rJson = await rateRes.json()
     const sigJson = await signalsRes.json()
 
@@ -241,7 +244,7 @@ async function refresh() {
       activePlans.value = sJson.data.active_plans || []
       recentTrades.value = sJson.data.recent_trades || []
     }
-    if (aJson.data) alerts.value = aJson.data
+    await refreshAlerts()
     if (rJson.data) usdCny.value = rJson.data.usd_cny
     latestSignals.value = sigJson.data || []
     lastUpdated.value = new Date()
@@ -250,11 +253,42 @@ async function refresh() {
   initialized.value = true
 }
 
+async function refreshAlerts() {
+  const res = await api('/api/dashboard/alerts')
+  const json = await res.json()
+  if (json.data) alerts.value = json.data
+}
+
 async function markDone(id) {
   try {
     await api(`/api/notifications/${id}/read`, { method: 'PUT' })
+    await notificationsStore.notifyChanged()
   } catch { /* ignore */ }
   alerts.value = alerts.value.filter(a => a.id !== id)
+}
+
+async function ensureRuntimeSettings() {
+  if (Object.keys(runtimeSettingsStore.values || {}).length > 0) return
+  try {
+    await runtimeSettingsStore.syncFromServer()
+  } catch {}
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  const seconds = Math.max(0, Math.trunc(runtimeSettingsStore.getNumber('refresh_interval', 60)))
+  if (seconds > 0) {
+    refreshTimer = setInterval(() => {
+      refresh().catch(() => {})
+    }, seconds * 1000)
+  }
 }
 
 function fmt(n) {
@@ -290,7 +324,25 @@ function fmtUpdateTime(d) {
   return formatTime(d)
 }
 
-onMounted(refresh)
+watch(() => notificationsStore.changeToken, () => {
+  if (!initialized.value) return
+  refreshAlerts().catch(() => {})
+})
+
+watch(() => runtimeSettingsStore.values.refresh_interval, (nextValue, prevValue) => {
+  if (!initialized.value || nextValue === prevValue) return
+  startAutoRefresh()
+})
+
+onMounted(async () => {
+  await ensureRuntimeSettings()
+  await refresh()
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 </script>
 
 <style scoped>

@@ -5,6 +5,7 @@
 import http from 'http';
 import https from 'https';
 import { createLogger } from '../utils/logger.js';
+import { getCachedMarketSnapshot } from './market-cache.js';
 
 const log = createLogger('ai');
 
@@ -30,8 +31,13 @@ function buildPrompt(context) {
   const { assets: assetList, budget, goal, riskLevel, localNews, triggeredPlans } = context;
 
   const assetsInfo = assetList.map(a => {
+    const priceStatusHint = a.marketDataQuality === 'stale'
+      ? '（使用缓存行情，可能不是最新）'
+      : a.marketDataQuality === 'missing'
+        ? '（暂无可用行情缓存）'
+        : '';
     const holdingInfo = a.holding
-      ? `持仓数量: ${a.holding.quantity}, 成本价: ${a.holding.avg_cost}, 总投入: ${a.holding.total_invested}, 当前市价: ${a.currentPrice || '未知'}, 浮动盈亏: ${a.currentPrice ? ((a.currentPrice - a.holding.avg_cost) / a.holding.avg_cost * 100).toFixed(2) + '%' : '未知'}`
+      ? `持仓数量: ${a.holding.quantity}, 成本价: ${a.holding.avg_cost}, 总投入: ${a.holding.total_invested}, 当前市价: ${a.currentPrice || '未知'}${priceStatusHint}, 浮动盈亏: ${a.currentPrice ? ((a.currentPrice - a.holding.avg_cost) / a.holding.avg_cost * 100).toFixed(2) + '%' : '未知'}`
       : '暂无持仓';
 
     const tradesInfo = a.recentTrades.length
@@ -260,9 +266,8 @@ export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, 
     if (!asset) throw new Error(`资产 ID ${id} 不存在`);
 
     const holding = db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(id);
-    let currentPrice = null;
-    const priceRow = db.prepare('SELECT price FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(id);
-    if (priceRow) currentPrice = priceRow.price;
+    const marketSnapshot = getCachedMarketSnapshot(db, asset);
+    const currentPrice = marketSnapshot.price;
 
     // Price history for trend analysis
     const priceHistory = db.prepare(
@@ -271,7 +276,15 @@ export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, 
 
     const recentTrades = db.prepare('SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 10').all(id);
 
-    assetList.push({ asset, holding, currentPrice, recentTrades, priceHistory });
+    assetList.push({
+      asset,
+      holding,
+      currentPrice,
+      currentPriceTime: marketSnapshot.fetched_at,
+      marketDataQuality: marketSnapshot.data_quality,
+      recentTrades,
+      priceHistory,
+    });
   }
 
   // 本地资讯（最近7天）
