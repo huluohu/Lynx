@@ -187,6 +187,8 @@ export default {
       refresh: 'Reload system info',
       openPage: 'View system info',
       openPageDesc: 'Open the standalone page for version, paths, timezone, and current preferences',
+      heroEyebrow: 'Personal investing cockpit',
+      heroSubtitle: 'Lynx brings assets, plans, market data, news, and alerts into one local-first workspace.',
       version: 'Current version',
       serverVersion: 'Server version',
       dataDirectory: 'Data directory',

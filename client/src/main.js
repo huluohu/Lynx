@@ -6,6 +6,17 @@ import i18n from './i18n/index.js'
 import { usePreferencesStore } from './stores/preferences.js'
 import './style.css'
 
+function applyDisplayMode() {
+  const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
+  document.documentElement.dataset.displayMode = standalone ? 'standalone' : 'browser'
+}
+
+applyDisplayMode()
+
+const standaloneMediaQuery = window.matchMedia?.('(display-mode: standalone)')
+standaloneMediaQuery?.addEventListener?.('change', applyDisplayMode)
+standaloneMediaQuery?.addListener?.(applyDisplayMode)
+
 const app = createApp(App)
 const pinia = createPinia()
 

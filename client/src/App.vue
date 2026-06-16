@@ -274,6 +274,7 @@ import { useNotificationsStore } from './stores/notifications.js'
 import { usePreferencesStore } from './stores/preferences.js'
 import { useRuntimeSettingsStore } from './stores/runtime-settings.js'
 import { useMobilePageActionsState } from './composables/useMobilePageActions.js'
+import { useDocumentScrollLock } from './composables/useDocumentScrollLock.js'
 import { useConfirm } from './utils/confirm.js'
 import { useToast } from './utils/toast.js'
 import AppToast from './components/AppToast.vue'
@@ -315,6 +316,9 @@ const hasUnreadNotifications = computed(() => notificationsStore.unreadCount > 0
 const mobileUnreadBadgeLabel = computed(() => (
   notificationsStore.unreadCount > 99 ? '99+' : String(notificationsStore.unreadCount || 0)
 ))
+const shellOverlayOpen = computed(() => sidebarOpen.value || moreMenuOpen.value || showMobilePageActionsSheet.value)
+
+useDocumentScrollLock(shellOverlayOpen)
 
 async function syncPreferences() {
   try {
@@ -455,10 +459,10 @@ onUnmounted(() => {
   align-items: center;
    justify-content: flex-end;
    gap: 16px;
-   margin-bottom: 18px;
-   padding: 8px 0 10px;
-   background: var(--surface-overlay);
-   border-bottom: 1px solid var(--border);
+    margin-bottom: var(--mobile-shell-header-gap, 18px);
+    padding: 8px 0 10px;
+    background: var(--surface-overlay);
+    border-bottom: 1px solid var(--border);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -830,7 +834,7 @@ button.mobile-nav-item {
     margin:
       calc(-1 * var(--safe-top))
       calc(-1 * (16px + var(--safe-right)))
-      18px
+      calc(var(--mobile-shell-header-gap, 18px) + var(--mobile-shell-standalone-bonus, 0px))
       calc(-1 * (16px + var(--safe-left)));
     padding:
       calc(10px + var(--safe-top))
@@ -844,7 +848,7 @@ button.mobile-nav-item {
     gap: 10px;
   }
   .app-shell-content {
-    padding-top: 8px;
+    padding-top: calc(var(--mobile-shell-content-gap, 8px) + var(--mobile-shell-standalone-bonus, 0px));
   }
   .app-shell-header-left,
   .app-shell-header-right {

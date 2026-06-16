@@ -25,9 +25,13 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useDocumentScrollLock } from '../composables/useDocumentScrollLock.js'
 import { useConfirmState, resolveConfirm } from '../utils/confirm.js'
 
 const state = useConfirmState()
+
+useDocumentScrollLock(computed(() => state.visible))
 
 function cancel() {
   resolveConfirm(false)

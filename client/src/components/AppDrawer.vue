@@ -46,6 +46,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useDocumentScrollLock } from '../composables/useDocumentScrollLock.js'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -127,6 +128,8 @@ const sheetClass = computed(() => ({
   'sheet-panel--fixed': props.mobileHeight === 'fixed',
   'sheet-panel--fullscreen': props.mobileHeight === 'fullscreen',
 }))
+
+useDocumentScrollLock(computed(() => props.modelValue))
 </script>
 
 <style scoped>

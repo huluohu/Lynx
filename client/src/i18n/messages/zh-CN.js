@@ -187,6 +187,8 @@ export default {
       refresh: '重新加载系统信息',
       openPage: '查看系统信息',
       openPageDesc: '进入独立页面查看版本、路径、时区和当前偏好',
+      heroEyebrow: '个人投资驾驶舱',
+      heroSubtitle: 'Lynx 把资产、计划、行情、资讯与提醒收在一个本地优先的操作界面里。',
       version: '当前版本',
       serverVersion: '服务端版本',
       dataDirectory: '数据目录',

@@ -20,6 +20,22 @@
       </div>
     </div>
 
+    <div class="card about-hero-card">
+      <div class="about-hero-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 13 Q6 8 9 9 Q11 5 12 5 Q13 5 15 9 Q18 8 20 13 Q20 18 12 20 Q4 18 4 13Z" />
+          <circle cx="9.5" cy="13" r="1.2" fill="currentColor" stroke="none" />
+          <circle cx="14.5" cy="13" r="1.2" fill="currentColor" stroke="none" />
+          <path d="M5 7 L4 4M6 6 L5.5 3.5M19 7 L20 4M18 6 L18.5 3.5" />
+        </svg>
+      </div>
+      <div class="about-hero-copy">
+        <div class="about-hero-eyebrow">{{ t('settings.about.heroEyebrow') }}</div>
+        <div class="about-hero-title">L¥NX <span class="about-hero-title-muted">/ Lynx</span></div>
+        <p class="about-hero-subtitle">{{ t('settings.about.heroSubtitle') }}</p>
+      </div>
+    </div>
+
     <div class="card">
       <div v-if="error" class="alert">{{ error }}</div>
       <div v-for="item in aboutItems" :key="item.key" class="about-row">
@@ -93,6 +109,63 @@ onUnmounted(() => {
   max-width: 720px;
 }
 
+.about-hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.about-hero-mark {
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--primary) 14%, var(--bg-card));
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 18%, var(--border));
+}
+
+.about-hero-mark svg {
+  width: 32px;
+  height: 32px;
+}
+
+.about-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.about-hero-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.about-hero-title {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.about-hero-title-muted {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.about-hero-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
 .about-row {
   display: flex;
   flex-direction: column;
@@ -127,6 +200,16 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--text);
   word-break: break-all;
+}
+
+@media (max-width: 768px) {
+  .about-hero-card {
+    gap: 12px;
+  }
+
+  .about-hero-title {
+    font-size: 22px;
+  }
 }
 
 </style>
