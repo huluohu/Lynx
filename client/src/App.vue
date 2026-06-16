@@ -146,7 +146,9 @@
           </button>
         </div>
       </header>
-      <router-view />
+      <div class="app-shell-content">
+        <router-view />
+      </div>
     </main>
 
     <nav class="mobile-nav">
@@ -167,8 +169,11 @@
           <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
           <span>{{ t('nav.strategies') }}</span>
         </router-link>
-        <button class="mobile-nav-item" @click="openMoreMenu">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        <button class="mobile-nav-item mobile-nav-more" @click="openMoreMenu">
+          <span class="mobile-nav-icon-wrap">
+            <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            <span v-if="hasUnreadNotifications" class="mobile-nav-alert-badge">{{ mobileUnreadBadgeLabel }}</span>
+          </span>
           <span>{{ t('nav.more') }}</span>
         </button>
       </div>
@@ -306,6 +311,10 @@ const safeMobilePageActions = computed(() => {
 })
 
 const showMobilePageActionsSheet = computed(() => isMobilePageActionsOpen.value && safeMobilePageActions.value.length > 0)
+const hasUnreadNotifications = computed(() => notificationsStore.unreadCount > 0)
+const mobileUnreadBadgeLabel = computed(() => (
+  notificationsStore.unreadCount > 99 ? '99+' : String(notificationsStore.unreadCount || 0)
+))
 
 async function syncPreferences() {
   try {
@@ -450,8 +459,11 @@ onUnmounted(() => {
    padding: 8px 0 10px;
    background: var(--surface-overlay);
    border-bottom: 1px solid var(--border);
-   backdrop-filter: blur(14px);
-   -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.app-shell-content {
+  min-width: 0;
 }
 .app-shell-header-left,
 .app-shell-header-right {
@@ -783,6 +795,30 @@ onUnmounted(() => {
   justify-content: center;
   padding: 0 4px;
 }
+.mobile-nav-more .mobile-nav-icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mobile-nav-alert-badge {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
 button.mobile-nav-item {
   background: none;
   border: none;
@@ -794,7 +830,7 @@ button.mobile-nav-item {
     margin:
       calc(-1 * var(--safe-top))
       calc(-1 * (16px + var(--safe-right)))
-      16px
+      18px
       calc(-1 * (16px + var(--safe-left)));
     padding:
       calc(10px + var(--safe-top))
@@ -806,6 +842,9 @@ button.mobile-nav-item {
     align-items: center;
     justify-content: stretch;
     gap: 10px;
+  }
+  .app-shell-content {
+    padding-top: 8px;
   }
   .app-shell-header-left,
   .app-shell-header-right {
