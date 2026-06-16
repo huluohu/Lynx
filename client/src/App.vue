@@ -832,9 +832,9 @@ button.mobile-nav-item {
 @media (max-width: 768px) {
   .app-shell-header {
     margin:
-      calc(-1 * var(--safe-top))
+      0
       calc(-1 * (16px + var(--safe-right)))
-      calc(var(--mobile-shell-header-gap, 18px) + var(--mobile-shell-standalone-bonus, 0px))
+      var(--mobile-shell-header-gap, 18px)
       calc(-1 * (16px + var(--safe-left)));
     padding:
       calc(10px + var(--safe-top))
@@ -848,7 +848,7 @@ button.mobile-nav-item {
     gap: 10px;
   }
   .app-shell-content {
-    padding-top: calc(var(--mobile-shell-content-gap, 8px) + var(--mobile-shell-standalone-bonus, 0px));
+    padding-top: var(--mobile-shell-content-gap, 8px);
   }
   .app-shell-header-left,
   .app-shell-header-right {

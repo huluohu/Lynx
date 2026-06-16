@@ -56,6 +56,12 @@ function buildSummary(db) {
     FROM trading_plans p JOIN assets a ON p.asset_id = a.id
     WHERE p.status IN ('pending', 'triggered') ORDER BY p.seq`).all();
 
+  const activeStrategyCount = db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM strategies
+    WHERE status = 'active'
+  `).get().count;
+
   // 最近交易
   const recentTrades = db.prepare(`SELECT t.*, a.name, a.symbol
     FROM transactions t JOIN assets a ON t.asset_id = a.id
@@ -67,6 +73,7 @@ function buildSummary(db) {
       total_market_value: totalMarketValue,
       total_pl: totalPL,
       total_pl_pct: totalInvested ? (totalPL / totalInvested * 100) : 0,
+      active_strategy_count: activeStrategyCount,
     },
     allocation,
     active_plans: activePlans,

@@ -49,7 +49,7 @@
       <div class="stat-card">
         <div class="stat-label">{{ t('dashboard.assetCount') }}</div>
         <div class="stat-value">{{ allocation.length }}</div>
-        <div class="stat-sub">{{ t('dashboard.activeStrategies', { count: activePlans.length }) }}</div>
+        <div class="stat-sub">{{ t('dashboard.activeStrategies', { count: summary.active_strategy_count || 0 }) }}</div>
       </div>
     </div>
 
@@ -207,7 +207,7 @@ import PullRefreshView from '../components/PullRefreshView.vue'
 const { t } = useI18n()
 const notificationsStore = useNotificationsStore()
 const runtimeSettingsStore = useRuntimeSettingsStore()
-const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, total_pl_pct: 0 })
+const summary = ref({ total_invested: 0, total_market_value: 0, total_pl: 0, total_pl_pct: 0, active_strategy_count: 0 })
 const allocation = ref([])
 const activePlans = ref([])
 const recentTrades = ref([])
