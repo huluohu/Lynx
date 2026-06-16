@@ -2,6 +2,8 @@
  * Currency formatting utilities
  */
 
+import { formatNumber } from './formatters.js'
+
 const CURRENCY_SYMBOLS = {
   CNY: '¥',
   USD: '$',
@@ -33,7 +35,7 @@ export function formatMoney(value, currency = 'CNY') {
   const symbol = currencySymbol(currency)
   const num = Number(value)
   if (isNaN(num)) return '-'
-  return `${symbol}${Math.round(num).toLocaleString()}`
+  return `${symbol}${formatNumber(Math.round(num), { maximumFractionDigits: 0 })}`
 }
 
 /**
@@ -47,5 +49,5 @@ export function formatPrice(value, currency = 'CNY') {
   const symbol = currencySymbol(currency)
   const num = Number(value)
   if (isNaN(num)) return '-'
-  return `${symbol}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `${symbol}${formatNumber(num, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }

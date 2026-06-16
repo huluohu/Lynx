@@ -3,10 +3,10 @@
     <div class="page-header">
       <h1 class="page-title">{{ asset.icon }} {{ asset.name }}</h1>
       <div class="page-actions hide-on-mobile">
-        <button class="btn btn-primary" @click="showTxDrawer = true">+ 记录交易</button>
-        <button class="btn" @click="showAIDrawer = true">AI 建议</button>
-        <button class="btn" @click="showEditDrawer = true">编辑</button>
-        <button class="btn btn-danger" @click="showDeleteConfirm = true">删除</button>
+        <button class="btn btn-primary" @click="showTxDrawer = true">+ {{ t('assetDetail.recordTrade') }}</button>
+        <button class="btn" @click="showAIDrawer = true">{{ t('assetDetail.aiAdvice') }}</button>
+        <button class="btn" @click="showEditDrawer = true">{{ t('assetDetail.edit') }}</button>
+        <button class="btn btn-danger" @click="confirmDelete">{{ t('assetDetail.delete') }}</button>
       </div>
       <button class="btn btn-icon show-on-mobile" @click="showActions = !showActions">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
@@ -19,140 +19,132 @@
       <div v-if="showActions" class="action-sheet">
         <div class="action-sheet-item" @click="showTxDrawer = true; showActions = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          记录交易
+          {{ t('assetDetail.recordTrade') }}
         </div>
         <div class="action-sheet-item" @click="showAIDrawer = true; showActions = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-          AI 策略建议
+          {{ t('assetDetail.aiAdviceTitle') }}
         </div>
         <div class="action-sheet-item" @click="showEditDrawer = true; showActions = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          编辑资产
+          {{ t('assetDetail.editAsset') }}
         </div>
-        <div class="action-sheet-item danger" @click="showDeleteConfirm = true; showActions = false">
+        <div class="action-sheet-item danger" @click="confirmDelete(); showActions = false">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          删除资产
+          {{ t('assetDetail.deleteAsset') }}
         </div>
-        <div class="action-sheet-cancel" @click="showActions = false">取消</div>
+        <div class="action-sheet-cancel" @click="showActions = false">{{ t('common.cancel') }}</div>
       </div>
     </transition>
 
     <div class="grid-2" style="margin-bottom:20px">
       <div class="card">
-        <div class="section-title">基本信息</div>
+        <div class="section-title">{{ t('assetDetail.basicInfo') }}</div>
         <div class="info-list">
-          <div class="info-row"><span class="info-label">代码</span><span style="color:var(--text-dim)">{{ asset.symbol }}</span></div>
-          <div class="info-row"><span class="info-label">类型</span><span class="badge" :class="typeBadge(asset.type)">{{ asset.type }}</span></div>
-          <div class="info-row"><span class="info-label">计价货币</span><span>{{ asset.currency }}</span></div>
-          <div class="info-row"><span class="info-label">数据源</span><span style="color:var(--text-dim)">{{ asset.data_source || '自动' }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assets.fields.symbol') }}</span><span style="color:var(--text-dim)">{{ asset.symbol }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assets.fields.type') }}</span><span class="badge" :class="typeBadge(asset.type)">{{ assetTypeLabel(asset.type) }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assets.fields.currency') }}</span><span>{{ asset.currency }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assetDetail.dataSource') }}</span><span style="color:var(--text-dim)">{{ asset.data_source || t('assetDetail.auto') }}</span></div>
         </div>
       </div>
 
       <div class="card" v-if="holding">
-        <div class="section-title">📦 持仓信息</div>
+        <div class="section-title">📦 {{ t('assetDetail.holdingInfo') }}</div>
         <div class="info-list">
-          <div class="info-row"><span class="info-label">持仓数量</span><span style="font-weight:600">{{ holding.quantity }}</span></div>
-          <div class="info-row"><span class="info-label">成本价</span><span>¥{{ fmt(holding.avg_cost) }}</span></div>
-          <div class="info-row"><span class="info-label">总投入</span><span>¥{{ fmt(holding.total_invested) }}</span></div>
-          <div class="info-row"><span class="info-label">目标价</span><span>{{ holding.target_price ? '¥'+holding.target_price : '-' }}</span></div>
-          <div class="info-row"><span class="info-label">止损线</span><span style="color:var(--red)">{{ holding.stop_loss ? '¥'+holding.stop_loss : '-' }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('holdings.fields.quantity') }}</span><span style="font-weight:600">{{ holding.quantity }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('holdings.fields.avgCost') }}</span><span>¥{{ fmt(holding.avg_cost) }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('holdings.fields.totalInvested') }}</span><span>¥{{ fmt(holding.total_invested) }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assetDetail.targetPrice') }}</span><span>{{ holding.target_price ? '¥' + fmt(holding.target_price) : '-' }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assetDetail.stopLoss') }}</span><span style="color:var(--red)">{{ holding.stop_loss ? '¥' + fmt(holding.stop_loss) : '-' }}</span></div>
         </div>
       </div>
     </div>
 
     <!-- 交易记录 -->
     <div class="card">
-      <div class="section-title">交易记录</div>
+      <div class="section-title">{{ t('assetDetail.transactions') }}</div>
       <!-- Desktop -->
       <table v-if="transactions.length" class="hide-mobile">
-        <thead><tr><th>时间</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th><th>手续费</th></tr></thead>
+        <thead><tr><th>{{ t('assetDetail.time') }}</th><th>{{ t('transactionForm.type') }}</th><th>{{ t('transactionForm.quantity') }}</th><th>{{ t('transactionForm.price') }}</th><th>{{ t('transactionForm.total') }}</th><th>{{ t('assetDetail.fee') }}</th></tr></thead>
         <tbody>
-          <tr v-for="t in transactions" :key="t.id">
-            <td>{{ t.executed_at?.slice(0,10) }}</td>
-            <td><span class="badge" :class="t.type==='buy'?'badge-buy':'badge-sell'">{{ t.type==='buy'?'买入':'卖出' }}</span></td>
-            <td>{{ t.quantity }}</td>
-            <td>¥{{ t.price }}</td>
-            <td :class="t.type==='buy'?'pnl negative':'pnl positive'">¥{{ fmt(t.total) }}</td>
-            <td>¥{{ fmt(t.fee) }}</td>
+          <tr v-for="tx in transactions" :key="tx.id">
+            <td>{{ tx.executed_at?.slice(0,10) }}</td>
+            <td><span class="badge" :class="tx.type==='buy'?'badge-buy':'badge-sell'">{{ tx.type==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span></td>
+            <td>{{ tx.quantity }}</td>
+            <td>¥{{ fmt(tx.price) }}</td>
+            <td :class="tx.type==='buy'?'pnl negative':'pnl positive'">¥{{ fmt(tx.total) }}</td>
+            <td>¥{{ fmt(tx.fee) }}</td>
           </tr>
         </tbody>
       </table>
       <!-- Mobile cards -->
       <div v-if="transactions.length" class="show-mobile tx-cards">
-        <div v-for="t in transactions" :key="t.id" class="tx-card">
-          <div class="tx-card-top">
-            <span class="badge" :class="t.type==='buy'?'badge-buy':'badge-sell'">{{ t.type==='buy'?'买入':'卖出' }}</span>
-            <span style="color:var(--text-muted);font-size:12px">{{ t.executed_at?.slice(0,10) }}</span>
-          </div>
-          <div class="tx-card-body">
-            <span>{{ t.quantity }} × ¥{{ t.price }}</span>
-            <span :class="t.type==='buy'?'pnl negative':'pnl positive'" style="font-weight:600">¥{{ fmt(t.total) }}</span>
+          <div v-for="tx in transactions" :key="tx.id" class="tx-card">
+            <div class="tx-card-top">
+              <span class="badge" :class="tx.type==='buy'?'badge-buy':'badge-sell'">{{ tx.type==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
+              <span style="color:var(--text-muted);font-size:12px">{{ tx.executed_at?.slice(0,10) }}</span>
+            </div>
+            <div class="tx-card-body">
+              <span>{{ tx.quantity }} × ¥{{ fmt(tx.price) }}</span>
+              <span :class="tx.type==='buy'?'pnl negative':'pnl positive'" style="font-weight:600">¥{{ fmt(tx.total) }}</span>
+            </div>
           </div>
         </div>
-      </div>
-      <div v-if="!transactions.length" class="empty" style="padding:24px"><p>暂无交易记录</p></div>
+      <div v-if="!transactions.length" class="empty" style="padding:24px"><p>{{ t('assetDetail.noTransactions') }}</p></div>
     </div>
 
     <!-- Transaction Drawer -->
-    <AppDrawer v-model="showTxDrawer" title="记录交易">
+    <AppDrawer v-model="showTxDrawer" :title="t('assetDetail.recordTrade')">
       <TransactionForm :asset-id="route.params.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
     </AppDrawer>
 
     <!-- Edit Drawer -->
-    <AppDrawer v-model="showEditDrawer" title="编辑资产">
+    <AppDrawer v-model="showEditDrawer" :title="t('assetDetail.editAsset')">
       <form @submit.prevent="saveEdit">
-        <div class="form-group"><label class="form-label">名称</label><input class="form-input" v-model="editForm.name" required /></div>
-        <div class="form-group"><label class="form-label">代码</label><input class="form-input" v-model="editForm.symbol" /></div>
+        <div class="form-group"><label class="form-label">{{ t('assets.fields.name') }}</label><input class="form-input" v-model="editForm.name" required /></div>
+        <div class="form-group"><label class="form-label">{{ t('assets.fields.symbol') }}</label><input class="form-input" v-model="editForm.symbol" /></div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">类型</label>
+          <div class="form-group"><label class="form-label">{{ t('assets.fields.type') }}</label>
             <select class="form-select" v-model="editForm.type">
-              <option value="gold">黄金</option><option value="crypto">加密货币</option><option value="stock">股票</option><option value="forex">外汇</option><option value="commodity">大宗商品</option>
+              <option value="gold">{{ assetTypeLabel('gold') }}</option><option value="crypto">{{ assetTypeLabel('crypto') }}</option><option value="stock">{{ assetTypeLabel('stock') }}</option><option value="forex">{{ assetTypeLabel('forex') }}</option><option value="commodity">{{ assetTypeLabel('commodity') }}</option>
             </select>
           </div>
-          <div class="form-group"><label class="form-label">计价货币</label>
+          <div class="form-group"><label class="form-label">{{ t('assets.fields.currency') }}</label>
             <select class="form-select" v-model="editForm.currency">
               <option value="CNY">CNY</option><option value="USD">USD</option><option value="USDT">USDT</option>
             </select>
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">图标</label><input class="form-input" v-model="editForm.icon" /></div>
-          <div class="form-group"><label class="form-label">数据源</label><input class="form-input" v-model="editForm.data_source" placeholder="自动" /></div>
+          <div class="form-group"><label class="form-label">{{ t('assets.fields.icon') }}</label><input class="form-input" v-model="editForm.icon" /></div>
+          <div class="form-group"><label class="form-label">{{ t('assetDetail.dataSource') }}</label><input class="form-input" v-model="editForm.data_source" :placeholder="t('assetDetail.auto')" /></div>
         </div>
 
-        <div class="section-title" style="margin-top:20px">持仓信息</div>
+        <div class="section-title" style="margin-top:20px">{{ t('assetDetail.holdingInfo') }}</div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">持仓数量</label><input class="form-input" type="number" step="any" v-model="editForm.quantity" /></div>
-          <div class="form-group"><label class="form-label">成本价</label><input class="form-input" type="number" step="any" v-model="editForm.avg_cost" /></div>
+          <div class="form-group"><label class="form-label">{{ t('holdings.fields.quantity') }}</label><input class="form-input" type="number" step="any" v-model="editForm.quantity" /></div>
+          <div class="form-group"><label class="form-label">{{ t('holdings.fields.avgCost') }}</label><input class="form-input" type="number" step="any" v-model="editForm.avg_cost" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">总投入</label><input class="form-input" type="number" step="any" v-model="editForm.total_invested" /></div>
+          <div class="form-group"><label class="form-label">{{ t('holdings.fields.totalInvested') }}</label><input class="form-input" type="number" step="any" v-model="editForm.total_invested" /></div>
           <div class="form-group"></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">目标价</label><input class="form-input" type="number" step="any" v-model="editForm.target_price" /></div>
-          <div class="form-group"><label class="form-label">止损线</label><input class="form-input" type="number" step="any" v-model="editForm.stop_loss" /></div>
+          <div class="form-group"><label class="form-label">{{ t('assetDetail.targetPrice') }}</label><input class="form-input" type="number" step="any" v-model="editForm.target_price" /></div>
+          <div class="form-group"><label class="form-label">{{ t('assetDetail.stopLoss') }}</label><input class="form-input" type="number" step="any" v-model="editForm.stop_loss" /></div>
         </div>
 
         <div style="display:flex;gap:10px;margin-top:16px">
-          <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? '保存中...' : '保存' }}</button>
-          <button type="button" class="btn" @click="showEditDrawer = false">取消</button>
+          <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? t('assetDetail.saving') : t('assetDetail.save') }}</button>
+          <button type="button" class="btn" @click="showEditDrawer = false">{{ t('common.cancel') }}</button>
         </div>
       </form>
     </AppDrawer>
 
-    <!-- Delete Confirm -->
-    <ConfirmDialog
-      v-model="showDeleteConfirm"
-      title="删除资产"
-      :message="`确定要删除「${asset.name}」吗？相关持仓和交易记录将一并删除。`"
-      confirm-text="删除"
-      :loading="deleting"
-      @confirm="doDelete"
-    />
+    <!-- delete confirm is handled programmatically via useConfirm() -->
 
     <!-- AI Drawer -->
-    <AppDrawer v-model="showAIDrawer" title="✨ AI 策略建议">
+    <AppDrawer v-model="showAIDrawer" :title="`✨ ${t('assetDetail.aiAdviceTitle')}`">
       <AIStrategyGenerator :preset-asset-id="route.params.id" @done="showAIDrawer = false" />
     </AppDrawer>
   </div>
@@ -161,19 +153,23 @@
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
+import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
+import { formatNumber } from '../utils/formatters.js'
 
 useSwipeBack()
 
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const confirm = useConfirm()
+const { t } = useI18n()
 const asset = ref({})
 const holding = ref(null)
 const transactions = ref([])
@@ -213,7 +209,7 @@ async function loadData() {
 
 function onTxSuccess() {
   showTxDrawer.value = false
-  toast.success('交易已记录')
+  toast.success(t('assetDetail.recordTrade'))
   loadData()
 }
 
@@ -224,7 +220,7 @@ async function saveEdit() {
     const assetPayload = { name: editForm.name, symbol: editForm.symbol, type: editForm.type, currency: editForm.currency, icon: editForm.icon, data_source: editForm.data_source }
     const res = await api(`/api/assets/${route.params.id}`, { method: 'PUT', body: JSON.stringify(assetPayload) })
     const json = await res.json()
-    if (!json.success) { toast.error(json.error || '保存失败'); saving.value = false; return }
+    if (!json.success) { toast.error(json.error || t('common.saveFailed')); saving.value = false; return }
 
     // Save holding fields if we have a holding
     if (asset.value.holding_id) {
@@ -251,9 +247,20 @@ async function saveEdit() {
       })
     }
 
-    toast.success('已更新'); showEditDrawer.value = false; loadData()
+    toast.success(t('assetDetail.updated')); showEditDrawer.value = false; loadData()
   } catch (e) { toast.error(e.message) }
   saving.value = false
+}
+
+async function confirmDelete() {
+  const ok = await confirm({
+    title: t('assetDetail.deleteAsset'),
+    message: t('assetDetail.deleteConfirm', { name: asset.name }),
+    confirmText: t('assetDetail.delete'),
+    icon: 'delete',
+    danger: true,
+  })
+  if (ok) doDelete()
 }
 
 async function doDelete() {
@@ -261,8 +268,8 @@ async function doDelete() {
   try {
     const res = await api(`/api/assets/${route.params.id}`, { method: 'DELETE' })
     const json = await res.json()
-    if (json.success) { toast.success('已删除'); router.push('/assets') }
-    else toast.error(json.error || '删除失败')
+    if (json.success) { toast.success(t('assetDetail.deleted')); router.push('/assets') }
+    else toast.error(json.error || t('assetDetail.deleteFailed'))
   } catch (e) { toast.error(e.message) }
   deleting.value = false
   showDeleteConfirm.value = false
@@ -271,9 +278,18 @@ async function doDelete() {
 function typeBadge(type) {
   return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
+function assetTypeLabel(type) {
+  return {
+    gold: t('assets.types.gold'),
+    crypto: t('assets.types.crypto'),
+    stock: t('assets.types.stock'),
+    forex: t('assets.types.forex'),
+    commodity: t('assets.types.commodity'),
+  }[type] || type
+}
 function fmt(n) {
   if (!n && n !== 0) return '0'
-  return Number(n).toLocaleString()
+  return formatNumber(Number(n))
 }
 
 onMounted(loadData)

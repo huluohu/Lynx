@@ -1,176 +1,225 @@
 <template>
   <div class="ai-gen">
-    <!-- Step 1: 配置 -->
     <div v-if="step === 'config'">
       <div class="form-group">
-        <label class="form-label">选择资产 *（可多选）</label>
+        <label class="form-label">{{ t('strategyCompare.selectAssets') }} *</label>
         <div class="asset-multi-select">
-          <div v-for="a in assets" :key="a.id" class="asset-chip" 
-               :class="{ selected: selectedAssetIds.includes(a.id) }"
-               @click="toggleAsset(a.id)">
+          <div
+            v-for="a in assets"
+            :key="a.id"
+            class="asset-chip"
+            :class="{ selected: selectedAssetIds.includes(a.id) }"
+            @click="toggleAsset(a.id)"
+          >
             {{ a.icon }} {{ a.name }}
           </div>
         </div>
         <div v-if="selectedAssetIds.length > 0" class="selected-count">
-          已选 {{ selectedAssetIds.length }} 个资产
+          {{ t('strategyCompare.selectedCount', { count: selectedAssetIds.length }) }}
         </div>
       </div>
 
-      <!-- 持仓摘要 -->
       <div v-if="holdingSummaries.length > 0" class="holding-summary">
         <div v-for="s in holdingSummaries" :key="s.asset_id" class="holding-summary-item">
           <div class="summary-asset-name">{{ s.name }}</div>
-          <div class="summary-row"><span>持仓数量</span><b>{{ s.quantity }}</b></div>
-          <div class="summary-row"><span>成本价</span><b>¥{{ s.avg_cost }}</b></div>
-          <div class="summary-row"><span>总投入</span><b>¥{{ fmt(s.total_invested) }}</b></div>
+          <div class="summary-row"><span>{{ t('strategyCompare.holdingQuantity') }}</span><b>{{ s.quantity }}</b></div>
+          <div class="summary-row"><span>{{ t('strategyCompare.avgCost') }}</span><b>¥{{ formatRounded(s.avg_cost) }}</b></div>
+          <div class="summary-row"><span>{{ t('strategyCompare.totalInvested') }}</span><b>¥{{ fmt(s.total_invested) }}</b></div>
           <div class="summary-row" v-if="s.pnl_pct !== null">
-            <span>浮动盈亏</span>
-            <b :class="s.pnl_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ s.pnl_pct >= 0 ? '+' : '' }}{{ s.pnl_pct }}%</b>
+            <span>{{ t('strategyCompare.floatingPnl') }}</span>
+            <b :class="s.pnl_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ formatPercent(s.pnl_pct, 1, true) }}</b>
           </div>
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">可用预算 (¥)</label>
+        <label class="form-label">{{ t('strategyCompare.budget') }} (¥)</label>
         <input class="form-input" type="number" v-model="form.budget" placeholder="20000" inputmode="numeric" />
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">投资目标</label>
+          <label class="form-label">{{ t('strategyCompare.goal') }}</label>
           <select class="form-select" v-model="form.goal">
-            <option value="recovery">💉 扭亏为盈</option>
-            <option value="growth">📈 稳定增长</option>
-            <option value="balanced">⚖️ 平衡网格</option>
-            <option value="trend">📊 趋势跟踪</option>
-            <option value="rebalance">⚖️ 组合再平衡</option>
+            <option value="recovery">💉 {{ t('strategyCompare.goals.recovery') }}</option>
+            <option value="growth">📈 {{ t('strategyCompare.goals.growth') }}</option>
+            <option value="balanced">⚖️ {{ t('strategyCompare.goals.balanced') }}</option>
+            <option value="trend">📊 {{ t('strategyCompare.goals.trend') }}</option>
+            <option value="rebalance">⚖️ {{ t('strategyCompare.goals.rebalance') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">风险偏好</label>
+          <label class="form-label">{{ t('strategyCompare.riskLevel') }}</label>
           <select class="form-select" v-model="form.risk_level">
-            <option value="low">🛡️ 保守</option>
-            <option value="medium">⚖️ 适中</option>
-            <option value="high">🔥 激进</option>
+            <option value="low">🛡️ {{ t('strategyCompare.risks.low') }}</option>
+            <option value="medium">⚖️ {{ t('strategyCompare.risks.medium') }}</option>
+            <option value="high">🔥 {{ t('strategyCompare.risks.high') }}</option>
           </select>
         </div>
       </div>
 
       <button class="btn btn-primary" style="width:100%;margin-top:12px" @click="generate" :disabled="generating || selectedAssetIds.length === 0">
-        {{ generating ? '⏳ Agent 工作中...' : '✨ 智能生成策略' }}
+        {{ generating ? t('aiStrategyGenerator.generating') : t('aiStrategyGenerator.generate') }}
       </button>
-
-      <!-- Agent Progress -->
-      <div v-if="generating" class="agent-progress">
-        <div class="progress-title">🧠 策略 Agent 工作中</div>
-        <div class="progress-steps">
-          <div v-for="s in agentSteps" :key="s.id" class="progress-step" :class="s.status">
-            <span class="step-icon">{{ s.status === 'done' ? '✅' : s.status === 'active' ? '⏳' : '⬜' }}</span>
-            <span class="step-label">{{ s.label }}</span>
-            <span v-if="s.detail" class="step-detail">{{ s.detail }}</span>
-          </div>
-        </div>
-      </div>
 
       <div v-if="error" class="gen-error">{{ error }}</div>
     </div>
 
-    <!-- Step 2: 预览结果 -->
     <div v-if="step === 'preview'">
-      <!-- 分析报告（可折叠） -->
+      <!-- Quality & Observability Banner -->
+      <div class="agent-quality-banner" v-if="evalResult || dataQualityScore != null || result.used_fallback_analysis">
+        <div class="quality-row">
+          <div v-if="evalResult" class="quality-item">
+            <span class="quality-label">{{ t('aiStrategyGenerator.evalScore') }}</span>
+            <span class="quality-score" :style="{ color: qualityGradeColor(evalResult.grade) }">
+              {{ Math.round((evalResult.score || 0) * 100) }}<small>/100</small>
+            </span>
+            <span class="quality-grade" :style="{ background: qualityGradeColor(evalResult.grade) + '20', color: qualityGradeColor(evalResult.grade) }">
+              {{ t('aiStrategyGenerator.evalGrade') }} {{ evalResult.grade }} · {{ t(`aiStrategyGenerator.grades.${evalResult.grade}`) }}
+            </span>
+          </div>
+          <div v-if="dataQualityScore != null" class="quality-item">
+            <span class="quality-label">{{ t('aiStrategyGenerator.dataQuality') }}</span>
+            <div class="dq-bar-track small">
+              <div class="dq-bar-fill" :style="{ width: (dataQualityScore * 100) + '%', background: dataQualityColor(dataQualityScore) }"></div>
+            </div>
+            <span class="dq-value" :style="{ color: dataQualityColor(dataQualityScore) }">{{ Math.round(dataQualityScore * 100) }}%</span>
+          </div>
+          <button v-if="evalResult" class="btn-link" @click="showQualityDetails = !showQualityDetails">
+            {{ t('aiStrategyGenerator.qualityDetails') }} {{ showQualityDetails ? '▲' : '▼' }}
+          </button>
+        </div>
+
+        <!-- Fallback analysis warning -->
+        <div v-if="result.used_fallback_analysis" class="agent-warning">
+          {{ t('aiStrategyGenerator.fallbackAnalysis') }}
+        </div>
+
+        <!-- Data quality low warning -->
+        <div v-if="dataQualityScore != null && dataQualityScore < 0.4" class="agent-warning">
+          ⚠️ {{ t('aiStrategyGenerator.dataQualityLow') }}
+        </div>
+
+        <!-- Quality check details (collapsible) -->
+        <div v-if="showQualityDetails && evalResult?.checks" class="quality-checks">
+          <div v-for="c in evalResult.checks" :key="c.name" class="quality-check-row">
+            <span class="check-icon">{{ c.passed ? '✅' : '❌' }}</span>
+            <span class="check-name">{{ c.name.replace(/_/g, ' ') }}</span>
+            <span v-if="c.detail" class="check-detail">{{ c.detail }}</span>
+          </div>
+        </div>
+
+        <!-- Consistency warnings (collapsible) -->
+        <div v-if="result.consistency_warnings?.length" class="agent-warnings-section">
+          <div class="warnings-header clickable" @click="showConsistencyWarnings = !showConsistencyWarnings">
+            {{ t('aiStrategyGenerator.consistencyWarnings') }} ({{ result.consistency_warnings.length }})
+            <span>{{ showConsistencyWarnings ? '▲' : '▼' }}</span>
+          </div>
+          <div v-if="showConsistencyWarnings" class="warnings-list">
+            <div v-for="(w, i) in result.consistency_warnings" :key="i" class="warning-item">⚠️ {{ w }}</div>
+          </div>
+        </div>
+
+        <!-- Fix log -->
+        <div v-if="result.fix_log?.length" class="fix-log">
+          <span class="fix-log-label">🔧 {{ t('aiStrategyGenerator.fixLog') }}:</span>
+          {{ result.fix_log.join(' · ') }}
+        </div>
+
+        <!-- Trace info -->
+        <div v-if="result._meta?.trace_id" class="trace-info">
+          <span class="trace-label">{{ t('aiStrategyGenerator.traceId') }}: #{{ result._meta.trace_id }}</span>
+          <span class="trace-elapsed" v-if="result._meta?.elapsed_ms">{{ (result._meta.elapsed_ms / 1000).toFixed(1) }}s</span>
+        </div>
+      </div>
       <div v-if="result.analysis" class="preview-section analysis-section">
         <div class="section-title clickable" @click="showAnalysis = !showAnalysis">
-          📊 市场分析报告 
+          {{ t('aiStrategyGenerator.analysisReport') }}
           <span class="toggle-icon">{{ showAnalysis ? '▼' : '▶' }}</span>
           <span v-if="result.analysis.confidence_level" class="confidence-badge">
-            置信度 {{ Math.round(result.analysis.confidence_level * 100) }}%
+            {{ t('aiStrategyGenerator.confidence', { value: formatRounded(result.analysis.confidence_level * 100) }) }}
           </span>
         </div>
         <div v-if="showAnalysis" class="analysis-content">
           <div class="analysis-item">
-            <div class="analysis-label">市场评估</div>
+            <div class="analysis-label">{{ t('aiStrategyGenerator.marketAssessment') }}</div>
             <p>{{ result.analysis.market_assessment }}</p>
           </div>
           <div v-if="result.analysis.macro_outlook" class="analysis-item">
-            <div class="analysis-label">宏观展望</div>
+            <div class="analysis-label">{{ t('aiStrategyGenerator.macroOutlook') }}</div>
             <p>{{ result.analysis.macro_outlook }}</p>
           </div>
           <div v-if="result.analysis.portfolio_diagnosis" class="analysis-item">
-            <div class="analysis-label">组合诊断</div>
+            <div class="analysis-label">{{ t('aiStrategyGenerator.portfolioDiagnosis') }}</div>
             <p>{{ result.analysis.portfolio_diagnosis }}</p>
           </div>
           <div v-for="aa in (result.analysis.asset_analyses || [])" :key="aa.asset_name" class="analysis-item">
             <div class="analysis-label">{{ aa.asset_name }}</div>
             <div class="analysis-trend">
-              <div v-if="aa.trend?.short_term"><b>短期:</b> {{ aa.trend.short_term }}</div>
-              <div v-if="aa.trend?.medium_term"><b>中期:</b> {{ aa.trend.medium_term }}</div>
-              <div v-if="aa.trend?.key_support_levels?.length"><b>支撑位:</b> {{ aa.trend.key_support_levels.join(', ') }}</div>
-              <div v-if="aa.trend?.key_resistance_levels?.length"><b>阻力位:</b> {{ aa.trend.key_resistance_levels.join(', ') }}</div>
+              <div v-if="aa.trend?.short_term"><b>{{ t('aiStrategyGenerator.shortTerm') }}:</b> {{ aa.trend.short_term }}</div>
+              <div v-if="aa.trend?.medium_term"><b>{{ t('aiStrategyGenerator.mediumTerm') }}:</b> {{ aa.trend.medium_term }}</div>
+              <div v-if="aa.trend?.key_support_levels?.length"><b>{{ t('aiStrategyGenerator.supportLevels') }}:</b> {{ aa.trend.key_support_levels.join(', ') }}</div>
+              <div v-if="aa.trend?.key_resistance_levels?.length"><b>{{ t('aiStrategyGenerator.resistanceLevels') }}:</b> {{ aa.trend.key_resistance_levels.join(', ') }}</div>
             </div>
             <div v-if="aa.risk_factors?.length" class="analysis-list">
-              <span class="list-label">⚠️ 风险:</span> {{ aa.risk_factors.join('；') }}
+              <span class="list-label">{{ t('aiStrategyGenerator.riskFactors') }}:</span> {{ aa.risk_factors.join('；') }}
             </div>
             <div v-if="aa.opportunities?.length" class="analysis-list">
-              <span class="list-label">💡 机会:</span> {{ aa.opportunities.join('；') }}
+              <span class="list-label">{{ t('aiStrategyGenerator.opportunities') }}:</span> {{ aa.opportunities.join('；') }}
             </div>
           </div>
           <div v-if="result.analysis.data_limitations" class="analysis-item disclaimer">
-            <div class="analysis-label">⚠️ 数据局限性</div>
+            <div class="analysis-label">{{ t('aiStrategyGenerator.dataLimitations') }}</div>
             <p>{{ result.analysis.data_limitations }}</p>
           </div>
         </div>
       </div>
 
-      <!-- 策略建议 -->
       <div class="preview-section">
-        <div class="section-title">🎯 策略建议</div>
+        <div class="section-title">{{ t('aiStrategyGenerator.strategySuggestion') }}</div>
         <div class="info-list">
-          <div class="info-row"><span class="info-label">名称</span><span>{{ result.strategy.name }}</span></div>
-          <div class="info-row"><span class="info-label">类型</span><span class="badge badge-buy">{{ typeLabel(result.strategy.type) }}</span></div>
-          <div class="info-row"><span class="info-label">描述</span><span style="color:var(--text-dim)">{{ result.strategy.description }}</span></div>
-          <div class="info-row" v-if="selectedAssetIds.length > 1"><span class="info-label">组合</span><span>{{ selectedAssetNames }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('aiStrategyGenerator.name') }}</span><span>{{ result.strategy.name }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('strategyCompare.type') }}</span><span class="badge badge-buy">{{ typeLabel(result.strategy.type) }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('aiStrategyGenerator.description') }}</span><span style="color:var(--text-dim)">{{ result.strategy.description }}</span></div>
+          <div class="info-row" v-if="selectedAssetIds.length > 1"><span class="info-label">{{ t('aiStrategyGenerator.portfolio') }}</span><span>{{ selectedAssetNames }}</span></div>
         </div>
       </div>
 
-      <!-- 决策逻辑 -->
       <div v-if="result.reasoning" class="preview-section">
-        <div class="section-title">💡 决策逻辑</div>
+        <div class="section-title">{{ t('aiStrategyGenerator.reasoning') }}</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.6">{{ result.reasoning }}</p>
       </div>
 
-      <!-- 风险管理 -->
       <div v-if="result.risk_management" class="preview-section">
-        <div class="section-title">🛡️ 风险管理</div>
+        <div class="section-title">{{ t('aiStrategyGenerator.riskManagement') }}</div>
         <div class="risk-info">
-          <div v-if="result.risk_management.max_loss_tolerance"><b>最大容忍亏损:</b> {{ result.risk_management.max_loss_tolerance }}</div>
-          <div v-if="result.risk_management.position_sizing_logic"><b>仓位逻辑:</b> {{ result.risk_management.position_sizing_logic }}</div>
+          <div v-if="result.risk_management.max_loss_tolerance"><b>{{ t('aiStrategyGenerator.maxLossTolerance') }}:</b> {{ result.risk_management.max_loss_tolerance }}</div>
+          <div v-if="result.risk_management.position_sizing_logic"><b>{{ t('aiStrategyGenerator.positionSizingLogic') }}:</b> {{ result.risk_management.position_sizing_logic }}</div>
           <div v-if="result.risk_management.stop_loss_triggers?.length">
-            <b>止损条件:</b>
-            <ul><li v-for="(t, i) in result.risk_management.stop_loss_triggers" :key="i">{{ t }}</li></ul>
+            <b>{{ t('aiStrategyGenerator.stopLossTriggers') }}:</b>
+            <ul><li v-for="(triggerText, i) in result.risk_management.stop_loss_triggers" :key="i">{{ triggerText }}</li></ul>
           </div>
         </div>
       </div>
 
-      <!-- 执行建议 -->
       <div v-if="result.execution_notes" class="preview-section">
-        <div class="section-title">📝 执行建议</div>
+        <div class="section-title">{{ t('aiStrategyGenerator.executionNotes') }}</div>
         <p style="font-size:13px;color:var(--text-dim);line-height:1.6">{{ result.execution_notes }}</p>
       </div>
 
-      <!-- 操盘计划（可编辑） -->
       <div class="preview-section">
-        <div class="section-title">📋 操盘计划 ({{ editablePlans.length }} 步)
-          <span class="budget-usage">预算使用: ¥{{ totalBudgetUsed }}</span>
+        <div class="section-title">{{ t('aiStrategyGenerator.planTitle', { count: editablePlans.length }) }}
+          <span class="budget-usage">{{ t('aiStrategyGenerator.budgetUsage', { value: totalBudgetUsed }) }}</span>
         </div>
         <div class="plan-preview-list">
           <div v-for="(p, idx) in editablePlans" :key="p.seq" class="plan-preview-item" :class="{ editing: editingPlanIdx === idx }">
             <div class="plan-preview-header">
-              <span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? '买入' : '卖出' }}</span>
+              <span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
               <template v-if="editingPlanIdx === idx">
                 <select v-model="p.trigger_type" class="inline-select">
-                  <option value="price_below">价格 ≤</option>
-                  <option value="price_above">价格 ≥</option>
-                  <option value="time">时间</option>
+                  <option value="price_below">{{ t('aiStrategyGenerator.triggers.priceBelow') }}</option>
+                  <option value="price_above">{{ t('aiStrategyGenerator.triggers.priceAbove') }}</option>
+                  <option value="time">{{ t('aiStrategyGenerator.triggers.time') }}</option>
                 </select>
                 <input type="number" v-model.number="p.trigger_value" class="inline-input" style="width:80px" />
               </template>
@@ -179,21 +228,21 @@
               </template>
               <span v-if="selectedAssetIds.length > 1 && p.asset_id" class="plan-asset-tag">{{ getAssetName(p.asset_id) }}</span>
               <div class="plan-actions">
-                <button class="plan-action-btn" @click="editingPlanIdx = editingPlanIdx === idx ? -1 : idx" :title="editingPlanIdx === idx ? '完成' : '编辑'">
+                <button class="plan-action-btn" @click="editingPlanIdx = editingPlanIdx === idx ? -1 : idx" :title="editingPlanIdx === idx ? t('aiStrategyGenerator.done') : t('aiStrategyGenerator.edit')">
                   {{ editingPlanIdx === idx ? '✓' : '✏️' }}
                 </button>
-                <button class="plan-action-btn del" @click="removePlan(idx)" title="删除">✕</button>
+                <button class="plan-action-btn del" @click="removePlan(idx)" :title="t('aiStrategyGenerator.delete')">✕</button>
               </div>
             </div>
             <div class="plan-preview-meta">
               <template v-if="editingPlanIdx === idx">
-                <label>金额: <input type="number" v-model.number="p.amount" class="inline-input" style="width:70px" /></label>
-                <label>数量: <input type="number" v-model.number="p.quantity" class="inline-input" style="width:70px" step="0.0001" /></label>
+                <label>{{ t('aiStrategyGenerator.amount') }}: <input type="number" v-model.number="p.amount" class="inline-input" style="width:70px" /></label>
+                <label>{{ t('aiStrategyGenerator.quantity') }}: <input type="number" v-model.number="p.quantity" class="inline-input" style="width:70px" step="0.0001" /></label>
               </template>
               <template v-else>
-                <span v-if="p.amount">¥{{ Math.round(p.amount) }}</span>
-                <span v-if="p.quantity">{{ typeof p.quantity === 'number' ? p.quantity.toFixed(4) : p.quantity }}</span>
-                <span v-if="p.new_avg_cost">均价→¥{{ p.new_avg_cost }}</span>
+                <span v-if="p.amount">¥{{ formatRounded(p.amount) }}</span>
+                <span v-if="p.quantity">{{ formatFixed(p.quantity, 4) }}</span>
+                <span v-if="p.new_avg_cost">{{ t('aiStrategyGenerator.averageCostArrow', { value: formatRounded(p.new_avg_cost) }) }}</span>
               </template>
             </div>
             <div v-if="p.rationale && editingPlanIdx !== idx" class="plan-rationale">📌 {{ p.rationale }}</div>
@@ -202,41 +251,55 @@
         </div>
       </div>
 
-      <!-- 重新生成区域 -->
       <div class="preview-section regenerate-section">
         <div class="section-title clickable" @click="showRegenerate = !showRegenerate">
-          🔄 不满意？调整后重新生成
+          {{ t('aiStrategyGenerator.regenerateTitle') }}
           <span class="toggle-icon">{{ showRegenerate ? '▼' : '▶' }}</span>
-          <span v-if="regenerateCount > 0" class="regen-count">已迭代 {{ regenerateCount }} 次</span>
+          <span v-if="regenerateCount > 0" class="regen-count">{{ t('aiStrategyGenerator.iterationCount', { count: regenerateCount }) }}</span>
         </div>
         <div v-if="showRegenerate" class="regenerate-form">
-          <textarea 
-            v-model="userFeedback" 
-            class="form-input feedback-input" 
-            placeholder="输入您的调整建议，例如：买入价格再低一些、增加止损条件、减少单笔金额..."
+          <textarea
+            v-model="userFeedback"
+            class="form-input feedback-input"
+            :placeholder="t('aiStrategyGenerator.regeneratePlaceholder')"
             rows="3"
           ></textarea>
           <button class="btn btn-secondary" style="width:100%;margin-top:8px" @click="regenerate" :disabled="generating || !userFeedback.trim()">
-            🔄 基于反馈重新生成
+            {{ t('aiStrategyGenerator.regenerateAction') }}
           </button>
         </div>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn btn-primary" style="flex:1" @click="confirmSave" :disabled="saving">
-          {{ saving ? '保存中...' : '✅ 确认采用' }}
+          {{ saving ? t('strategyCompare.saving') : t('aiStrategyGenerator.confirmAdopt') }}
         </button>
-        <button class="btn" @click="generate" :disabled="generating">🔄 重新生成</button>
-        <button class="btn" @click="step = 'config'">⚙️ 改参数</button>
+        <button class="btn" @click="generate" :disabled="generating">{{ t('aiStrategyGenerator.regenerateAgain') }}</button>
+        <button class="btn" @click="step = 'config'">{{ t('aiStrategyGenerator.changeParams') }}</button>
       </div>
     </div>
+
+    <!-- Agent Progress Overlay — teleported above drawer, cannot be accidentally dismissed -->
+    <AgentProgressOverlay
+      :visible="showProgressOverlay"
+      :steps="agentSteps"
+      :error="error"
+      :data-quality-score="dataQualityScore"
+      :eval-score="evalResult?.score ?? null"
+      :grade="evalResult?.grade ?? null"
+      @close="closeProgressOverlay"
+      @cancel="cancelGenerate"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { formatNumber } from '../utils/formatters.js'
+import AgentProgressOverlay from './AgentProgressOverlay.vue'
 
 const props = defineProps({
   presetAssetId: { type: [Number, String], default: null },
@@ -245,6 +308,7 @@ const props = defineProps({
 const emit = defineEmits(['done'])
 
 const toast = useToast()
+const { t } = useI18n()
 const assets = ref([])
 const holdingSummaries = ref([])
 const selectedAssetIds = ref([])
@@ -266,26 +330,40 @@ const form = reactive({
   risk_level: 'medium',
 })
 
-// Agent progress tracking
+let _abortController = null
+
 const agentSteps = ref([
-  { id: 'collecting', label: '收集数据', status: 'pending', detail: '' },
-  { id: 'analyzing', label: '市场研判', status: 'pending', detail: '' },
-  { id: 'generating', label: '生成策略', status: 'pending', detail: '' },
+  { id: 'precheck', status: 'pending', detail: '' },
+  { id: 'collecting', status: 'pending', detail: '' },
+  { id: 'analyzing', status: 'pending', detail: '' },
+  { id: 'validating', status: 'pending', detail: '' },
+  { id: 'generating', status: 'pending', detail: '' },
+  { id: 'postvalidating', status: 'pending', detail: '' },
+  { id: 'evaluating', status: 'pending', detail: '' },
 ])
+
+const dataQualityScore = ref(null)
+const evalResult = ref(null)
+const traceInfo = ref(null)
+const progressDetail = reactive({})
+const showQualityDetails = ref(false)
+const showTraceInfo = ref(false)
+const showConsistencyWarnings = ref(false)
+const showProgressOverlay = ref(false)
 
 const selectedAssetNames = computed(() => {
   return selectedAssetIds.value
     .map(id => assets.value.find(a => a.id === id))
     .filter(Boolean)
     .map(a => a.name)
-    .join('、')
+    .join(t('aiStrategyGenerator.assetNameSeparator'))
 })
 
 const totalBudgetUsed = computed(() => {
-  return editablePlans.value
+  const total = editablePlans.value
     .filter(p => p.action === 'buy' && p.amount)
     .reduce((sum, p) => sum + (p.amount || 0), 0)
-    .toLocaleString()
+  return formatRounded(total)
 })
 
 function toggleAsset(id) {
@@ -297,12 +375,11 @@ function toggleAsset(id) {
 
 function getAssetName(id) {
   const a = assets.value.find(x => x.id === id)
-  return a ? a.name : `#${id}`
+  return a ? a.name : t('aiStrategyGenerator.assetNameFallback', { id })
 }
 
 function removePlan(idx) {
   editablePlans.value.splice(idx, 1)
-  // Re-number seq
   editablePlans.value.forEach((p, i) => { p.seq = i + 1 })
 }
 
@@ -326,14 +403,14 @@ async function loadAssetInfo() {
         const priceRes = await api(`/api/market/prices/${assetId}`)
         const pJson = await priceRes.json()
         const price = pJson.data?.price
-        const pnl_pct = price && h.avg_cost ? ((price - h.avg_cost) / h.avg_cost * 100).toFixed(1) : null
+        const pnlPct = price && h.avg_cost ? Number((((price - h.avg_cost) / h.avg_cost) * 100).toFixed(1)) : null
         summaries.push({
           asset_id: assetId,
-          name: asset?.name || `资产#${assetId}`,
+          name: asset?.name || t('aiStrategyGenerator.assetNameFallback', { id: assetId }),
           quantity: h.quantity,
           avg_cost: h.avg_cost,
           total_invested: h.total_invested,
-          pnl_pct: pnl_pct ? Number(pnl_pct) : null,
+          pnl_pct: pnlPct,
         })
       }
     } catch {}
@@ -342,11 +419,42 @@ async function loadAssetInfo() {
 }
 
 function updateAgentStep(stepId, status, detail) {
-  const s = agentSteps.value.find(x => x.id === stepId)
-  if (s) {
-    s.status = status
-    if (detail) s.detail = detail
+  const current = agentSteps.value.find(x => x.id === stepId)
+  if (current) {
+    current.status = status
+    if (detail !== undefined) current.detail = detail
   }
+}
+
+function cancelGenerate() {
+  if (_abortController) {
+    _abortController.abort()
+    _abortController = null
+  }
+  generating.value = false
+  showProgressOverlay.value = false
+  agentSteps.value.forEach(s => { if (s.status !== 'done') s.status = 'pending' })
+}
+
+function closeProgressOverlay() {
+  showProgressOverlay.value = false
+  error.value = ''
+}
+
+function agentStepLabel(stepId) {
+  const key = `aiStrategyGenerator.progress.${stepId}`
+  return t(key, stepId)
+}
+
+function qualityGradeColor(grade) {
+  return { A: 'var(--green)', B: 'var(--primary)', C: 'var(--yellow, #f59e0b)', D: 'var(--red)' }[grade] || 'var(--text-dim)'
+}
+
+function dataQualityColor(score) {
+  if (score == null) return 'var(--text-dim)'
+  if (score >= 0.7) return 'var(--green)'
+  if (score >= 0.4) return 'var(--yellow, #f59e0b)'
+  return 'var(--red)'
 }
 
 async function generate() {
@@ -355,10 +463,12 @@ async function generate() {
   result.value = null
   editablePlans.value = []
   editingPlanIdx.value = -1
-  step.value = 'config' // show progress UI
-
-  // Reset progress
-  agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = ''; })
+  step.value = 'config'
+  dataQualityScore.value = null
+  evalResult.value = null
+  traceInfo.value = null
+  agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = '' })
+  showProgressOverlay.value = true
 
   try {
     await doGenerate({
@@ -371,16 +481,19 @@ async function generate() {
     error.value = e.message
   }
   generating.value = false
+  // Overlay stays open on error so user can read it; on success it shows "view result" CTA
 }
 
 async function regenerate() {
   if (!userFeedback.value.trim()) return
   error.value = ''
   generating.value = true
-
-  // Reset progress
-  agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = ''; })
-  step.value = 'config' // show progress
+  dataQualityScore.value = null
+  evalResult.value = null
+  traceInfo.value = null
+  agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = '' })
+  showProgressOverlay.value = true
+  step.value = 'config'
 
   try {
     await doGenerate({
@@ -401,16 +514,25 @@ async function regenerate() {
 }
 
 async function doGenerate(body) {
+  _abortController = new AbortController()
   const token = localStorage.getItem('token')
   const baseUrl = import.meta.env.VITE_API_BASE || ''
-  const response = await fetch(`${baseUrl}/api/strategies/ai-agent-generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  })
+
+  let response
+  try {
+    response = await fetch(`${baseUrl}/api/strategies/ai-agent-generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+      signal: _abortController.signal,
+    })
+  } catch (e) {
+    if (e.name === 'AbortError') return // silently cancelled
+    throw e
+  }
 
   if (!response.ok) {
     const text = await response.text()
@@ -418,69 +540,106 @@ async function doGenerate(body) {
       const json = JSON.parse(text)
       throw new Error(json.error || `HTTP ${response.status}`)
     } catch (e) {
-      if (e.message.startsWith('HTTP')) throw e
-      throw new Error(`请求失败: ${response.status}`)
+      if (e.message?.startsWith('HTTP')) throw e
+      throw new Error(t('aiStrategyGenerator.requestFailed', { status: response.status }))
     }
   }
 
-  // Parse SSE stream
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
 
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
 
-    let eventType = ''
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        eventType = line.slice(7).trim()
-      } else if (line.startsWith('data: ') && eventType) {
-        try {
-          const data = JSON.parse(line.slice(6))
-          handleSSEEvent(eventType, data)
-        } catch {}
-        eventType = ''
+      let eventType = ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ') && eventType) {
+          try {
+            const data = JSON.parse(line.slice(6))
+            handleSSEEvent(eventType, data)
+          } catch {}
+          eventType = ''
+        }
       }
     }
+  } catch (e) {
+    if (e.name === 'AbortError') return // silently cancelled
+    throw e
+  } finally {
+    _abortController = null
   }
 }
 
 function handleSSEEvent(event, data) {
   if (event === 'progress') {
-    const { step: stepName, message } = data
-    if (stepName === 'collecting') {
+    const { step: stepName, message, detail } = data
+    if (detail) Object.assign(progressDetail, { [stepName]: detail })
+
+    // Precheck
+    if (stepName === 'precheck') {
+      updateAgentStep('precheck', 'active', message)
+    } else if (stepName === 'precheck_done') {
+      updateAgentStep('precheck', 'done', message)
+      updateAgentStep('collecting', 'active', '')
+    // Collecting
+    } else if (stepName === 'collecting') {
       updateAgentStep('collecting', 'active', message)
     } else if (stepName === 'collecting_done') {
       updateAgentStep('collecting', 'done', message)
+      if (detail?.data_quality_score != null) dataQualityScore.value = detail.data_quality_score
       updateAgentStep('analyzing', 'active', '')
+    // Analyzing
     } else if (stepName === 'analyzing') {
       updateAgentStep('analyzing', 'active', message)
     } else if (stepName === 'analyzing_done') {
       updateAgentStep('analyzing', 'done', message)
-      updateAgentStep('generating', 'active', '')
+      updateAgentStep('validating', 'active', '')
+    // Self-check
+    } else if (stepName === 'validating') {
+      updateAgentStep('validating', 'active', message)
+    // Generating
     } else if (stepName === 'generating') {
+      updateAgentStep('validating', 'done', '')
       updateAgentStep('generating', 'active', message)
+    // Post-validate
+    } else if (stepName === 'postvalidating') {
+      updateAgentStep('generating', 'done', '')
+      updateAgentStep('postvalidating', 'active', message)
+    } else if (stepName === 'postvalidating_done') {
+      updateAgentStep('postvalidating', 'done', message)
+      updateAgentStep('evaluating', 'active', '')
+    // Evaluating / done
+    } else if (stepName === 'evaluating') {
+      updateAgentStep('evaluating', 'active', message)
     } else if (stepName === 'done') {
-      updateAgentStep('generating', 'done', message)
+      updateAgentStep('evaluating', 'done', message)
+      if (detail?.eval_score != null) evalResult.value = detail
     }
   } else if (event === 'result') {
     if (data.success && data.data) {
       result.value = data.data
       editablePlans.value = JSON.parse(JSON.stringify(data.data.plans || []))
       generationId.value = data.data.generation_id || null
+      // Extract eval and trace info from result
+      if (data.data.eval) evalResult.value = data.data.eval
+      if (data.data.data_quality_score != null) dataQualityScore.value = data.data.data_quality_score
+      if (data.data._meta?.trace_id) traceInfo.value = data.data._meta
       step.value = 'preview'
       showAnalysis.value = true
     } else {
-      error.value = data.error || '生成失败'
+      error.value = data.error || t('aiStrategyGenerator.generateFailed')
     }
   } else if (event === 'error') {
-    error.value = data.error || '生成失败'
+    error.value = data.error || t('aiStrategyGenerator.generateFailed')
   }
 }
 
@@ -502,7 +661,7 @@ async function confirmSave() {
     })
     const json = await res.json()
     if (!json.success) throw new Error(json.error)
-    toast.success(props.existingStrategyId ? '策略已更新' : '策略已保存')
+    toast.success(props.existingStrategyId ? t('aiStrategyGenerator.updated') : t('aiStrategyGenerator.saved'))
     emit('done', json.data.strategyId)
   } catch (e) {
     toast.error(e.message)
@@ -510,9 +669,39 @@ async function confirmSave() {
   saving.value = false
 }
 
-function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t }
-function triggerLabel(t) { return { price_above:'价格 ≥', price_below:'价格 ≤', time:'时间' }[t] || t }
-function fmt(n) { return n ? Math.round(n).toLocaleString() : '0' }
+function typeLabel(type) {
+  return type ? t(`strategyCompare.strategyTypes.${type}`) : '-'
+}
+
+function triggerLabel(type) {
+  return {
+    price_above: t('aiStrategyGenerator.triggers.priceAbove'),
+    price_below: t('aiStrategyGenerator.triggers.priceBelow'),
+    time: t('aiStrategyGenerator.triggers.time'),
+  }[type] || type
+}
+
+function formatRounded(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? formatNumber(Math.round(number)) : '0'
+}
+
+function formatFixed(value, digits = 4) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  return formatNumber(number, { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
+
+function formatPercent(value, digits = 1, withSign = false) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return '-'
+  const prefix = withSign && number > 0 ? '+' : ''
+  return `${prefix}${formatNumber(number, { minimumFractionDigits: digits, maximumFractionDigits: digits })}%`
+}
+
+function fmt(n) {
+  return formatRounded(n)
+}
 
 onMounted(() => {
   loadAssets()
@@ -854,19 +1043,151 @@ onMounted(() => {
   }
 }
 
-@media (max-width: 480px) {
-  .plan-preview-meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-  .plan-preview-meta label {
-    width: 100%;
-  }
-  .plan-preview-meta label .inline-input,
-  .plan-preview-meta label .inline-select {
-    flex: 1;
-    width: 100%;
-  }
+/* Data quality bar in progress */
+.data-quality-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.dq-label { color: var(--text-dim); white-space: nowrap; }
+.dq-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dq-bar-track.small {
+  width: 60px;
+  flex: none;
+  height: 5px;
+}
+.dq-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.dq-value { font-weight: 600; font-size: 12px; min-width: 30px; text-align: right; }
+
+/* Quality banner */
+.agent-quality-banner {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.quality-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.quality-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.quality-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.quality-score {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.quality-score small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.quality-grade {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.btn-link {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.agent-warning {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f59e0b;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.quality-checks {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.quality-check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.check-icon { font-size: 12px; }
+.check-name { color: var(--text-dim); text-transform: capitalize; }
+.check-detail { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+.agent-warnings-section { margin-top: 8px; }
+.warnings-header {
+  font-size: 12px;
+  color: #f59e0b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+.warnings-list {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.warning-item {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 3px 6px;
+}
+.fix-log {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 4px 8px;
+  background: rgba(59,130,246,0.06);
+  border-radius: 4px;
+}
+.fix-log-label { font-weight: 600; color: var(--primary); }
+.trace-info {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.trace-label { font-family: monospace; }
+.trace-elapsed {
+  padding: 1px 6px;
+  background: var(--border);
+  border-radius: 4px;
+  font-size: 11px;
 }
 </style>

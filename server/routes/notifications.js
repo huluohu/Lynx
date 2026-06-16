@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { sendTestPush, pushPendingNotifications } from '../services/push.js';
+import { normalizeApiTimestampFields } from '../utils/datetime.js';
 
 const router = Router();
+
+function normalizeNotification(row) {
+  return normalizeApiTimestampFields(row, ['created_at', 'sent_at'], { assumeUtcWhenNoTimezone: true });
+}
 
 // GET 未读通知列表
 router.get('/', (req, res) => {
@@ -15,7 +20,7 @@ router.get('/', (req, res) => {
   }
   sql += ' ORDER BY created_at DESC LIMIT ?';
   params.push(Number(limit));
-  const rows = getDb().prepare(sql).all(...params);
+  const rows = getDb().prepare(sql).all(...params).map(normalizeNotification);
   res.json({ success: true, data: rows });
 });
 
@@ -49,7 +54,7 @@ router.get('/history', (req, res) => {
 
   const total = db.prepare(`SELECT COUNT(*) AS count${fromSql}${whereSql}`).get(...params).count;
   const rows = db.prepare(`SELECT n.*, a.name AS asset_name, a.symbol, s.name AS strategy_name${fromSql}${whereSql}
-    ORDER BY n.created_at DESC, n.id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset);
+    ORDER BY n.created_at DESC, n.id DESC LIMIT ? OFFSET ?`).all(...params, pageSize, offset).map(normalizeNotification);
 
   res.json({ success: true, data: {
     items: rows,

@@ -1,14 +1,14 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">资产管理</h1>
-      <router-link to="/assets/add" class="btn btn-primary">+ 添加资产</router-link>
+      <h1 class="page-title">{{ t('assetList.title') }}</h1>
+      <router-link to="/assets/add" class="btn btn-primary">+ {{ t('assetList.addAsset') }}</router-link>
     </div>
 
     <div class="card" v-if="assets.length">
       <!-- Desktop -->
       <table class="hide-mobile">
-        <thead><tr><th>名称</th><th>代码</th><th>类型</th><th>持仓量</th><th>成本价</th><th>总投入</th></tr></thead>
+        <thead><tr><th>{{ t('assetList.name') }}</th><th>{{ t('assetList.symbol') }}</th><th>{{ t('assetList.type') }}</th><th>{{ t('assetList.quantity') }}</th><th>{{ t('assetList.avgCost') }}</th><th>{{ t('assetList.totalInvested') }}</th></tr></thead>
         <tbody>
           <tr v-for="a in assets" :key="a.id" style="cursor:pointer" @click="openDetail(a)">
             <td><span class="icon-text" style="font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span></td>
@@ -38,7 +38,7 @@
     </div>
     <div v-else-if="!loading" class="card empty">
       <div class="empty-icon">📭</div>
-      <p>还没有资产，<router-link to="/assets/add">添加一个</router-link></p>
+      <p>{{ t('assetList.empty') }}，<router-link to="/assets/add">{{ t('assetList.addOne') }}</router-link></p>
     </div>
     <div v-else class="card">
       <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
@@ -51,30 +51,30 @@
     </div>
 
     <!-- Detail Drawer -->
-    <AppDrawer v-model="showDetailDrawer" :title="detailAsset ? `${detailAsset.icon || '💰'} ${detailAsset.name}` : '资产详情'">
+    <AppDrawer v-model="showDetailDrawer" :title="detailAsset ? `${detailAsset.icon || '💰'} ${detailAsset.name}` : t('assetList.assetDetails')">
       <div v-if="detailAsset" class="detail-drawer-content">
         <div class="detail-section">
-          <div class="detail-row"><span>代码</span><span style="color:var(--text-dim)">{{ detailAsset.symbol }}</span></div>
-          <div class="detail-row"><span>类型</span><span class="badge" :class="typeBadge(detailAsset.type)">{{ detailAsset.type }}</span></div>
-          <div class="detail-row"><span>计价货币</span><span>{{ detailAsset.currency || 'CNY' }}</span></div>
+          <div class="detail-row"><span>{{ t('assetList.symbol') }}</span><span style="color:var(--text-dim)">{{ detailAsset.symbol }}</span></div>
+          <div class="detail-row"><span>{{ t('assetList.type') }}</span><span class="badge" :class="typeBadge(detailAsset.type)">{{ assetTypeLabel(detailAsset.type) }}</span></div>
+          <div class="detail-row"><span>{{ t('assetList.currency') }}</span><span>{{ detailAsset.currency || 'CNY' }}</span></div>
         </div>
 
         <div v-if="detailAsset.quantity" class="detail-section">
-          <div class="detail-section-title">持仓信息</div>
-          <div class="detail-row"><span>数量</span><b>{{ detailAsset.quantity?.toFixed(4) }}</b></div>
-          <div class="detail-row"><span>成本价</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.avg_cost) }}</span></div>
-          <div class="detail-row"><span>总投入</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.total_invested) }}</span></div>
+          <div class="detail-section-title">{{ t('assetList.holdingInfo') }}</div>
+          <div class="detail-row"><span>{{ t('assetList.quantity') }}</span><b>{{ detailAsset.quantity?.toFixed(4) }}</b></div>
+          <div class="detail-row"><span>{{ t('assetList.avgCost') }}</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.avg_cost) }}</span></div>
+          <div class="detail-row"><span>{{ t('assetList.totalInvested') }}</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.total_invested) }}</span></div>
         </div>
 
         <div class="detail-actions">
-          <button class="btn btn-primary" style="flex:1" @click="detailOpenTx">+ 记录交易</button>
-          <router-link :to="`/assets/${detailAsset.id}`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看详情页</router-link>
+          <button class="btn btn-primary" style="flex:1" @click="detailOpenTx">+ {{ t('assetList.recordTrade') }}</button>
+          <router-link :to="`/assets/${detailAsset.id}`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">{{ t('assetList.viewDetailPage') }}</router-link>
         </div>
       </div>
     </AppDrawer>
 
     <!-- Transaction Drawer -->
-    <AppDrawer v-model="showTxDrawer" :title="`记录交易 - ${txAsset?.name || ''}`">
+    <AppDrawer v-model="showTxDrawer" :title="`${t('assetList.recordTrade')} - ${txAsset?.name || ''}`">
       <TransactionForm v-if="txAsset" :asset-id="txAsset.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
     </AppDrawer>
   </div>
@@ -82,13 +82,16 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
+import { formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 
 const toast = useToast()
+const { t } = useI18n()
 const assets = ref([])
 const loading = ref(true)
 const showTxDrawer = ref(false)
@@ -117,17 +120,19 @@ function detailOpenTx() {
 
 function onTxSuccess() {
   showTxDrawer.value = false
-  toast.success('交易已记录')
+  toast.success(t('assetList.tradeRecorded'))
   loadData()
 }
 
 function typeBadge(type) {
   return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
+function assetTypeLabel(type) {
+  return t(`assetList.types.${type}`)
+}
 function cs(a) { return currencySymbol(a?.currency) }
 function fmt(n) {
-  if (!n && n !== 0) return '-'
-  return Math.round(n).toLocaleString()
+  return formatNumber(Math.round(Number(n || 0)), { maximumFractionDigits: 0 })
 }
 
 onMounted(loadData)

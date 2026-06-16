@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">策略管理</h1>
+      <h1 class="page-title">{{ t('strategyList.title') }}</h1>
       <!-- Desktop actions -->
       <div class="page-actions desktop-only">
         <button v-if="drafts.length" class="btn btn-draft btn-inline-icon" @click="showDrafts = true">
@@ -11,7 +11,7 @@
             <path d="M9 12h6" />
             <path d="M9 16h4" />
           </svg>
-          <span>草稿</span>
+          <span>{{ t('strategyList.drafts') }}</span>
           <span class="draft-badge">{{ drafts.length }}</span>
         </button>
         <router-link to="/strategies/compare" class="btn btn-inline-icon">
@@ -24,15 +24,15 @@
             <path d="M17 20v-8" />
             <path d="M15 18l2 2 2-2" />
           </svg>
-          <span>AI 对比方案</span>
+          <span>{{ t('strategyList.compare') }}</span>
         </router-link>
-        <button class="btn btn-primary" @click="showAI = true">AI 生成</button>
-        <router-link to="/strategies/create" class="btn">+ 创建</router-link>
+        <button class="btn btn-primary" @click="showAI = true">{{ t('strategyList.aiGenerate') }}</button>
+        <router-link to="/strategies/create" class="btn">+ {{ t('strategyList.create') }}</router-link>
       </div>
       <!-- Mobile actions: primary + more -->
       <div class="page-actions mobile-only">
-        <button class="btn btn-primary btn-sm" @click="showAI = true">AI 生成</button>
-        <button class="btn btn-icon" @click="showPageActions = true" title="更多操作">
+        <button class="btn btn-primary btn-sm" @click="showAI = true">{{ t('strategyList.aiGenerate') }}</button>
+        <button class="btn btn-icon" @click="showPageActions = true" :title="t('strategyList.moreActions')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
         </button>
       </div>
@@ -49,7 +49,7 @@
                 <path d="M9 3h6v4H9z" />
                 <path d="M9 12h6" /><path d="M9 16h4" />
               </svg>
-              草稿
+              {{ t('strategyList.drafts') }}
               <span class="nav-badge" style="margin-left:auto">{{ drafts.length }}</span>
             </div>
             <router-link to="/strategies/compare" class="action-sheet-item" @click="showPageActions = false">
@@ -58,17 +58,17 @@
                 <path d="M15 6l2-2 2 2" /><path d="M17 4v8" />
                 <path d="M17 20v-8" /><path d="M15 18l2 2 2-2" />
               </svg>
-              AI 对比方案
+              {{ t('strategyList.compare') }}
             </router-link>
             <div class="action-sheet-item" @click="showAI = true; showPageActions = false">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
-              AI 生成策略
+              {{ t('strategyList.aiGenerateStrategy') }}
             </div>
             <router-link to="/strategies/create" class="action-sheet-item" @click="showPageActions = false">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-              创建策略
+              {{ t('strategyList.create') }}
             </router-link>
-            <div class="action-sheet-cancel" @click="showPageActions = false">取消</div>
+            <div class="action-sheet-cancel" @click="showPageActions = false">{{ t('common.cancel') }}</div>
           </div>
         </div>
       </Transition>
@@ -76,14 +76,14 @@
 
     <div class="card" v-if="strategies.length">
       <table class="hide-mobile">
-        <thead><tr><th>名称</th><th>关联资产</th><th>类型</th><th>状态</th><th>创建时间</th></tr></thead>
+        <thead><tr><th>{{ t('strategyList.name') }}</th><th>{{ t('strategyList.relatedAssets') }}</th><th>{{ t('strategyList.type') }}</th><th>{{ t('strategyList.status') }}</th><th>{{ t('strategyList.createdAt') }}</th></tr></thead>
         <tbody>
           <tr v-for="s in strategies" :key="s.id" style="cursor:pointer" @click="openDetail(s)">
             <td style="font-weight:600">{{ s.name }}</td>
             <td>{{ assetDisplay(s) }}</td>
             <td><span class="badge badge-buy">{{ typeLabel(s.type) }}</span></td>
             <td><span class="badge" :class="statusBadge(s.status)">{{ statusLabel(s.status) }}</span></td>
-            <td style="color:var(--text-muted)">{{ s.created_at?.slice(0,10) }}</td>
+            <td style="color:var(--text-muted)">{{ fmtDate(s.created_at) }}</td>
           </tr>
         </tbody>
       </table>
@@ -99,13 +99,13 @@
             <div class="strategy-card-body">
               <span>{{ assetDisplay(s) }}</span>
               <span class="badge badge-buy">{{ typeLabel(s.type) }}</span>
-              <span style="color:var(--text-muted);font-size:12px">{{ s.created_at?.slice(0,10) }}</span>
+              <span style="color:var(--text-muted);font-size:12px">{{ fmtDate(s.created_at) }}</span>
             </div>
           </div>
           <template #actions>
             <button class="swipe-action-btn danger" @click="deleteStrategy(s)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-              删除
+              {{ t('common.delete') }}
             </button>
           </template>
         </SwipeActionItem>
@@ -121,67 +121,67 @@
       </div>
     </div>
     <div v-else class="card empty">
-      <div class="empty-icon">🎯</div><p>还没有策略，<router-link to="/strategies/create">创建一个</router-link> 或使用 <a href="#" @click.prevent="showAI = true">AI 生成</a></p>
+      <div class="empty-icon">🎯</div><p>{{ t('strategyList.emptyPrefix') }}<router-link to="/strategies/create">{{ t('strategyList.createOne') }}</router-link> {{ t('strategyList.emptyMiddle') }} <a href="#" @click.prevent="showAI = true">{{ t('strategyList.aiGenerateLink') }}</a></p>
     </div>
 
     <!-- AI Drawer -->
-    <AppDrawer v-model="showAI" title="AI 生成策略">
+    <AppDrawer v-model="showAI" :title="t('strategyList.aiDrawerTitle')">
       <AIStrategyGenerator @done="onAIDone" />
     </AppDrawer>
 
     <!-- Detail Drawer -->
-    <AppDrawer v-model="showDetailDrawer" :title="detailStrategy?.name || '策略详情'">
+    <AppDrawer v-model="showDetailDrawer" :title="detailStrategy?.name || t('strategyList.detailTitle')">
       <div v-if="detailStrategy" class="detail-drawer-content">
         <!-- Tabs: 详情 / 生成历史 -->
         <div class="drawer-tabs">
-          <button class="drawer-tab" :class="{ active: detailTab === 'info' }" @click="detailTab = 'info'">详情</button>
-          <button class="drawer-tab" :class="{ active: detailTab === 'history' }" @click="detailTab = 'history'; loadGenerationHistory()">生成历史</button>
+          <button class="drawer-tab" :class="{ active: detailTab === 'info' }" @click="detailTab = 'info'">{{ t('strategyList.info') }}</button>
+          <button class="drawer-tab" :class="{ active: detailTab === 'history' }" @click="detailTab = 'history'; loadGenerationHistory()">{{ t('strategyList.generationHistory') }}</button>
         </div>
 
         <template v-if="detailTab === 'info'">
           <div class="detail-section">
-            <div class="detail-row"><span>类型</span><span class="badge badge-buy">{{ typeLabel(detailStrategy.type) }}</span></div>
-            <div class="detail-row"><span>关联资产</span><span>{{ assetDisplay(detailStrategy) }}</span></div>
-            <div class="detail-row"><span>状态</span><span class="badge" :class="statusBadge(detailStrategy.status)">{{ statusLabel(detailStrategy.status) }}</span></div>
-            <div class="detail-row"><span>创建时间</span><span style="color:var(--text-dim)">{{ detailStrategy.created_at?.slice(0,10) }}</span></div>
-            <div class="detail-row" v-if="detailStrategy.description"><span>描述</span><span style="color:var(--text-dim);font-size:13px">{{ detailStrategy.description }}</span></div>
+            <div class="detail-row"><span>{{ t('strategyList.type') }}</span><span class="badge badge-buy">{{ typeLabel(detailStrategy.type) }}</span></div>
+            <div class="detail-row"><span>{{ t('strategyList.relatedAssets') }}</span><span>{{ assetDisplay(detailStrategy) }}</span></div>
+            <div class="detail-row"><span>{{ t('strategyList.status') }}</span><span class="badge" :class="statusBadge(detailStrategy.status)">{{ statusLabel(detailStrategy.status) }}</span></div>
+            <div class="detail-row"><span>{{ t('strategyList.createdAt') }}</span><span style="color:var(--text-dim)">{{ fmtDate(detailStrategy.created_at) }}</span></div>
+            <div class="detail-row" v-if="detailStrategy.description"><span>{{ t('strategyList.description') }}</span><span style="color:var(--text-dim);font-size:13px">{{ detailStrategy.description }}</span></div>
           </div>
 
           <div v-if="detailPlans.length" class="detail-section">
-            <div class="detail-section-title">操盘计划 ({{ detailPlans.length }} 步)</div>
+            <div class="detail-section-title">{{ t('strategyList.plansTitle', { count: detailPlans.length }) }}</div>
             <div v-for="p in detailPlans" :key="p.id" class="plan-mini">
-              <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'" style="font-size:11px">{{ p.action==='buy'?'买':'卖' }}</span>
+              <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'" style="font-size:11px">{{ p.action==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
               <span>{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
               <span v-if="p.amount" style="color:var(--text-dim)">¥{{ Math.round(p.amount) }}</span>
               <span class="badge" :class="planStatusBadge(p.status)" style="font-size:10px;margin-left:auto">{{ planStatusLabel(p.status) }}</span>
             </div>
           </div>
           <div v-else class="detail-section" style="padding:12px 14px;color:var(--text-dim);font-size:13px">
-            暂无操盘计划
+            {{ t('strategyList.noPlans') }}
           </div>
 
           <div class="detail-actions">
-            <router-link :to="`/strategies/${detailStrategy.id}`" class="btn btn-primary" style="flex:1;text-align:center" @click="showDetailDrawer = false">查看完整详情</router-link>
-            <router-link :to="`/strategies/${detailStrategy.id}/edit`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">编辑</router-link>
+            <router-link :to="`/strategies/${detailStrategy.id}`" class="btn btn-primary" style="flex:1;text-align:center" @click="showDetailDrawer = false">{{ t('strategyList.viewFullDetail') }}</router-link>
+            <router-link :to="`/strategies/${detailStrategy.id}/edit`" class="btn" style="flex:1;text-align:center" @click="showDetailDrawer = false">{{ t('strategyList.edit') }}</router-link>
           </div>
         </template>
 
         <!-- Generation History Tab -->
         <template v-if="detailTab === 'history'">
           <div v-if="generationHistory.length === 0" class="detail-section" style="padding:16px 14px;color:var(--text-dim);font-size:13px;text-align:center">
-            暂无生成历史
+            {{ t('strategyList.noGenerationHistory') }}
           </div>
           <div v-else class="history-list">
             <div v-for="h in generationHistory" :key="h.id" class="history-item" @click="viewHistoryDetail(h)">
               <div class="history-item-header">
-                <span class="history-name">{{ h.strategy_name || '策略生成' }}</span>
+                <span class="history-name">{{ h.strategy_name || t('strategyList.generatedStrategy') }}</span>
                 <span class="badge" :class="h.status === 'adopted' ? 'badge-buy' : h.status === 'discarded' ? 'badge-sell' : 'badge-pending'">
-                  {{ { draft: '草稿', adopted: '已采用', discarded: '已丢弃' }[h.status] || h.status }}
+                  {{ historyStatusLabel(h.status) }}
                 </span>
               </div>
               <div class="history-item-meta">
-                <span>{{ h.goal }} · {{ h.risk_level }}</span>
-                <span>{{ h.created_at?.slice(0, 16).replace('T', ' ') }}</span>
+                <span>{{ goalLabel(h.goal) }} · {{ riskLabel(h.risk_level) }}</span>
+                <span>{{ fmtDateTime(h.created_at) }}</span>
               </div>
             </div>
           </div>
@@ -190,45 +190,45 @@
     </AppDrawer>
 
     <!-- Drafts Drawer -->
-    <AppDrawer v-model="showDrafts" title="AI 策略草稿">
+    <AppDrawer v-model="showDrafts" :title="t('strategyList.draftsTitle')">
       <div class="drafts-list">
         <div v-for="d in drafts" :key="d.id" class="draft-item">
           <div class="draft-item-header">
-            <span class="draft-name">{{ d.strategy_name || '未命名策略' }}</span>
-            <span style="font-size:11px;color:var(--text-dim)">{{ d.created_at?.slice(0, 16).replace('T', ' ') }}</span>
+            <span class="draft-name">{{ d.strategy_name || t('strategyList.unnamedStrategy') }}</span>
+            <span style="font-size:11px;color:var(--text-dim)">{{ fmtDateTime(d.created_at) }}</span>
           </div>
           <div class="draft-item-meta">
-            <span>{{ d.goal }} · ¥{{ d.budget }} · {{ d.risk_level }}</span>
+            <span>{{ goalLabel(d.goal) }} · ¥{{ d.budget }} · {{ riskLabel(d.risk_level) }}</span>
             <span v-if="d.elapsed_ms">{{ (d.elapsed_ms / 1000).toFixed(1) }}s</span>
           </div>
           <div class="draft-item-actions">
-            <button class="btn btn-primary btn-sm" @click="adoptDraft(d)">采用</button>
-            <button class="btn btn-sm" @click="viewDraftDetail(d)">查看</button>
-            <button class="btn btn-sm btn-danger" @click="discardDraft(d)">丢弃</button>
+            <button class="btn btn-primary btn-sm" @click="adoptDraft(d)">{{ t('strategyList.adopt') }}</button>
+            <button class="btn btn-sm" @click="viewDraftDetail(d)">{{ t('strategyList.view') }}</button>
+            <button class="btn btn-sm btn-danger" @click="discardDraft(d)">{{ t('strategyList.discard') }}</button>
           </div>
         </div>
         <div v-if="!drafts.length" style="text-align:center;color:var(--text-dim);padding:20px">
-          暂无草稿
+          {{ t('strategyList.noDrafts') }}
         </div>
       </div>
     </AppDrawer>
 
     <!-- History Detail Drawer -->
-    <AppDrawer v-model="showHistoryDetail" :title="historyDetail?.strategy_name || '生成详情'">
+    <AppDrawer v-model="showHistoryDetail" :title="historyDetail?.strategy_name || t('strategyList.historyDetailTitle')">
       <div v-if="historyDetail" class="detail-drawer-content">
         <div class="detail-section">
-          <div class="detail-row"><span>目标</span><span>{{ historyDetail.goal }}</span></div>
-          <div class="detail-row"><span>风险</span><span>{{ historyDetail.risk_level }}</span></div>
-          <div class="detail-row"><span>预算</span><span>¥{{ historyDetail.budget }}</span></div>
-          <div class="detail-row"><span>模型</span><span style="color:var(--text-dim)">{{ historyDetail.model }}</span></div>
-          <div class="detail-row"><span>耗时</span><span style="color:var(--text-dim)">{{ (historyDetail.elapsed_ms / 1000).toFixed(1) }}s</span></div>
+          <div class="detail-row"><span>{{ t('strategyList.goal') }}</span><span>{{ goalLabel(historyDetail.goal) }}</span></div>
+          <div class="detail-row"><span>{{ t('strategyList.risk') }}</span><span>{{ riskLabel(historyDetail.risk_level) }}</span></div>
+          <div class="detail-row"><span>{{ t('strategyList.budget') }}</span><span>¥{{ historyDetail.budget }}</span></div>
+          <div class="detail-row"><span>{{ t('strategyList.model') }}</span><span style="color:var(--text-dim)">{{ historyDetail.model }}</span></div>
+          <div class="detail-row"><span>{{ t('strategyList.elapsed') }}</span><span style="color:var(--text-dim)">{{ (historyDetail.elapsed_ms / 1000).toFixed(1) }}s</span></div>
         </div>
         <div v-if="historyDetail.reasoning" class="detail-section" style="padding:12px 14px">
-          <div class="detail-section-title" style="padding:0 0 6px 0">💡 决策逻辑</div>
+          <div class="detail-section-title" style="padding:0 0 6px 0">{{ t('strategyList.reasoning') }}</div>
           <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0">{{ historyDetail.reasoning }}</p>
         </div>
         <div v-if="historyDetail.analysis?.market_assessment" class="detail-section" style="padding:12px 14px">
-          <div class="detail-section-title" style="padding:0 0 6px 0">市场评估</div>
+          <div class="detail-section-title" style="padding:0 0 6px 0">{{ t('strategyList.marketAssessment') }}</div>
           <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin:0">{{ historyDetail.analysis.market_assessment }}</p>
         </div>
       </div>
@@ -238,15 +238,18 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
+import { formatDate, formatDateTime } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
 const confirm = useConfirm()
+const { t } = useI18n()
 const strategies = ref([])
 const drafts = ref([])
 const loading = ref(true)
@@ -294,7 +297,7 @@ async function openDetail(s) {
 async function loadGenerationHistory() {
   if (!detailStrategy.value) return
   try {
-    const res = await api(`/api/strategies/generation-logs?asset_id=${detailStrategy.value.asset_id || ''}`)
+    const res = await api(`/api/strategies/generation-logs?strategy_id=${detailStrategy.value.id}`)
     const json = await res.json()
     generationHistory.value = json.data || []
   } catch { generationHistory.value = [] }
@@ -327,7 +330,7 @@ async function adoptDraft(d) {
     const res = await api(`/api/strategies/drafts/${d.id}/adopt`, { method: 'POST' })
     const json = await res.json()
     if (json.success) {
-      toast.success('策略已采用')
+      toast.success(t('strategyList.adoptedSuccess'))
       loadData()
       loadDrafts()
     } else {
@@ -341,7 +344,7 @@ async function discardDraft(d) {
     const res = await api(`/api/strategies/drafts/${d.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (json.success) {
-      toast.success('草稿已丢弃')
+      toast.success(t('strategyList.discardedSuccess'))
       loadDrafts()
     } else {
       toast.error(json.error)
@@ -353,9 +356,9 @@ function onAIDone() { showAI.value = false; loadData(); loadDrafts() }
 
 async function deleteStrategy(s) {
   const ok = await confirm({
-    title: '删除策略',
-    message: `确定删除策略「${s.name}」？删除后不可恢复。`,
-    confirmText: '删除',
+    title: t('strategyList.deleteTitle'),
+    message: t('strategyList.deleteMessage', { name: s.name }),
+    confirmText: t('common.delete'),
     icon: 'delete',
     danger: true,
   })
@@ -364,17 +367,22 @@ async function deleteStrategy(s) {
     const res = await api(`/api/strategies/${s.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (!json.success) throw new Error(json.error)
-    toast.success('已删除')
+    toast.success(t('strategyList.deleted'))
     loadData()
   } catch (e) {
-    toast.error(e.message || '删除失败')
+    toast.error(e.message || t('history.deleteFailed'))
   }
 }
-function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t }
-function statusLabel(s) { return { draft:'草稿', active:'活跃', paused:'暂停', closed:'关闭' }[s] || s }
+function fmtDate(value) { return formatDate(value) }
+function fmtDateTime(value) { return formatDateTime(value, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }
+function goalLabel(goal) { return goal ? t(`strategyCompare.goals.${goal}`) : '-' }
+function riskLabel(level) { return level ? t(`strategyCompare.risks.${level}`) : '-' }
+function historyStatusLabel(status) { return status ? t(`strategyList.historyStatuses.${status}`) : '-' }
+function typeLabel(type) { return type ? t(`strategyCompare.strategyTypes.${type}`) : '-' }
+function statusLabel(status) { return status ? t(`strategyList.statuses.${status}`) : status }
 function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', paused:'badge-pending', closed:'badge-sell' }[s] || '' }
-function triggerLabel(t) { return { price_above:'≥', price_below:'≤', time:'时间' }[t] || t }
-function planStatusLabel(s) { return { pending:'等待', triggered:'触发', executed:'已执行', cancelled:'取消' }[s] || s }
+function triggerLabel(type) { return { price_above:'≥', price_below:'≤', time:t('strategyCompare.triggerTime') }[type] || type }
+function planStatusLabel(status) { return status ? t(`strategyList.planStatuses.${status}`) : status }
 function planStatusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
 function assetDisplay(s) {
   if (s.assets && s.assets.length > 1) {

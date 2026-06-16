@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { normalizeApiTimestamp } from '../utils/datetime.js';
 
 const router = Router();
 
@@ -98,12 +99,12 @@ router.get('/alerts', (req, res) => {
     type: r.type,
     asset_name: r.asset_name,
     asset_icon: r.icon,
-    symbol: r.symbol,
-    message: r.message,
-    plan_id: r.plan_id,
-    strategy_id: r.strategy_id,
-    time: r.created_at,
-  }));
+      symbol: r.symbol,
+      message: r.message,
+      plan_id: r.plan_id,
+      strategy_id: r.strategy_id,
+      time: normalizeApiTimestamp(r.created_at, { assumeUtcWhenNoTimezone: true }),
+    }));
 
   res.json({ success: true, data: alerts });
 });

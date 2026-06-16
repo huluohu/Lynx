@@ -1,9 +1,9 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">AI 对比方案</h1>
+      <h1 class="page-title">{{ t('strategyCompare.title') }}</h1>
       <div class="page-actions">
-        <router-link to="/strategies" class="btn">返回策略列表</router-link>
+        <router-link to="/strategies" class="btn">{{ t('strategyCompare.back') }}</router-link>
       </div>
     </div>
 
@@ -16,26 +16,26 @@
 
     <template v-else>
       <div class="card">
-        <div class="section-title">方案配置</div>
+        <div class="section-title">{{ t('strategyCompare.config') }}</div>
 
         <div class="form-group">
-          <label class="form-label">选择资产 *（可多选）</label>
+          <label class="form-label">{{ t('strategyForm.relatedAssets') }} *</label>
           <div class="asset-multi-select">
             <div v-for="a in assets" :key="a.id" class="asset-chip" :class="{ selected: selectedAssetIds.includes(a.id) }" @click="toggleAsset(a.id)">
               {{ a.icon }} {{ a.name }}
             </div>
           </div>
-          <div v-if="selectedAssetIds.length" class="selected-count">已选 {{ selectedAssetIds.length }} 个资产</div>
+          <div v-if="selectedAssetIds.length" class="selected-count">{{ t('strategyCompare.selectedCount', { count: selectedAssetIds.length }) }}</div>
         </div>
 
         <div v-if="holdingSummaries.length" class="holding-summary">
           <div v-for="s in holdingSummaries" :key="s.asset_id" class="holding-summary-item">
             <div class="summary-asset-name">{{ s.name }}</div>
-            <div class="summary-row"><span>持仓数量</span><b>{{ s.quantity }}</b></div>
-            <div class="summary-row"><span>成本价</span><b>¥{{ s.avg_cost }}</b></div>
-            <div class="summary-row"><span>总投入</span><b>¥{{ fmt(s.total_invested) }}</b></div>
+            <div class="summary-row"><span>{{ t('strategyCompare.holdingQuantity') }}</span><b>{{ s.quantity }}</b></div>
+            <div class="summary-row"><span>{{ t('strategyCompare.avgCost') }}</span><b>¥{{ fmt(s.avg_cost) }}</b></div>
+            <div class="summary-row"><span>{{ t('strategyCompare.totalInvested') }}</span><b>¥{{ fmt(s.total_invested) }}</b></div>
             <div class="summary-row" v-if="s.pnl_pct !== null">
-              <span>浮动盈亏</span>
+              <span>{{ t('strategyCompare.floatingPnl') }}</span>
               <b :class="s.pnl_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ s.pnl_pct >= 0 ? '+' : '' }}{{ s.pnl_pct }}%</b>
             </div>
           </div>
@@ -43,28 +43,28 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">可用预算 (¥)</label>
+            <label class="form-label">{{ t('strategyCompare.budget') }} (¥)</label>
             <input class="form-input" type="number" v-model="form.budget" placeholder="20000" inputmode="numeric" />
           </div>
           <div class="form-group">
-            <label class="form-label">投资目标</label>
+            <label class="form-label">{{ t('strategyCompare.goal') }}</label>
             <select class="form-select" v-model="form.goal">
-              <option value="recovery">💉 扭亏为盈</option>
-              <option value="growth">📈 稳定增长</option>
-              <option value="balanced">⚖️ 平衡网格</option>
-              <option value="trend">📊 趋势跟踪</option>
-              <option value="rebalance">⚖️ 组合再平衡</option>
+              <option value="recovery">💉 {{ t('strategyCompare.goals.recovery') }}</option>
+              <option value="growth">📈 {{ t('strategyCompare.goals.growth') }}</option>
+              <option value="balanced">⚖️ {{ t('strategyCompare.goals.balanced') }}</option>
+              <option value="trend">📊 {{ t('strategyCompare.goals.trend') }}</option>
+              <option value="rebalance">⚖️ {{ t('strategyCompare.goals.rebalance') }}</option>
             </select>
           </div>
         </div>
 
         <button class="btn btn-primary" style="width:100%" @click="generateCompare" :disabled="comparing || selectedAssetIds.length === 0">
-          {{ comparing ? '生成中...' : '生成对比方案' }}
+          {{ comparing ? t('strategyCompare.generating') : t('strategyCompare.generate') }}
         </button>
       </div>
 
       <div class="card">
-        <div class="section-title">方案对比</div>
+        <div class="section-title">{{ t('strategyCompare.compare') }}</div>
 
         <div v-if="comparing" class="compare-grid">
           <div class="compare-card" v-for="i in 3" :key="i">
@@ -83,65 +83,65 @@
                 <div class="compare-title">{{ item.success ? (item.strategy?.name || item.label) : item.label }}</div>
                 <div class="compare-badges">
                   <span class="badge" :class="riskBadge(item.risk_level)">{{ item.label }}</span>
-                  <span v-if="item.risk_level === recommendedRiskLevel && item.success" class="badge badge-buy">推荐</span>
+                  <span v-if="item.risk_level === recommendedRiskLevel && item.success" class="badge badge-buy">{{ t('strategyCompare.recommended') }}</span>
                 </div>
               </div>
               <div class="compare-risk">{{ riskLabel(item.risk_level) }}</div>
             </div>
 
-            <div v-if="!item.success" class="alert" style="margin:0">{{ item.error || '生成失败' }}</div>
+            <div v-if="!item.success" class="alert" style="margin:0">{{ item.error || t('strategyCompare.generateFailed') }}</div>
 
             <template v-else>
-              <p class="compare-description">{{ item.strategy?.description || '暂无描述' }}</p>
+              <p class="compare-description">{{ item.strategy?.description || t('strategyCompare.noDescription') }}</p>
 
               <div class="metric-grid">
                 <div class="metric-box">
-                  <div class="metric-label">风险等级</div>
+                  <div class="metric-label">{{ t('strategyCompare.riskLevel') }}</div>
                   <div class="metric-value">{{ riskLabel(item.risk_level) }}</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-label">预算使用</div>
+                  <div class="metric-label">{{ t('strategyCompare.budgetUsage') }}</div>
                   <div class="metric-value">¥{{ fmt(item.meta?.budget_usage) }}</div>
                 </div>
                 <div class="metric-box">
-                  <div class="metric-label">计划数量</div>
+                  <div class="metric-label">{{ t('strategyCompare.planCount') }}</div>
                   <div class="metric-value">{{ item.meta?.plan_count || 0 }}</div>
                 </div>
               </div>
 
               <div class="compare-section">
-                <div class="compare-section-title">策略信息</div>
-                <div class="mini-row"><span>类型</span><span class="badge badge-buy">{{ typeLabel(item.strategy?.type) }}</span></div>
-                <div class="mini-row"><span>目标</span><span>{{ goalLabel(form.goal) }}</span></div>
-                <div class="mini-row"><span>模型</span><span>{{ item.meta?.model || '-' }}</span></div>
+                <div class="compare-section-title">{{ t('strategyCompare.strategyInfo') }}</div>
+                <div class="mini-row"><span>{{ t('strategyCompare.type') }}</span><span class="badge badge-buy">{{ typeLabel(item.strategy?.type) }}</span></div>
+                <div class="mini-row"><span>{{ t('strategyCompare.goal') }}</span><span>{{ goalLabel(form.goal) }}</span></div>
+                <div class="mini-row"><span>{{ t('strategyCompare.model') }}</span><span>{{ item.meta?.model || '-' }}</span></div>
               </div>
 
               <div v-if="item.reasoning" class="compare-section">
-                <div class="compare-section-title">决策逻辑</div>
+                <div class="compare-section-title">{{ t('strategyCompare.reasoning') }}</div>
                 <p class="compare-text">{{ item.reasoning }}</p>
               </div>
 
               <div class="compare-section">
-                <div class="compare-section-title">计划预览</div>
+                <div class="compare-section-title">{{ t('strategyCompare.preview') }}</div>
                 <div v-if="item.plans?.length" class="plan-preview-list">
                   <div v-for="plan in item.plans.slice(0, 5)" :key="`${item.risk_level}-${plan.seq}`" class="plan-preview-item">
-                    <span class="badge" :class="plan.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ plan.action === 'buy' ? '买入' : '卖出' }}</span>
+                    <span class="badge" :class="plan.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ plan.action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
                     <span>{{ triggerLabel(plan.trigger_type) }} {{ plan.trigger_value }}</span>
                     <span style="margin-left:auto;color:var(--text-dim)">{{ plan.amount ? `¥${fmt(plan.amount)}` : (plan.quantity || '-') }}</span>
                   </div>
                 </div>
-                <div v-else class="empty-inline">暂无计划</div>
+                <div v-else class="empty-inline">{{ t('strategyCompare.noPlans') }}</div>
               </div>
 
               <button class="btn btn-primary" style="width:100%;margin-top:16px" @click="adoptStrategy(item)" :disabled="savingRiskLevel === item.risk_level">
-                {{ savingRiskLevel === item.risk_level ? '保存中...' : '采用此方案' }}
+                {{ savingRiskLevel === item.risk_level ? t('strategyCompare.saving') : t('strategyCompare.adopt') }}
               </button>
             </template>
           </div>
         </div>
 
         <div v-else class="empty" style="padding:20px 0">
-          <p>选择资产并点击“生成对比方案”，即可同时获得保守 / 均衡 / 进取三种 AI 策略。</p>
+          <p>{{ t('strategyCompare.empty') }}</p>
         </div>
       </div>
     </template>
@@ -151,11 +151,14 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { formatNumber } from '../utils/formatters.js'
 
 const router = useRouter()
 const toast = useToast()
+const { t } = useI18n()
 
 const assetsLoading = ref(true)
 const comparing = ref(false)
@@ -172,12 +175,18 @@ const form = reactive({
 
 function fmt(n) {
   const value = Number(n)
-  return Number.isFinite(value) ? Math.round(value).toLocaleString() : '0'
+  return Number.isFinite(value) ? formatNumber(Math.round(value)) : '0'
 }
-function riskLabel(level) { return { low: '保守', medium: '均衡', high: '进取' }[level] || level }
-function goalLabel(goal) { return { recovery: '扭亏为盈', growth: '稳定增长', balanced: '平衡网格', trend: '趋势跟踪', rebalance: '组合再平衡' }[goal] || goal }
-function typeLabel(t) { return { dca:'定投', grid:'网格', value_avg:'价值平均', recovery:'扭亏', trend:'趋势', rebalance:'再平衡' }[t] || t || '-' }
-function triggerLabel(t) { return { price_above:'价格 ≥', price_below:'价格 ≤', time:'时间' }[t] || t }
+function riskLabel(level) { return t(`strategyCompare.risks.${level}`) }
+function goalLabel(goal) { return t(`strategyCompare.goals.${goal}`) }
+function typeLabel(type) { return type ? t(`strategyCompare.strategyTypes.${type}`) : '-' }
+function triggerLabel(type) {
+  return {
+    price_above: t('aiStrategyGenerator.triggers.priceAbove'),
+    price_below: t('aiStrategyGenerator.triggers.priceBelow'),
+    time: t('strategyCompare.triggerTime'),
+  }[type] || type
+}
 function riskBadge(level) { return { low: 'badge-buy', medium: 'badge-executed', high: 'badge-sell' }[level] || 'badge-pending' }
 
 function toggleAsset(id) {
@@ -219,7 +228,7 @@ async function loadAssetInfo() {
         const pnlPct = price && h.avg_cost ? ((price - h.avg_cost) / h.avg_cost * 100).toFixed(1) : null
         summaries.push({
           asset_id: assetId,
-          name: asset?.name || `资产#${assetId}`,
+          name: asset?.name || `Asset #${assetId}`,
           quantity: h.quantity,
           avg_cost: h.avg_cost,
           total_invested: h.total_invested,
@@ -245,10 +254,10 @@ async function generateCompare() {
       }),
     })
     const json = await res.json()
-    if (!json.success) throw new Error(json.error || '生成失败')
+    if (!json.success) throw new Error(json.error || t('strategyCompare.generateFailed'))
     compareResults.value = json.data?.comparisons || []
     recommendedRiskLevel.value = json.data?.recommended_risk_level || null
-    toast.success('对比方案已生成')
+    toast.success(t('strategyCompare.generated'))
   } catch (e) {
     toast.error(e.message)
   } finally {
@@ -270,8 +279,8 @@ async function adoptStrategy(item) {
       }),
     })
     const json = await res.json()
-    if (!json.success) throw new Error(json.error || '保存失败')
-    toast.success('策略已保存')
+    if (!json.success) throw new Error(json.error || t('common.saveFailed'))
+    toast.success(t('strategyCompare.saved'))
     router.push(`/strategies/${json.data.strategyId}`)
   } catch (e) {
     toast.error(e.message)

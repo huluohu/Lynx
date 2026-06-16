@@ -14,6 +14,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   pullDistance: { type: Number, default: 0 },
@@ -21,11 +22,12 @@ const props = defineProps({
   isRefreshing: { type: Boolean, default: false },
   threshold: { type: Number, default: 60 },
 })
+const { t } = useI18n()
 
 const statusText = computed(() => {
-  if (props.isRefreshing) return '刷新中...'
-  if (props.pullDistance >= props.threshold) return '释放刷新'
-  return '下拉刷新'
+  if (props.isRefreshing) return t('pullRefresh.refreshing')
+  if (props.pullDistance >= props.threshold) return t('pullRefresh.release')
+  return t('pullRefresh.pull')
 })
 </script>
 

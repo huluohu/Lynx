@@ -2,13 +2,13 @@
   <PullRefreshView :onRefresh="loadData">
   <div>
     <div class="page-header">
-      <h1 class="page-title">持仓管理</h1>
+      <h1 class="page-title">{{ t('holdings.title') }}</h1>
     </div>
 
     <div class="card" v-if="holdings.length">
       <!-- Desktop table -->
       <table class="hide-mobile">
-        <thead><tr><th>资产</th><th>数量</th><th>成本价</th><th>总投入</th><th>现价</th><th>市值</th><th>盈亏</th><th>状态</th></tr></thead>
+        <thead><tr><th>{{ t('holdings.asset') }}</th><th>{{ t('holdings.quantity') }}</th><th>{{ t('holdings.avgCost') }}</th><th>{{ t('holdings.totalInvested') }}</th><th>{{ t('holdings.currentPrice') }}</th><th>{{ t('holdings.marketValue') }}</th><th>{{ t('holdings.pnl') }}</th><th>{{ t('holdings.status') }}</th></tr></thead>
         <tbody>
           <tr v-for="h in holdings" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
             <td><span class="icon-text"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span> <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
@@ -18,7 +18,7 @@
             <td>{{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</td>
             <td>{{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</td>
             <td :style="{ color: pnlColor(h), fontWeight: 600 }">{{ pnlText(h) }}</td>
-            <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? '持仓中' : '已清仓' }}</span></td>
+             <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? t('holdings.statusActive') : t('holdings.statusClosed') }}</span></td>
           </tr>
         </tbody>
       </table>
@@ -31,16 +31,16 @@
             <span :style="{ color: pnlColor(h), fontWeight: 600, fontSize: '13px' }">{{ pnlText(h) }}</span>
           </div>
           <div class="holding-card-body">
-            <div><span class="meta-label">数量</span> {{ h.quantity }}</div>
-            <div><span class="meta-label">成本</span> {{ cs(h) }}{{ fmt(h.avg_cost) }}</div>
-            <div><span class="meta-label">现价</span> {{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</div>
-            <div><span class="meta-label">市值</span> {{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</div>
+             <div><span class="meta-label">{{ t('holdings.quantity') }}</span> {{ h.quantity }}</div>
+             <div><span class="meta-label">{{ t('holdings.avgCost') }}</span> {{ cs(h) }}{{ fmt(h.avg_cost) }}</div>
+             <div><span class="meta-label">{{ t('holdings.currentPrice') }}</span> {{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</div>
+             <div><span class="meta-label">{{ t('holdings.marketValue') }}</span> {{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</div>
           </div>
         </div>
       </div>
     </div>
     <div v-else-if="!loading" class="card empty">
-      <div class="empty-icon">📦</div><p>暂无持仓</p>
+      <div class="empty-icon">📦</div><p>{{ t('holdings.empty') }}</p>
     </div>
     <div v-else class="card">
       <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
@@ -53,47 +53,47 @@
     </div>
 
     <!-- Detail Drawer -->
-    <AppDrawer v-model="showDetail" :title="currentHolding?.name || '持仓详情'">
+    <AppDrawer v-model="showDetail" :title="currentHolding?.name || t('holdings.detailTitle')">
       <div v-if="currentHolding" class="info-list">
-        <div class="info-row"><span class="info-label">资产</span><span class="icon-text"><span class="icon">{{ currentHolding.icon }}</span> {{ currentHolding.name }}</span></div>
-        <div class="info-row"><span class="info-label">数量</span><span style="font-weight:600">{{ currentHolding.quantity }}</span></div>
-        <div class="info-row"><span class="info-label">成本价</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.avg_cost) }}</span></div>
-        <div class="info-row"><span class="info-label">总投入</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.total_invested) }}</span></div>
-        <div class="info-row"><span class="info-label">现价</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.current_price) : '暂无' }}</span></div>
-        <div class="info-row"><span class="info-label">市值</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.quantity * currentHolding.current_price) : '-' }}</span></div>
-        <div class="info-row"><span class="info-label">盈亏</span><span :style="{ color: pnlColor(currentHolding), fontWeight: 600 }">{{ pnlText(currentHolding) }}</span></div>
-        <div class="info-row"><span class="info-label">目标价</span><span>{{ currentHolding.target_price ? cs(currentHolding)+currentHolding.target_price : '-' }}</span></div>
-        <div class="info-row"><span class="info-label">止损线</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? cs(currentHolding)+currentHolding.stop_loss : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.asset') }}</span><span class="icon-text"><span class="icon">{{ currentHolding.icon }}</span> {{ currentHolding.name }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.quantity') }}</span><span style="font-weight:600">{{ currentHolding.quantity }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.avgCost') }}</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.avg_cost) }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.totalInvested') }}</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.total_invested) }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.currentPrice') }}</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.current_price) : t('holdings.unavailable') }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.marketValue') }}</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.quantity * currentHolding.current_price) : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.pnl') }}</span><span :style="{ color: pnlColor(currentHolding), fontWeight: 600 }">{{ pnlText(currentHolding) }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.targetPrice') }}</span><span>{{ currentHolding.target_price ? cs(currentHolding)+currentHolding.target_price : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.stopLoss') }}</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? cs(currentHolding)+currentHolding.stop_loss : '-' }}</span></div>
       </div>
 
       <div style="margin-top:20px">
-        <div class="section-title">编辑</div>
+        <div class="section-title">{{ t('holdings.edit') }}</div>
         <form @submit.prevent="saveHolding">
           <div class="form-row">
-            <div class="form-group"><label class="form-label">数量</label><input class="form-input" type="number" step="any" v-model="editHolding.quantity" /></div>
-            <div class="form-group"><label class="form-label">成本价</label><input class="form-input" type="number" step="any" v-model="editHolding.avg_cost" /></div>
+            <div class="form-group"><label class="form-label">{{ t('holdings.quantity') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.quantity" /></div>
+            <div class="form-group"><label class="form-label">{{ t('holdings.avgCost') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.avg_cost" /></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">总投入</label><input class="form-input" type="number" step="any" v-model="editHolding.total_invested" /></div>
+            <div class="form-group"><label class="form-label">{{ t('holdings.totalInvested') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.total_invested" /></div>
             <div class="form-group">
-              <label class="form-label">计价单位</label>
+              <label class="form-label">{{ t('history.currency') }}</label>
               <select class="form-select" v-model="editHolding.currency">
-                <option value="CNY">人民币 (CNY)</option>
-                <option value="USD">美元 (USD)</option>
+                <option value="CNY">{{ t('assets.currencyCny') }}</option>
+                <option value="USD">{{ t('assets.currencyUsd') }}</option>
                 <option value="USDT">USDT</option>
               </select>
             </div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">目标价</label><input class="form-input" type="number" step="any" v-model="editHolding.target_price" /></div>
-            <div class="form-group"><label class="form-label">止损线</label><input class="form-input" type="number" step="any" v-model="editHolding.stop_loss" /></div>
+            <div class="form-group"><label class="form-label">{{ t('holdings.targetPrice') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.target_price" /></div>
+            <div class="form-group"><label class="form-label">{{ t('holdings.stopLoss') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.stop_loss" /></div>
           </div>
-          <button type="submit" class="btn btn-primary btn-sm" :disabled="savingHolding">保存</button>
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="savingHolding">{{ t('holdings.save') }}</button>
         </form>
       </div>
 
       <div style="margin-top:20px">
-        <div class="section-title">+ 快速记录交易</div>
+        <div class="section-title">+ {{ t('holdings.quickRecord') }}</div>
         <TransactionForm v-if="currentHolding" :asset-id="currentHolding.asset_id" @success="onTxSuccess" @cancel="showDetail = false" />
       </div>
     </AppDrawer>
@@ -104,14 +104,17 @@
 
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
+import { formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
+const { t } = useI18n()
 const holdings = ref([])
 const loading = ref(true)
 const showDetail = ref(false)
@@ -146,7 +149,7 @@ function openDetail(h) {
 
 function onTxSuccess() {
   showDetail.value = false
-  toast.success('交易已记录')
+  toast.success(t('assetList.tradeRecorded'))
   loadData()
 }
 
@@ -166,16 +169,15 @@ async function saveHolding() {
       body: JSON.stringify(payload)
     })
     const json = await res.json()
-    if (json.success) { toast.success('已保存'); loadData() }
-    else toast.error(json.error || '保存失败')
+    if (json.success) { toast.success(t('holdings.saved')); loadData() }
+    else toast.error(json.error || t('common.saveFailed'))
   } catch (e) { toast.error(e.message) }
   savingHolding.value = false
 }
 
 function cs(h) { return currencySymbol(h?.currency) }
 function fmt(n) {
-  if (!n && n !== 0) return '0'
-  return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })
+  return formatNumber(n, { maximumFractionDigits: 2 })
 }
 function pnl(h) {
   if (!h.current_price || !h.total_invested) return null
@@ -188,7 +190,7 @@ function pnlPct(h) {
 function pnlColor(h) {
   const v = pnl(h)
   if (v === null) return 'var(--text-dim)'
-  return v >= 0 ? 'var(--green)' : 'var(--red)'
+  return v >= 0 ? 'var(--market-positive)' : 'var(--market-negative)'
 }
 function pnlText(h) {
   const v = pnl(h)

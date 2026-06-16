@@ -1,8 +1,8 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">市场信号</h1>
-      <button class="btn" @click="refreshSignals" :disabled="loading">{{ loading ? '分析中...' : '刷新信号' }}</button>
+      <h1 class="page-title">{{ t('signals.title') }}</h1>
+      <button class="btn" @click="refreshSignals" :disabled="loading">{{ loading ? t('signals.refreshing') : t('signals.refresh') }}</button>
     </div>
 
     <div v-if="!initialized" class="grid-2">
@@ -24,7 +24,7 @@
           <div class="signal-status">
             <span class="badge" :class="signalBadgeClass(signal.signal_type)">{{ signalLabel(signal.signal_type) }}</span>
             <div class="strength-wrap">
-              <span class="strength-label">强度 {{ signal.strength }}/10</span>
+               <span class="strength-label">{{ t('signals.strength', { value: signal.strength }) }}</span>
               <div class="strength-bar"><div class="strength-fill" :class="signal.signal_type" :style="{ width: `${Math.max(10, signal.strength * 10)}%` }"></div></div>
             </div>
           </div>
@@ -33,44 +33,47 @@
         <div class="signal-summary">{{ signal.summary }}</div>
 
         <details class="signal-details">
-          <summary>技术指标</summary>
+          <summary>{{ t('signals.indicators') }}</summary>
           <div class="indicator-grid">
             <div class="indicator-item"><span>MA5</span><b>{{ fmtIndicator(signal.indicators?.ma5) }}</b></div>
             <div class="indicator-item"><span>MA20</span><b>{{ fmtIndicator(signal.indicators?.ma20) }}</b></div>
             <div class="indicator-item"><span>RSI</span><b>{{ fmtIndicator(signal.indicators?.rsi14) }}</b></div>
-            <div class="indicator-item"><span>波动率</span><b>{{ fmtIndicator(signal.indicators?.volatility_pct, '%') }}</b></div>
-            <div class="indicator-item"><span>1日涨跌</span><b>{{ fmtIndicator(signal.indicators?.change_1d_pct, '%') }}</b></div>
-            <div class="indicator-item"><span>7日涨跌</span><b>{{ fmtIndicator(signal.indicators?.change_7d_pct, '%') }}</b></div>
+            <div class="indicator-item"><span>{{ t('signals.volatility') }}</span><b>{{ fmtIndicator(signal.indicators?.volatility_pct, '%') }}</b></div>
+            <div class="indicator-item"><span>{{ t('signals.change1d') }}</span><b>{{ fmtIndicator(signal.indicators?.change_1d_pct, '%') }}</b></div>
+            <div class="indicator-item"><span>{{ t('signals.change7d') }}</span><b>{{ fmtIndicator(signal.indicators?.change_7d_pct, '%') }}</b></div>
           </div>
         </details>
 
         <div class="signal-analysis">
-          <div class="detail-title">AI分析</div>
-          <div class="signal-analysis-text">{{ signal.ai_analysis || '暂无 AI 补充分析' }}</div>
+          <div class="detail-title">{{ t('signals.aiAnalysis') }}</div>
+          <div class="signal-analysis-text">{{ signal.ai_analysis || t('signals.noAiAnalysis') }}</div>
         </div>
 
         <div class="signal-footer">
           <span :class="{ 'expired-label': isExpired(signal.valid_until) }">
-            {{ isExpired(signal.valid_until) ? '已过期' : '有效期至' }} {{ fmtTime(signal.valid_until) }}
+            {{ isExpired(signal.valid_until) ? t('signals.expired') : t('signals.validUntil') }} {{ fmtTime(signal.valid_until) }}
           </span>
-          <span>生成于 {{ fmtTime(signal.created_at) }}</span>
+          <span>{{ t('signals.generatedAt') }} {{ fmtTime(signal.created_at) }}</span>
         </div>
       </div>
     </div>
 
     <div v-else class="card empty">
       <div class="empty-icon">📡</div>
-      <p>还没有市场信号，点击上方“刷新信号”开始分析。</p>
+      <p>{{ t('signals.empty') }}</p>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { formatDateTime, parseDateTime } from '../utils/formatters.js'
 
 const toast = useToast()
+const { t } = useI18n()
 const signals = ref([])
 const loading = ref(false)
 const initialized = ref(false)
@@ -82,7 +85,7 @@ async function loadSignals() {
     const json = await res.json()
     signals.value = json.data || []
   } catch (e) {
-    toast.error(e.message || '获取信号失败')
+    toast.error(e.message || t('signals.refreshFailed'))
   }
   loading.value = false
   initialized.value = true
@@ -94,34 +97,38 @@ async function refreshSignals() {
     const res = await api('/api/signals/analyze', { method: 'POST', body: JSON.stringify({}) })
     const json = await res.json()
     if (json.success) {
-      signals.value = json.data || []
-      toast.success(`已刷新 ${signals.value.length} 条市场信号`)
+      const nextSignals = Array.isArray(json.data) ? json.data : []
+      if (nextSignals.length || !signals.value.length) {
+        signals.value = nextSignals
+      }
+      toast.success(t('signals.refreshed', { count: signals.value.length }))
     } else {
-      toast.error(json.error || '刷新失败')
+      toast.error(json.error || t('signals.refreshActionFailed'))
     }
   } catch (e) {
-    toast.error(e.message || '刷新失败')
+    toast.error(e.message || t('signals.refreshActionFailed'))
   }
   loading.value = false
   initialized.value = true
 }
 
-function signalLabel(type) { return { bullish: '看涨', bearish: '看跌', neutral: '中性' }[type] || '中性' }
+function signalLabel(type) { return { bullish: t('signals.bullish'), bearish: t('signals.bearish'), neutral: t('signals.neutral') }[type] || t('signals.neutral') }
 function signalBadgeClass(type) {
-  return { bullish: 'badge-buy', bearish: 'badge-sell', neutral: 'badge-pending' }[type] || 'badge-pending'
+  return { bullish: 'badge-market-up', bearish: 'badge-market-down', neutral: 'badge-pending' }[type] || 'badge-pending'
 }
 function fmtIndicator(value, suffix = '') {
   return Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}${suffix}` : '-'
 }
 function fmtTime(value) {
   if (!value) return '-'
-  const d = new Date(value.endsWith('Z') || value.includes('+') ? value : value + 'Z')
-  if (isNaN(d.getTime())) return String(value).slice(0, 16).replace('T', ' ')
-  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const d = parseDateTime(value)
+  if (!d || isNaN(d.getTime())) return String(value).slice(0, 16).replace('T', ' ')
+  return formatDateTime(d, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 function isExpired(value) {
   if (!value) return false
-  const d = new Date(value.endsWith('Z') || value.includes('+') ? value : value + 'Z')
+  const d = parseDateTime(value)
+  if (!d) return false
   return d.getTime() < Date.now()
 }
 
@@ -171,8 +178,8 @@ onMounted(loadSignals)
   height: 100%;
   border-radius: 999px;
 }
-.strength-fill.bullish { background: var(--green); }
-.strength-fill.bearish { background: var(--red); }
+.strength-fill.bullish { background: var(--market-positive); }
+.strength-fill.bearish { background: var(--market-negative); }
 .strength-fill.neutral { background: var(--text-muted); }
 .signal-summary {
   font-size: 14px;

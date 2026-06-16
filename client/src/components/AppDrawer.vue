@@ -116,7 +116,7 @@ const sheetStyle = computed(() => {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--surface-backdrop);
   z-index: 1000;
   display: flex;
   justify-content: flex-end;
@@ -142,7 +142,7 @@ const sheetStyle = computed(() => {
 .sheet-panel {
   width: 100%;
   max-height: 90vh;
-  background: var(--bg-card);
+  background: var(--sheet-bg);
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
   display: flex;

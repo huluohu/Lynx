@@ -1,16 +1,55 @@
 /**
- * Strategy Agent — 3-Step Chain for intelligent strategy generation
- * 
- * Step 1: Data Collection (no LLM) — gather portfolio, market, macro data
- * Step 2: Research Analysis (LLM #1) — analyst role, structured report
- * Step 3: Strategy Generation (LLM #2) — strategist role, actionable plan
+ * Strategy Agent — 6-Step Pipeline for intelligent strategy generation
+ *
+ * Step 0: Pre-check      — config, data availability
+ * Step 1: Data Collection — portfolio, market, macro, indicators
+ * Step 2: LLM Analysis   — analyst role, structured research report
+ * Step 3: Self-check     — validate analysis completeness, fill gaps
+ * Step 4: LLM Strategy   — strategist role, actionable plan
+ * Step 5: Post-validate  — plan constraints, auto-fix, budget cap
+ * Step 6: Evaluate       — quality scoring, self-consistency
  */
 import http from 'http';
 import https from 'https';
 import { createLogger } from '../utils/logger.js';
 import { httpGet } from './price.js';
+import {
+  scoreDataQuality,
+  computeIndicators,
+  analyzeTransactionPatterns,
+  validatePlans,
+  autoFixPlans,
+  evaluateOutput,
+  selfCheckConsistency,
+} from './agent-evaluator.js';
+import { AgentTracer } from './agent-trace.js';
 
 const log = createLogger('strategy-agent');
+
+// ============================================================
+// Circuit Breaker
+// ============================================================
+
+const circuitBreaker = {
+  failures: 0,
+  lastFailure: 0,
+  threshold: 3,
+  resetMs: 5 * 60 * 1000, // 5 minutes
+  isOpen() {
+    if (this.failures < this.threshold) return false;
+    if (Date.now() - this.lastFailure > this.resetMs) {
+      this.failures = 0; // reset
+      return false;
+    }
+    return true;
+  },
+  recordSuccess() { this.failures = 0; },
+  recordFailure() {
+    this.failures++;
+    this.lastFailure = Date.now();
+    log.warn('Circuit breaker: failure recorded', { failures: this.failures, threshold: this.threshold });
+  },
+};
 
 // ============================================================
 // LLM Infrastructure
@@ -35,25 +74,34 @@ export function getAgentConfig(db) {
 
 export function callLLM(apiUrl, apiKey, model, messages, { temperature = 0.7, maxTokens = 4000, timeout = 60000, retries = 2 } = {}) {
   return new Promise(async (resolve) => {
+    if (circuitBreaker.isOpen()) {
+      log.warn('Circuit breaker open, skipping LLM call');
+      resolve(null);
+      return;
+    }
     for (let attempt = 0; attempt <= retries; attempt++) {
       const result = await _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout });
       if (result) {
         if (result.error && attempt < retries) {
           log.warn('Agent LLM API error, retrying', { error: result.error.message, attempt: attempt + 1 });
-          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          await sleep(1000 * (attempt + 1));
           continue;
         }
+        circuitBreaker.recordSuccess();
         resolve(result);
         return;
       }
+      circuitBreaker.recordFailure();
       if (attempt < retries) {
         log.warn('Agent LLM request failed, retrying', { attempt: attempt + 1 });
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        await sleep(1500 * (attempt + 1));
       }
     }
     resolve(null);
   });
 }
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout }) {
   return new Promise((resolve) => {
@@ -61,13 +109,7 @@ function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxT
     const isHttps = url.protocol === 'https:';
     const lib = isHttps ? https : http;
 
-    const body = JSON.stringify({
-      model,
-      messages,
-      temperature,
-      max_tokens: maxTokens,
-    });
-
+    const body = JSON.stringify({ model, messages, temperature, max_tokens: maxTokens });
     const opts = {
       hostname: url.hostname,
       port: url.port || (isHttps ? 443 : 80),
@@ -84,7 +126,7 @@ function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxT
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
-        if (res.statusCode >= 500 || res.statusCode === 429) {
+        if (res.statusCode === 429 || res.statusCode >= 500) {
           log.warn('Agent LLM HTTP error', { status: res.statusCode });
           resolve(null);
           return;
@@ -101,18 +143,47 @@ function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxT
 
 function extractJSON(text) {
   try { return JSON.parse(text); } catch {}
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const match = text?.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (match) { try { return JSON.parse(match[1].trim()); } catch {} }
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
+  const start = text?.indexOf('{');
+  const end = text?.lastIndexOf('}');
   if (start !== -1 && end > start) {
     try { return JSON.parse(text.slice(start, end + 1)); } catch {}
   }
   return null;
 }
 
+// Sanitize external text to prevent prompt injection
+function sanitizeExternalText(text) {
+  if (!text) return '';
+  return text
+    .replace(/ignore\s+(previous|all|above)\s+(instructions?|prompts?)/gi, '[filtered]')
+    .replace(/you\s+are\s+now/gi, '[filtered]')
+    .replace(/system\s*:/gi, '[filtered]')
+    .replace(/```/g, '')
+    .slice(0, 500);
+}
+
 // ============================================================
-// Step 1: Data Collection
+// Step 0: Pre-Check
+// ============================================================
+
+function preCheck(db, config, assetIds) {
+  const issues = [];
+  if (!config.apiUrl) issues.push('AI API 地址未配置');
+  if (!config.apiKey) issues.push('AI API 密钥未配置');
+  if (!assetIds || assetIds.length === 0) issues.push('未选择任何资产');
+
+  for (const id of assetIds) {
+    const asset = db.prepare('SELECT id, name FROM assets WHERE id = ?').get(id);
+    if (!asset) issues.push(`资产 ID ${id} 不存在`);
+  }
+
+  return { ok: issues.length === 0, issues };
+}
+
+// ============================================================
+// Step 1: Data Collection (enhanced)
 // ============================================================
 
 async function collectData(db, assetIds, config) {
@@ -120,72 +191,84 @@ async function collectData(db, assetIds, config) {
 
   const result = {
     assets: [],
-    priceHistory: [],
     recentNews: [],
     macroIndicators: {},
     triggeredPlans: [],
   };
 
-  // 1a. Internal data per asset
   for (const id of assetIds) {
     const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
     if (!asset) continue;
 
     const holding = db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(id);
-    const transactions = db.prepare('SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 30').all(id);
-    
-    // Price history from cache (last 30 days)
+    const transactions = db.prepare(
+      'SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 50'
+    ).all(id);
+
     const priceHistory = db.prepare(
       "SELECT price, currency, fetched_at FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-30 days') ORDER BY fetched_at ASC"
     ).all(id);
 
-    // Current price
-    const latestPrice = db.prepare('SELECT price, fetched_at FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1').get(id);
+    const latestPriceRow = db.prepare(
+      'SELECT price, fetched_at FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC LIMIT 1'
+    ).get(id);
 
-    // Existing strategies for this asset
     const existingStrategies = db.prepare(
       "SELECT name, type, status, parameters FROM strategies WHERE (asset_id = ? OR asset_ids LIKE ?) AND status IN ('active', 'draft')"
     ).all(id, `%${id}%`);
 
-    // Triggered/executed plans for this asset (feedback)
     const triggeredPlans = db.prepare(
       "SELECT tp.*, s.name as strategy_name FROM trading_plans tp LEFT JOIN strategies s ON tp.strategy_id = s.id WHERE tp.asset_id = ? AND tp.status IN ('triggered', 'executed') ORDER BY tp.updated_at DESC LIMIT 10"
     ).all(id);
     result.triggeredPlans.push(...triggeredPlans);
+
+    // Compute technical indicators
+    const indicators = computeIndicators(priceHistory);
+    // Analyze transaction patterns
+    const tradePatterns = analyzeTransactionPatterns(transactions);
+
+    // PnL calculation
+    let pnl = null;
+    let pnlPct = null;
+    if (holding && latestPriceRow?.price && holding.avg_cost) {
+      pnl = (latestPriceRow.price - holding.avg_cost) * holding.quantity;
+      pnlPct = ((latestPriceRow.price - holding.avg_cost) / holding.avg_cost * 100);
+    }
 
     result.assets.push({
       asset,
       holding,
       transactions,
       priceHistory,
-      latestPrice: latestPrice?.price || null,
-      latestPriceTime: latestPrice?.fetched_at || null,
+      latestPrice: latestPriceRow?.price || null,
+      latestPriceTime: latestPriceRow?.fetched_at || null,
       existingStrategies,
+      indicators,
+      tradePatterns,
+      pnl: pnl != null ? Math.round(pnl * 100) / 100 : null,
+      pnlPct: pnlPct != null ? Math.round(pnlPct * 100) / 100 : null,
     });
   }
 
-  // 1b. Local news from news table (last 7 days)
+  // Local news (last 7 days)
   try {
     const localNews = db.prepare(
       "SELECT title, summary, source, published_at FROM news WHERE published_at > datetime('now', '-7 days') ORDER BY published_at DESC LIMIT 20"
     ).all();
-    if (localNews.length > 0) {
-      result.recentNews.push(...localNews.map(n => ({
-        title: n.title,
-        snippet: n.summary || '',
-        source: n.source || '',
-        date: n.published_at || '',
-        local: true,
-      })));
-    }
+    result.recentNews.push(...localNews.map(n => ({
+      title: n.title,
+      snippet: n.summary || '',
+      source: n.source || '',
+      date: n.published_at || '',
+      local: true,
+    })));
   } catch (e) {
     log.debug('Failed to read local news', { error: e.message });
   }
 
-  // 1c. External data (parallel)
+  // External data (parallel, non-blocking)
   const externalPromises = [];
 
-  // Fear & Greed Index (crypto)
   const hasCrypto = result.assets.some(a => a.asset.type === 'crypto');
   if (hasCrypto) {
     externalPromises.push(
@@ -193,7 +276,6 @@ async function collectData(db, assetIds, config) {
     );
   }
 
-  // Gold-specific macro data
   const hasGold = result.assets.some(a => a.asset.type === 'gold' || a.asset.symbol?.includes('AU'));
   if (hasGold) {
     externalPromises.push(
@@ -201,7 +283,6 @@ async function collectData(db, assetIds, config) {
     );
   }
 
-  // News search (if configured) — supplement local news
   if (config.searchApiUrl && config.searchApiKey) {
     for (const a of result.assets) {
       externalPromises.push(
@@ -212,7 +293,6 @@ async function collectData(db, assetIds, config) {
     }
   }
 
-  // Wait for all external requests (with timeout)
   await Promise.allSettled(externalPromises);
 
   log.info('Step 1 complete', {
@@ -226,7 +306,6 @@ async function collectData(db, assetIds, config) {
   return result;
 }
 
-// Fetch Fear & Greed Index
 async function fetchFearGreedIndex() {
   try {
     const data = await httpGet('https://api.alternative.me/fng/?limit=7', { timeout: 5000 });
@@ -240,26 +319,20 @@ async function fetchFearGreedIndex() {
   return null;
 }
 
-// Fetch gold-related macro indicators
 async function fetchGoldMacro() {
   const indicators = {};
-  
-  // DXY (Dollar Index) approximation via EUR/USD
   try {
     const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
     if (data?.rates) {
       indicators.usd_cny = data.rates.CNY;
       indicators.usd_eur = data.rates.EUR;
       indicators.usd_jpy = data.rates.JPY;
-      // Rough DXY approximation
       indicators.dxy_approx = Math.round((1 / data.rates.EUR) * 57.6 + data.rates.JPY * 0.136 + (1 / data.rates.GBP) * 11.9);
     }
   } catch (e) { log.warn('Failed to fetch FX rates', { error: e.message }); }
-
   return indicators;
 }
 
-// Search news via configured API
 async function searchNews(config, assetName, assetType) {
   try {
     const query = `${assetName} 投资 行情分析`;
@@ -277,92 +350,68 @@ async function searchNews(config, assetName, assetType) {
   return [];
 }
 
-// Sanitize external text to prevent prompt injection
-function sanitizeExternalText(text) {
-  if (!text) return '';
-  // Remove common prompt injection patterns
-  return text
-    .replace(/ignore\s+(previous|all|above)\s+(instructions?|prompts?)/gi, '[filtered]')
-    .replace(/you\s+are\s+now/gi, '[filtered]')
-    .replace(/system\s*:/gi, '[filtered]')
-    .replace(/```/g, '')
-    .slice(0, 500); // Limit length
-}
-
 // ============================================================
-// Step 2: Research Analysis (LLM Call #1)
+// Step 2: LLM Analysis
 // ============================================================
 
 function buildAnalystPrompt(collectedData) {
   const { assets, recentNews, macroIndicators, triggeredPlans } = collectedData;
 
-  // Format portfolio data
   const portfolioSection = assets.map(a => {
-    const { asset, holding, transactions, priceHistory, latestPrice, existingStrategies } = a;
-    
+    const { asset, holding, transactions, priceHistory, latestPrice, existingStrategies, indicators, tradePatterns, pnlPct } = a;
+
     const holdingStr = holding
-      ? `持仓: ${holding.quantity} 单位, 成本: ¥${holding.avg_cost}, 总投入: ¥${holding.total_invested}, 当前价: ¥${latestPrice || '未知'}`
+      ? `持仓: ${holding.quantity}单位, 成本¥${holding.avg_cost}, 总投入¥${holding.total_invested}, 当前价¥${latestPrice || '未知'}, 盈亏: ${pnlPct != null ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : '未知'}`
       : '暂无持仓';
-    
-    // Price trend
-    let trendStr = '';
-    if (priceHistory.length >= 2) {
-      const oldest = priceHistory[0].price;
-      const newest = priceHistory[priceHistory.length - 1].price;
-      const change = ((newest - oldest) / oldest * 100).toFixed(1);
-      const high = Math.max(...priceHistory.map(p => p.price));
-      const low = Math.min(...priceHistory.map(p => p.price));
-      trendStr = `30日走势: ${change > 0 ? '+' : ''}${change}%, 高点: ¥${high.toFixed(2)}, 低点: ¥${low.toFixed(2)}, 波动幅度: ${((high - low) / low * 100).toFixed(1)}%`;
-    }
 
-    // Recent trades pattern
-    let tradePattern = '';
-    if (transactions.length > 0) {
-      const buys = transactions.filter(t => t.type === 'buy');
-      const sells = transactions.filter(t => t.type === 'sell');
-      const avgBuyPrice = buys.length > 0 ? (buys.reduce((s, t) => s + t.price, 0) / buys.length).toFixed(2) : '-';
-      const lastTrade = transactions[0];
-      tradePattern = `近30笔: 买${buys.length}次(均价¥${avgBuyPrice}), 卖${sells.length}次, 最近: ${lastTrade.executed_at?.slice(0, 10)} ${lastTrade.type} ${lastTrade.quantity}@¥${lastTrade.price}`;
-    }
+    const trendStr = priceHistory.length >= 2
+      ? (() => {
+        const oldest = priceHistory[0].price;
+        const newest = priceHistory[priceHistory.length - 1].price;
+        const change = ((newest - oldest) / oldest * 100).toFixed(1);
+        const high = Math.max(...priceHistory.map(p => p.price));
+        const low = Math.min(...priceHistory.map(p => p.price));
+        const indStr = indicators.volatility != null
+          ? `, 日均波动率:${indicators.volatility}%, SMA7:¥${indicators.sma7}, SMA20:¥${indicators.sma20}${indicators.momentum5 != null ? `, 5日动能:${indicators.momentum5}%` : ''}`
+          : '';
+        return `30日走势: ${change > 0 ? '+' : ''}${change}%, 高¥${high.toFixed(2)}, 低¥${low.toFixed(2)}${indStr}`;
+      })()
+      : '价格历史数据不足';
 
-    // Existing strategies
+    const tradeStr = tradePatterns.buyCount
+      ? `近期交易: 买${tradePatterns.buyCount}次(均价¥${tradePatterns.avgBuyPrice}), 卖${tradePatterns.sellCount}次${tradePatterns.avgIntervalDays ? `, 平均间隔${tradePatterns.avgIntervalDays}天` : ''}`
+      : '暂无交易记录';
+
     const stratStr = existingStrategies.length > 0
       ? `已有策略: ${existingStrategies.map(s => `${s.name}(${s.type}/${s.status})`).join(', ')}`
       : '暂无关联策略';
 
     return `### ${asset.name} (${asset.symbol}) — ${asset.type}
 - ${holdingStr}
-- ${trendStr || '价格历史数据不足'}
-- ${tradePattern || '暂无交易记录'}
+- ${trendStr}
+- ${tradeStr}
 - ${stratStr}`;
   }).join('\n\n');
 
-  // Triggered plans feedback
-  let plansSection = '';
-  if (triggeredPlans && triggeredPlans.length > 0) {
-    plansSection = `\n## 已触发/已执行的计划（历史反馈）\n` +
-      triggeredPlans.map(p => `- [${p.status}] ${p.strategy_name || '策略'}: ${p.action} ${p.quantity || ''}单位 @ ¥${p.trigger_value}, ${p.notes || ''}`).join('\n') +
-      `\n（请基于以上执行结果调整后续建议，避免重复已执行的计划）`;
-  }
+  const plansSection = triggeredPlans.length > 0
+    ? `\n## 已触发/执行计划（历史反馈）\n`
+      + triggeredPlans.map(p => `- [${p.status}] ${p.strategy_name || '策略'}: ${p.action} ${p.quantity || ''}单位@¥${p.trigger_value}${p.notes ? ', ' + p.notes : ''}`).join('\n')
+      + '\n（请基于以上执行结果调整建议）'
+    : '';
 
-  // Macro section
   let macroSection = '';
   if (macroIndicators.fearGreed) {
     const fg = macroIndicators.fearGreed;
-    macroSection += `\n- 加密市场恐惧贪婪指数: ${fg.current.value} (${fg.current.label}), 7日趋势: ${fg.history.map(h => h.value).join('→')}`;
+    macroSection += `\n- 加密恐惧贪婪指数: ${fg.current.value}(${fg.current.label}), 7日趋势: ${fg.history.map(h => h.value).join('→')}`;
   }
-  if (macroIndicators.gold) {
+  if (macroIndicators.gold?.usd_cny) {
     const g = macroIndicators.gold;
-    if (g.usd_cny) macroSection += `\n- USD/CNY: ${g.usd_cny}`;
-    if (g.usd_jpy) macroSection += `\n- USD/JPY: ${g.usd_jpy}`;
-    if (g.dxy_approx) macroSection += `\n- 美元指数(估): ${g.dxy_approx}`;
+    macroSection += `\n- USD/CNY: ${g.usd_cny}, USD/JPY: ${g.usd_jpy || '-'}, 美元指数(估): ${g.dxy_approx || '-'}`;
   }
 
-  // News section — combine local + external
-  let newsSection = '暂无相关新闻';
-  if (recentNews.length > 0) {
-    newsSection = recentNews.slice(0, 15).map(n => `- [${n.date?.slice(0, 10) || ''}] ${n.title}${n.snippet ? ': ' + n.snippet.slice(0, 80) : ''} (${n.source})`).join('\n');
-  }
+  const newsSection = recentNews.length > 0
+    ? recentNews.slice(0, 15).map(n => `- [${n.date?.slice(0, 10) || ''}] ${n.title}${n.snippet ? ': ' + n.snippet.slice(0, 80) : ''} (${n.source})`).join('\n')
+    : '暂无相关新闻';
 
   return `你是一位经验丰富的投资研究分析师。请基于以下数据，对投资组合进行全面分析。
 
@@ -401,59 +450,138 @@ ${newsSection}
   "macro_outlook": "宏观环境对该组合的影响分析",
   "news_sentiment": "资讯情绪综合判断（偏多/中性/偏空）及关键信号",
   "confidence_level": 0.7,
-  "data_limitations": "数据局限性说明（坦诚告知哪些判断可能不准确）"
+  "data_limitations": "数据局限性说明"
 }
 
 重要提示：
-- 如果价格数据不足，请明确说明并基于你的知识做出保守判断
+- 价格数据不足时请明确说明并做保守判断
 - 支撑位和阻力位必须是具体数字
-- 风险因素要具体、可操作
-- confidence_level 范围 0-1，反映你对分析可靠性的评估
-- 必须坦诚说明数据局限性
-- 结合资讯信息判断市场情绪，但不要被单条新闻左右`;
+- confidence_level 范围 0-1
+- 必须坦诚说明数据局限性`;
 }
 
-async function runAnalysis(collectedData, config) {
+/**
+ * Rule-based fallback analysis when LLM is unavailable
+ */
+function buildFallbackAnalysis(collectedData) {
+  const { assets, recentNews } = collectedData;
+  return {
+    market_assessment: '由于AI服务暂时不可用，此报告为基于数据的规则推断，仅供参考。',
+    asset_analyses: assets.map(a => {
+      const indicators = a.indicators || {};
+      const priceChange = indicators.priceChange30d;
+      return {
+        asset_name: a.asset.name,
+        trend: {
+          short_term: priceChange != null ? (priceChange > 0 ? '近期上涨趋势' : '近期下跌趋势') : '数据不足',
+          medium_term: '需要更多数据评估中期趋势',
+          key_support_levels: a.latestPrice ? [Math.round(a.latestPrice * 0.95 * 100) / 100] : [],
+          key_resistance_levels: a.latestPrice ? [Math.round(a.latestPrice * 1.05 * 100) / 100] : [],
+        },
+        current_position_assessment: a.holding ? '有持仓，建议结合实际情况制定策略' : '暂无持仓',
+        risk_factors: ['AI分析不可用，风险评估基于规则'],
+        opportunities: ['等待AI服务恢复后重新分析'],
+      };
+    }),
+    portfolio_diagnosis: '建议等待AI服务恢复后重新生成完整分析报告。',
+    macro_outlook: '当前宏观数据未能实时分析。',
+    news_sentiment: recentNews.length > 0 ? `已获取${recentNews.length}条资讯，情绪分析需AI支持` : '中性',
+    confidence_level: 0.2,
+    data_limitations: 'AI分析服务暂不可用，所有结论基于规则推断，可靠性有限',
+    _fallback: true,
+  };
+}
+
+async function runAnalysis(collectedData, config, tracer) {
   log.info('Step 2: Running analysis');
+  tracer?.startStep('analyze', { assetsCount: collectedData.assets.length, newsCount: collectedData.recentNews.length });
 
   const prompt = buildAnalystPrompt(collectedData);
-
   const messages = [
     { role: 'system', content: '你是一位专业的投资研究分析师，擅长技术分析和宏观经济研判。只输出 JSON，不输出其他文字。保持客观、审慎，明确标注不确定性。' },
     { role: 'user', content: prompt },
   ];
 
-  const response = await callLLM(
-    config.apiUrl, config.apiKey, config.analysisModel, messages,
-    { temperature: 0.4, maxTokens: 3000, timeout: 60000 }
-  );
+  const response = await callLLM(config.apiUrl, config.apiKey, config.analysisModel, messages, {
+    temperature: 0.4, maxTokens: 3000, timeout: 60000,
+  });
 
   if (!response) {
-    throw new Error('分析师 AI 服务无响应');
+    log.warn('Step 2: LLM unavailable, using fallback analysis');
+    const fallback = buildFallbackAnalysis(collectedData);
+    tracer?.completeStep('analyze', { fallback: true, confidence: fallback.confidence_level });
+    return { report: fallback, usedFallback: true };
   }
 
   const content = response.choices?.[0]?.message?.content;
   if (!content) {
     const err = response.error?.message || '未获取到分析结果';
-    throw new Error(`分析师 AI 返回异常: ${err}`);
+    tracer?.failStep('analyze', err);
+    log.warn('Step 2: LLM response invalid, using fallback', { err });
+    return { report: buildFallbackAnalysis(collectedData), usedFallback: true };
   }
 
   const report = extractJSON(content);
   if (!report || !report.market_assessment) {
-    log.error('Analysis JSON parse failed', { preview: content.slice(0, 300) });
-    throw new Error('分析报告格式异常，无法解析');
+    log.warn('Step 2: JSON parse failed, using fallback', { preview: content.slice(0, 200) });
+    tracer?.failStep('analyze', 'JSON parse failed');
+    return { report: buildFallbackAnalysis(collectedData), usedFallback: true };
   }
 
-  log.info('Step 2 complete', { confidence: report.confidence_level, assetsAnalyzed: report.asset_analyses?.length });
+  log.info('Step 2 complete', { confidence: report.confidence_level, assets: report.asset_analyses?.length });
+  tracer?.completeStep('analyze', { confidence: report.confidence_level, assetsAnalyzed: report.asset_analyses?.length });
+  return { report, usedFallback: false };
+}
+
+// ============================================================
+// Step 3: Self-Check / Analysis Validation
+// ============================================================
+
+function validateAndEnrichAnalysis(report, collectedData) {
+  const { assets } = collectedData;
+
+  // Ensure asset_analyses has an entry for each asset
+  const existingNames = new Set((report.asset_analyses || []).map(a => a.asset_name?.toLowerCase()));
+
+  for (const a of assets) {
+    if (!existingNames.has(a.asset.name.toLowerCase())) {
+      if (!report.asset_analyses) report.asset_analyses = [];
+      report.asset_analyses.push({
+        asset_name: a.asset.name,
+        trend: {
+          short_term: '数据不足，无法判断',
+          medium_term: '数据不足，无法判断',
+          key_support_levels: a.latestPrice ? [Math.round(a.latestPrice * 0.95 * 100) / 100] : [],
+          key_resistance_levels: a.latestPrice ? [Math.round(a.latestPrice * 1.05 * 100) / 100] : [],
+        },
+        current_position_assessment: a.holding ? '有持仓' : '无持仓',
+        risk_factors: [],
+        opportunities: [],
+      });
+    }
+  }
+
+  // Ensure confidence_level is valid
+  if (report.confidence_level == null || !Number.isFinite(Number(report.confidence_level))) {
+    report.confidence_level = 0.5;
+  }
+  report.confidence_level = Math.min(1, Math.max(0, Number(report.confidence_level)));
+
+  // Ensure string fields exist
+  report.market_assessment = report.market_assessment || '市场评估不可用';
+  report.portfolio_diagnosis = report.portfolio_diagnosis || '组合诊断不可用';
+  report.news_sentiment = report.news_sentiment || '中性';
+  report.data_limitations = report.data_limitations || '无特别说明';
+
   return report;
 }
 
 // ============================================================
-// Step 3: Strategy Generation (LLM Call #2)
+// Step 4: LLM Strategy Generation
 // ============================================================
 
 function buildStrategistPrompt(analysisReport, collectedData, userConstraints) {
-  const { budget, goal, riskLevel, assetIds, previousResult, userFeedback } = userConstraints;
+  const { budget, goal, riskLevel, previousResult, userFeedback } = userConstraints;
   const { assets, triggeredPlans } = collectedData;
 
   const goalMap = {
@@ -461,48 +589,35 @@ function buildStrategistPrompt(analysisReport, collectedData, userConstraints) {
     growth: '稳定增长，定期定额加仓',
     balanced: '平衡风险，网格波段交易',
     trend: '趋势跟踪，顺势加仓逆势减仓',
-    rebalance: '组合再平衡，按目标权重调整配比',
+    rebalance: '组合再平衡，按目标权重调整',
   };
-  const riskMap = { low: '保守（小仓位、宽间距、优先保本）', medium: '适中（平衡风险收益）', high: '激进（大仓位、密间距、追求收益最大化）' };
-
-  const typeMap = {
-    recovery: 'recovery',
-    growth: 'dca',
-    balanced: 'grid',
-    trend: 'trend',
-    rebalance: 'rebalance',
+  const riskMap = {
+    low: '保守（小仓位、宽间距、优先保本）',
+    medium: '适中（平衡风险收益）',
+    high: '激进（大仓位、密间距、追求收益最大化）',
   };
+  const typeMap = { recovery: 'recovery', growth: 'dca', balanced: 'grid', trend: 'trend', rebalance: 'rebalance' };
 
   const assetIdMap = assets.map(a => `${a.asset.id}=${a.asset.name}(${a.asset.symbol})`).join(', ');
   const isMulti = assets.length > 1;
 
-  // Triggered plans feedback section
-  let triggeredSection = '';
-  if (triggeredPlans && triggeredPlans.length > 0) {
-    triggeredSection = `\n## 已执行的历史计划
-${triggeredPlans.map(p => `- [${p.status}] ${p.action} ${p.quantity || ''}单位 @ ¥${p.trigger_value} (${p.notes || p.strategy_name || ''})`).join('\n')}
-注意：上述计划已执行，请避免生成重复的操作点位。新计划应基于当前最新分析结论。\n`;
-  }
+  const typeGuidance = {
+    recovery: '策略思路：通过分批低位补仓降低持仓成本，设置止损线保护本金。每一笔补仓都应有明确的支撑位依据。',
+    growth: '策略思路：制定定投计划（按周/月），在下跌时适当加仓（逢低加码），设置长期目标价位。',
+    balanced: '策略思路：在支撑位和阻力位之间设置网格买卖，低买高卖赚取波段利润。网格密度根据波动率调整。',
+    trend: '策略思路：识别趋势方向，顺势建仓/加仓，设置趋势破坏止损。突破关键阻力加仓，跌破关键支撑减仓。',
+    rebalance: '策略思路：设定各资产目标权重，当偏离超过阈值时触发再平衡操作。超配的减仓，低配的加仓。',
+  }[goal] || '';
 
-  // Strategy-type-specific guidance
-  let typeGuidance = '';
-  switch (goal) {
-    case 'recovery':
-      typeGuidance = `策略思路：通过分批低位补仓降低持仓成本，设置止损线保护本金。每一笔补仓都应有明确的支撑位依据。`;
-      break;
-    case 'growth':
-      typeGuidance = `策略思路：制定定投计划（按周/月），在下跌时适当加仓（逢低加码），设置长期目标价位。`;
-      break;
-    case 'balanced':
-      typeGuidance = `策略思路：在支撑位和阻力位之间设置网格买卖，低买高卖赚取波段利润。网格密度根据波动率调整。`;
-      break;
-    case 'trend':
-      typeGuidance = `策略思路：识别趋势方向，顺势建仓/加仓，设置趋势破坏止损。突破关键阻力加仓，跌破关键支撑减仓。`;
-      break;
-    case 'rebalance':
-      typeGuidance = `策略思路：设定各资产目标权重，当偏离超过阈值时触发再平衡操作。超配的减仓，低配的加仓。`;
-      break;
-  }
+  const triggeredSection = triggeredPlans.length > 0
+    ? `\n## 已执行历史计划\n`
+      + triggeredPlans.map(p => `- [${p.status}] ${p.action} ${p.quantity || ''}单位@¥${p.trigger_value} (${p.notes || p.strategy_name || ''})`).join('\n')
+      + '\n注意：上述计划已执行，请避免生成重复的操作点位。\n'
+    : '';
+
+  const feedbackSection = previousResult && userFeedback
+    ? `\n## ⚠️ 用户反馈（基于上次生成结果）\n上次策略: ${previousResult.strategy?.name || ''}\n上次推理: ${(previousResult.reasoning || '').slice(0, 500)}\n\n**用户反馈:** ${userFeedback}\n\n请针对性调整，保留有效结论，修正不满意部分。`
+    : '';
 
   return `你是一位专业的量化交易策略师。请基于以下分析报告，制定具体的操盘策略和交易计划。
 
@@ -519,15 +634,14 @@ ${isMulti ? '- 这是组合策略，需要合理分配预算到各资产' : ''}
 ## 策略类型指导
 ${typeGuidance}
 ${triggeredSection}
-## 当前持仓明细
-${assets.map(a => {
-  if (!a.holding) return `- ${a.asset.name}: 暂无持仓`;
-  return `- ${a.asset.name}: ${a.holding.quantity}单位, 成本¥${a.holding.avg_cost}, 投入¥${a.holding.total_invested}, 现价¥${a.latestPrice || '未知'}`;
-}).join('\n')}
+## 当前持仓
+${assets.map(a => a.holding
+  ? `- ${a.asset.name}: ${a.holding.quantity}单位, 成本¥${a.holding.avg_cost}, 现价¥${a.latestPrice || '未知'}${a.pnlPct != null ? ', 盈亏' + (a.pnlPct >= 0 ? '+' : '') + a.pnlPct.toFixed(1) + '%' : ''}`
+  : `- ${a.asset.name}: 暂无持仓`).join('\n')}
 
 ## 输出要求
 
-请返回严格的 JSON 格式（不要 markdown 代码块），结构如下:
+请返回严格的 JSON 格式（不要 markdown 代码块）:
 {
   "strategy": {
     "name": "策略名称（简短有力，体现核心思路）",
@@ -550,7 +664,7 @@ ${assets.map(a => {
       "amount": 数字或null,
       "new_avg_cost": 数字或null,
       "notes": "操作说明",
-      "rationale": "决策依据（引用分析报告中的具体结论，如支撑位、趋势判断等）"
+      "rationale": "决策依据（引用分析报告中的具体结论）"
     }
   ],
   "risk_management": {
@@ -564,57 +678,52 @@ ${assets.map(a => {
 
 ## 关键约束
 - 每条 plan 的 trigger_value 必须基于分析报告中的支撑/阻力位
-- rationale 必须明确引用分析依据，不能空泛
+- rationale 必须明确引用分析依据
 - 补仓价格必须低于当前价/成本价
 - 减仓价格必须高于成本价（除非止损）
 - 金额总和不得超过预算 ¥${budget}
 - plans 按 seq 从1开始编号
 - asset_id 必须是: ${assets.map(a => a.asset.id).join(', ')}
 - 价格保留2位小数
-${isMulti ? '- 组合策略要体现资产间的配置逻辑和再平衡思路' : ''}${previousResult && userFeedback ? `
-
-## ⚠️ 用户反馈（基于上次生成结果的调整要求）
-
-上次生成的策略名称: ${previousResult.strategy?.name || ''}
-上次生成的推理: ${(previousResult.reasoning || '').slice(0, 500)}
-
-**用户反馈:** ${userFeedback}
-
-请根据用户反馈对策略进行针对性调整，保持分析报告中的有效结论，但修正用户不满意的部分。` : ''}`;
+${isMulti ? '- 组合策略要体现各资产配置逻辑' : ''}
+${feedbackSection}`;
 }
 
-async function generateStrategy(analysisReport, collectedData, userConstraints, config) {
-  log.info('Step 3: Generating strategy');
+async function generateStrategy(analysisReport, collectedData, userConstraints, config, tracer) {
+  log.info('Step 4: Generating strategy');
+  tracer?.startStep('generate', { goal: userConstraints.goal, riskLevel: userConstraints.riskLevel });
 
   const prompt = buildStrategistPrompt(analysisReport, collectedData, userConstraints);
-
   const messages = [
     { role: 'system', content: '你是一位专业量化交易策略师，精通技术分析和仓位管理。只输出 JSON，不输出其他文字。每条交易计划都必须有明确的决策依据。' },
     { role: 'user', content: prompt },
   ];
 
-  const response = await callLLM(
-    config.apiUrl, config.apiKey, config.model, messages,
-    { temperature: 0.5, maxTokens: 4000, timeout: 60000 }
-  );
+  const response = await callLLM(config.apiUrl, config.apiKey, config.model, messages, {
+    temperature: 0.5, maxTokens: 4000, timeout: 60000,
+  });
 
   if (!response) {
-    throw new Error('策略师 AI 服务无响应');
+    tracer?.failStep('generate', 'LLM unavailable');
+    throw new Error('策略师 AI 服务无响应，请检查配置后重试');
   }
 
   const content = response.choices?.[0]?.message?.content;
   if (!content) {
     const err = response.error?.message || '未获取到策略结果';
+    tracer?.failStep('generate', err);
     throw new Error(`策略师 AI 返回异常: ${err}`);
   }
 
   const result = extractJSON(content);
   if (!result || !result.strategy || !result.plans) {
+    tracer?.failStep('generate', 'JSON parse failed');
     log.error('Strategy JSON parse failed', { preview: content.slice(0, 300) });
     throw new Error('策略生成格式异常，无法解析');
   }
 
-  log.info('Step 3 complete', { name: result.strategy.name, plans: result.plans.length });
+  tracer?.completeStep('generate', { name: result.strategy.name, planCount: result.plans.length });
+  log.info('Step 4 complete', { name: result.strategy.name, plans: result.plans.length });
   return result;
 }
 
@@ -623,49 +732,186 @@ async function generateStrategy(analysisReport, collectedData, userConstraints, 
 // ============================================================
 
 /**
- * Run the full Strategy Agent pipeline
+ * Run the full 6-step Strategy Agent pipeline.
+ *
  * @param {object} db - Database instance
- * @param {object} params - { assetIds, budget, goal, riskLevel }
- * @param {function} onProgress - Callback for progress updates: (step, message) => void
- * @returns {object} { analysis, strategy, plans, reasoning, risk_management, execution_notes }
+ * @param {object} params - { assetIds, budget, goal, riskLevel, previousResult, userFeedback, trigger }
+ * @param {function} onProgress - SSE callback: (step, message, detail?) => void
+ * @returns {object} Full result including analysis, strategy, plans, eval, trace info
  */
-export async function runStrategyAgent(db, { assetIds, budget, goal, riskLevel, previousResult, userFeedback }, onProgress) {
-  const config = getAgentConfig(db);
-  if (!config.apiUrl || !config.apiKey) {
-    throw new Error('请先在设置中配置 AI API 地址和密钥');
-  }
+export async function runStrategyAgent(db, params, onProgress) {
+  const {
+    assetIds,
+    budget = 20000,
+    goal = 'recovery',
+    riskLevel = 'medium',
+    previousResult,
+    userFeedback,
+    trigger = 'generate',
+  } = params;
 
+  const config = getAgentConfig(db);
   const notify = onProgress || (() => {});
   const startTime = Date.now();
   const isRegenerate = !!(previousResult && userFeedback);
 
-  log.info('Strategy Agent started', { assetIds, budget, goal, riskLevel, isRegenerate });
+  const tracer = new AgentTracer(db, isRegenerate ? 'regenerate' : trigger, assetIds, { budget, goal, riskLevel });
 
-  // Step 1: Data Collection
+  log.info('Strategy Agent started', { assetIds, budget, goal, riskLevel, isRegenerate, traceId: tracer.traceId });
+
+  // ── Step 0: Pre-Check ──────────────────────────────────────
+  tracer.startStep('precheck', { assetIds, goal, riskLevel });
+  notify('precheck', '正在检查配置和数据可用性...');
+
+  const preCheckResult = preCheck(db, config, assetIds);
+  if (!preCheckResult.ok) {
+    tracer.failStep('precheck', preCheckResult.issues.join('; '));
+    tracer.fail(preCheckResult.issues[0]);
+    throw new Error(preCheckResult.issues.join('；'));
+  }
+  tracer.completeStep('precheck', { ok: true });
+  notify('precheck_done', '配置检查通过');
+
+  // ── Step 1: Data Collection ────────────────────────────────
+  tracer.startStep('collect');
   notify('collecting', '正在收集持仓、行情和市场数据...');
-  const collectedData = await collectData(db, assetIds, config);
-  notify('collecting_done', `数据收集完成：${collectedData.assets.length}个资产, ${collectedData.recentNews.length}条资讯`);
 
-  // Step 2: Research Analysis
+  let collectedData;
+  try {
+    collectedData = await collectData(db, assetIds, config);
+  } catch (e) {
+    tracer.failStep('collect', e.message);
+    tracer.fail(e.message);
+    throw new Error(`数据收集失败: ${e.message}`);
+  }
+
+  const dataQuality = scoreDataQuality(collectedData);
+  tracer.setDataQuality(dataQuality);
+  tracer.completeStep('collect', {
+    assets: collectedData.assets.length,
+    pricePoints: collectedData.assets.reduce((s, a) => s + a.priceHistory.length, 0),
+    newsCount: collectedData.recentNews.length,
+    dataQuality,
+  });
+
+  notify('collecting_done', `数据收集完成：${collectedData.assets.length}个资产, ${collectedData.recentNews.length}条资讯`, {
+    data_quality_score: dataQuality,
+    price_points: collectedData.assets.reduce((s, a) => s + a.priceHistory.length, 0),
+    news_count: collectedData.recentNews.length,
+    has_macro: Object.keys(collectedData.macroIndicators).length > 0,
+  });
+
+  // ── Step 2: LLM Analysis ───────────────────────────────────
   notify('analyzing', '正在进行市场研判和趋势分析...');
-  const analysisReport = await runAnalysis(collectedData, config);
-  notify('analyzing_done', `分析完成：置信度 ${Math.round((analysisReport.confidence_level || 0.5) * 100)}%`);
 
-  // Step 3: Strategy Generation (with optional feedback context)
+  const { report: rawReport, usedFallback } = await runAnalysis(collectedData, config, tracer);
+
+  // ── Step 3: Self-check / Enrich Analysis ──────────────────
+  tracer.startStep('selfcheck');
+  notify('validating', '正在验证分析结果的一致性...');
+
+  const analysisReport = validateAndEnrichAnalysis(rawReport, collectedData);
+
+  const selfCheck = selfCheckConsistency({ plans: [], analysis: analysisReport, strategy: null }, collectedData, goal);
+  tracer.completeStep('selfcheck', { warnings: selfCheck.warnings.length, usedFallback });
+
+  notify('analyzing_done', `分析完成：置信度 ${Math.round((analysisReport.confidence_level || 0.5) * 100)}%${usedFallback ? '（规则推断）' : ''}`, {
+    confidence: analysisReport.confidence_level,
+    used_fallback: usedFallback,
+    self_check_warnings: selfCheck.warnings,
+  });
+
+  // ── Step 4: LLM Strategy Generation ───────────────────────
   notify('generating', isRegenerate ? '正在基于您的反馈优化策略...' : '正在基于分析结论生成操盘策略...');
-  const strategyResult = await generateStrategy(analysisReport, collectedData, { assetIds, budget, goal, riskLevel, previousResult, userFeedback }, config);
-  notify('done', '策略生成完成');
+
+  let strategyResult;
+  try {
+    strategyResult = await generateStrategy(analysisReport, collectedData, {
+      budget, goal, riskLevel, previousResult, userFeedback,
+    }, config, tracer);
+  } catch (e) {
+    tracer.fail(e.message);
+    throw e;
+  }
+
+  // ── Step 5: Post-Validation & Auto-Fix ────────────────────
+  tracer.startStep('postvalidate');
+  notify('postvalidating', '正在验证和修正策略约束...');
+
+  const validation = validatePlans(strategyResult.plans, collectedData.assets, budget);
+  const { plans: fixedPlans, fixLog } = autoFixPlans(strategyResult.plans, collectedData.assets, budget);
+
+  tracer.completeStep('postvalidate', {
+    issueCount: validation.issues.length,
+    fixCount: fixLog.length,
+    budgetUsage: Math.round(validation.budgetUsage * 100),
+  });
+
+  if (fixLog.length > 0) {
+    log.info('Auto-fixed plans', { fixes: fixLog });
+  }
+
+  // Re-run consistency check with final plans
+  const finalConsistency = selfCheckConsistency(
+    { plans: fixedPlans, analysis: analysisReport, strategy: strategyResult.strategy },
+    collectedData,
+    goal,
+  );
+
+  notify('postvalidating_done', `约束验证完成：${validation.issues.filter(i => i.severity === 'error').length}个错误, ${fixLog.length}项自动修正`);
+
+  // ── Step 6: Evaluate Output Quality ───────────────────────
+  tracer.startStep('evaluate');
+  notify('evaluating', '正在评估策略质量...');
+
+  const evalResult = evaluateOutput(
+    { ...strategyResult, plans: fixedPlans },
+    collectedData,
+    budget,
+  );
+
+  tracer.completeStep('evaluate', { score: evalResult.score, grade: evalResult.grade, passed: evalResult.passed });
+  notify('done', `策略生成完成 — 质量评分 ${Math.round(evalResult.score * 100)}分 (${evalResult.grade})`, {
+    eval_score: evalResult.score,
+    grade: evalResult.grade,
+    budget_usage: evalResult.budget_usage,
+  });
 
   const elapsed = Date.now() - startTime;
-  log.info('Strategy Agent complete', { elapsed: `${elapsed}ms`, strategy: strategyResult.strategy?.name });
+
+  tracer.complete({
+    evalScore: evalResult.score,
+    evalDetail: evalResult,
+    model: config.model,
+    elapsedMs: elapsed,
+  });
+
+  log.info('Strategy Agent complete', {
+    elapsed: `${elapsed}ms`,
+    strategy: strategyResult.strategy?.name,
+    evalScore: evalResult.score,
+    grade: evalResult.grade,
+    usedFallback,
+  });
 
   return {
     analysis: analysisReport,
     strategy: strategyResult.strategy,
-    plans: strategyResult.plans,
+    plans: fixedPlans,
     reasoning: strategyResult.reasoning || '',
     risk_management: strategyResult.risk_management || null,
     execution_notes: strategyResult.execution_notes || '',
-    _meta: { model: config.model, elapsed_ms: elapsed },
+    consistency_warnings: finalConsistency.warnings,
+    validation_issues: validation.issues,
+    fix_log: fixLog,
+    eval: evalResult,
+    data_quality_score: dataQuality,
+    used_fallback_analysis: usedFallback,
+    _meta: {
+      model: config.model,
+      elapsed_ms: elapsed,
+      trace_id: tracer.traceId,
+      run_id: tracer.runId,
+    },
   };
 }

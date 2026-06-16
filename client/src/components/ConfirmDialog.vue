@@ -41,7 +41,7 @@ function doConfirm() {
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--surface-backdrop);
   backdrop-filter: blur(2px);
   z-index: 9999;
   display: flex;
@@ -56,7 +56,7 @@ function doConfirm() {
   width: 380px;
   max-width: calc(100vw - 40px);
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px var(--shadow-color);
 }
 .confirm-icon-area {
   display: flex;
@@ -72,16 +72,16 @@ function doConfirm() {
   justify-content: center;
 }
 .confirm-icon.icon-delete {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-soft);
   color: var(--red, #ef4444);
 }
 .confirm-icon.icon-logout {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: var(--warning-soft);
+  color: var(--warning, #f59e0b);
 }
 .confirm-icon.icon-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: var(--warning-soft);
+  color: var(--warning, #f59e0b);
 }
 .confirm-content {
   padding: 20px 24px 8px;

@@ -2,15 +2,15 @@
   <PullRefreshView :onRefresh="() => refresh(true)">
   <div>
     <div class="page-header">
-      <h1 class="page-title">实时行情</h1>
+      <h1 class="page-title">{{ t('marketView.title') }}</h1>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span v-if="lastUpdated" class="update-hint">{{ fmtTime(lastUpdated) }} 更新</span>
+        <span v-if="lastUpdated" class="update-hint">{{ t('marketView.updatedAt', { time: fmtTime(lastUpdated) }) }}</span>
         <button class="btn btn-inline-icon" @click="refresh(true)" :disabled="loading">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" />
             <path d="M21 3v6h-6" />
           </svg>
-          <span>{{ loading ? '刷新中...' : '刷新' }}</span>
+          <span>{{ loading ? t('marketView.refreshing') : t('marketView.refresh') }}</span>
         </button>
       </div>
     </div>
@@ -45,8 +45,9 @@
             <div v-if="p.details?.ch24" :class="p.details.ch24 >= 0 ? 'pnl positive' : 'pnl negative'" style="font-size:13px">
               {{ p.details.ch24 >= 0 ? '+' : '' }}{{ p.details.ch24.toFixed(1) }}% (24h)
             </div>
-            <div v-if="p.stale" class="market-status warn">⚠️ 数据源暂不可用</div>
-            <div v-else-if="p.cached && !p.stale" class="market-status">📦 缓存</div>
+            <div v-if="p.empty_cache" class="market-status warn">{{ t('marketView.noCache') }}</div>
+            <div v-else-if="p.stale" class="market-status warn">{{ t('marketView.staleCache') }}</div>
+            <div v-else-if="p.cached && !p.stale" class="market-status">{{ t('marketView.cached') }}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:12px;color:var(--text-muted)">{{ p.symbol }}</div>
@@ -56,7 +57,7 @@
         </div>
       </div>
       <div v-if="!prices.length" class="card empty" style="grid-column:1/-1">
-        <div class="empty-icon">📈</div><p>暂无资产，请先<router-link to="/assets">添加资产</router-link></p>
+        <div class="empty-icon">📈</div><p>{{ t('marketView.empty') }}</p>
       </div>
     </div>
   </div>
@@ -65,11 +66,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { formatNumber, formatTime, parseDateTime } from '../utils/formatters.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
+const { t } = useI18n()
 const prices = ref([])
 const loading = ref(false)
 const initialized = ref(false)
@@ -82,27 +86,34 @@ async function refresh(force = false) {
     const res = await api(url)
     const json = await res.json()
     prices.value = json.data || []
-    lastUpdated.value = new Date()
+    lastUpdated.value = resolveLastUpdated(prices.value)
     if (force) {
       const fresh = prices.value.filter(p => !p.cached && !p.stale).length
-      toast.success(`已刷新 ${fresh} 个资产行情`)
+      toast.success(t('marketView.refreshed', { count: fresh }))
     }
   } catch (e) {
-    toast.error('获取行情失败')
+    toast.error(t('marketView.refreshFailed'))
   }
   loading.value = false
   initialized.value = true
 }
 function fmt(n) {
-  if (!n && n !== 0) return '-'
-  return Number(n).toLocaleString()
+  return formatNumber(n, { maximumFractionDigits: 2 })
+}
+function resolveLastUpdated(items) {
+  const dates = items
+    .map((item) => item.fetched_at)
+    .filter(Boolean)
+    .map((value) => parseDateTime(value))
+    .filter((date) => date && !Number.isNaN(date.getTime()))
+    .sort((a, b) => b.getTime() - a.getTime())
+  return dates[0] || null
 }
 function typeBadge(t) {
   return { gold:'badge-gold', crypto:'badge-crypto', stock:'badge-stock' }[t] || 'badge-pending'
 }
 function fmtTime(d) {
-  if (!d) return ''
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return formatTime(d, { second: '2-digit' })
 }
 onMounted(() => refresh(false))
 </script>

@@ -18,6 +18,7 @@ import dashboardRouter from './routes/dashboard.js';
 import settingsRouter from './routes/settings.js';
 import notificationsRouter from './routes/notifications.js';
 import signalsRouter from './routes/signals.js';
+import systemRouter from './routes/system.js';
 import { startMonitor } from './services/strategy-monitor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/signals', signalsRouter);
+app.use('/api/system', systemRouter);
 
 // ===== 全局错误处理（必须在所有路由之后） =====
 app.use((err, req, res, next) => {

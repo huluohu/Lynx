@@ -2,58 +2,60 @@
   <form @submit.prevent="submit" class="transaction-form">
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">类型 *</label>
+        <label class="form-label">{{ t('transactionForm.type') }} *</label>
         <select class="form-select" v-model="form.type" required>
-          <option value="buy">买入</option>
-          <option value="sell">卖出</option>
+          <option value="buy">{{ t('history.transactionTypes.buy') }}</option>
+          <option value="sell">{{ t('history.transactionTypes.sell') }}</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">日期</label>
+        <label class="form-label">{{ t('transactionForm.date') }}</label>
         <input class="form-input" type="date" v-model="form.executed_at" />
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">数量 *</label>
+        <label class="form-label">{{ t('transactionForm.quantity') }} *</label>
         <input class="form-input" type="number" step="any" v-model="form.quantity" required placeholder="0.0000" />
       </div>
       <div class="form-group">
-        <label class="form-label">价格 *</label>
+        <label class="form-label">{{ t('transactionForm.price') }} *</label>
         <input class="form-input" type="number" step="any" v-model="form.price" required placeholder="0.00" />
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">总金额</label>
-        <input class="form-input" type="number" step="any" v-model="computedTotal" placeholder="自动计算" />
+        <label class="form-label">{{ t('transactionForm.total') }}</label>
+        <input class="form-input" type="number" step="any" v-model="computedTotal" :placeholder="t('transactionForm.totalPlaceholder')" />
       </div>
       <div class="form-group">
-        <label class="form-label">手续费</label>
+        <label class="form-label">{{ t('transactionForm.fee') }}</label>
         <input class="form-input" type="number" step="any" v-model="form.fee" placeholder="0" />
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">备注</label>
-      <textarea class="form-textarea" v-model="form.reason" placeholder="交易原因/备注..." rows="2"></textarea>
+      <label class="form-label">{{ t('transactionForm.notes') }}</label>
+      <textarea class="form-textarea" v-model="form.reason" :placeholder="t('transactionForm.notesPlaceholder')" rows="2"></textarea>
     </div>
     <div class="form-actions">
       <button type="submit" class="btn btn-primary" :disabled="submitting">
-        {{ submitting ? '提交中...' : '提交' }}
+        {{ submitting ? t('transactionForm.submitting') : t('transactionForm.submit') }}
       </button>
-      <button type="button" class="btn" @click="$emit('cancel')">取消</button>
+      <button type="button" class="btn" @click="$emit('cancel')">{{ t('common.cancel') }}</button>
     </div>
   </form>
 </template>
 
 <script setup>
 import { reactive, ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 
 const props = defineProps({
   assetId: { type: [Number, String], required: true },
 })
 const emit = defineEmits(['success', 'cancel'])
+const { t } = useI18n()
 
 const submitting = ref(false)
 const form = reactive({
@@ -89,7 +91,7 @@ async function submit() {
       body: JSON.stringify(body),
     })
     const json = await res.json()
-    if (!json.success) throw new Error(json.error || '提交失败')
+    if (!json.success) throw new Error(json.error || t('transactionForm.submitFailed'))
     emit('success')
   } catch (e) {
     alert(e.message)

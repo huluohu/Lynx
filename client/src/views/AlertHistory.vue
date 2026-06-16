@@ -2,27 +2,27 @@
   <PullRefreshView :onRefresh="loadAlerts">
   <div>
     <div class="page-header">
-      <h1 class="page-title">提醒历史</h1>
-      <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? '清理中...' : '清空已读' }}</button>
+      <h1 class="page-title">{{ t('alertHistory.title') }}</h1>
+      <button class="btn" @click="clearRead" :disabled="clearing">{{ clearing ? t('alertHistory.clearing') : t('alertHistory.clearRead') }}</button>
     </div>
 
     <div class="filters">
       <select class="form-select filter-select" v-model="filters.type" @change="applyFilters">
-        <option value="">全部类型</option>
-        <option value="plan_triggered">计划触发</option>
-        <option value="plan_approaching">接近触发</option>
-        <option value="stop_loss">止损</option>
-        <option value="price_swing">价格波动</option>
-        <option value="trade_executed">交易执行</option>
+        <option value="">{{ t('alertHistory.filters.allTypes') }}</option>
+        <option value="plan_triggered">{{ t('alertHistory.types.planTriggered') }}</option>
+        <option value="plan_approaching">{{ t('alertHistory.types.planApproaching') }}</option>
+        <option value="stop_loss">{{ t('alertHistory.types.stopLoss') }}</option>
+        <option value="price_swing">{{ t('alertHistory.types.priceSwing') }}</option>
+        <option value="trade_executed">{{ t('alertHistory.types.tradeExecuted') }}</option>
       </select>
       <select class="form-select filter-select" v-model="filters.severity" @change="applyFilters">
-        <option value="">全部级别</option>
-        <option value="danger">高优先级</option>
-        <option value="warning">中优先级</option>
-        <option value="info">低优先级</option>
+        <option value="">{{ t('alertHistory.filters.allSeverities') }}</option>
+        <option value="danger">{{ t('alertHistory.severity.high') }}</option>
+        <option value="warning">{{ t('alertHistory.severity.medium') }}</option>
+        <option value="info">{{ t('alertHistory.severity.low') }}</option>
       </select>
       <select class="form-select filter-select" v-model="filters.asset_id" @change="applyFilters">
-        <option value="">全部资产</option>
+        <option value="">{{ t('alertHistory.filters.allAssets') }}</option>
         <option v-for="asset in assets" :key="asset.id" :value="String(asset.id)">{{ asset.name }}</option>
       </select>
     </div>
@@ -41,11 +41,11 @@
       <table class="hide-mobile">
         <thead>
           <tr>
-            <th>时间</th>
-            <th>提醒内容</th>
-            <th>资产</th>
-            <th>状态</th>
-            <th>操作</th>
+            <th>{{ t('alertHistory.columns.time') }}</th>
+            <th>{{ t('alertHistory.columns.content') }}</th>
+            <th>{{ t('alertHistory.columns.asset') }}</th>
+            <th>{{ t('alertHistory.columns.status') }}</th>
+            <th>{{ t('alertHistory.columns.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -61,17 +61,17 @@
                 <div class="content-message">{{ item.message }}</div>
               </div>
             </td>
-            <td>{{ item.asset_name || '-' }}</td>
+            <td>{{ item.asset_name || t('alertHistory.unlinkedAsset') }}</td>
             <td>
               <div class="status-cell">
                 <span class="badge" :class="severityBadge(item.severity)">{{ severityLabel(item.severity) }}</span>
-                <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? '已读' : '未读' }}</span>
+                <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? t('alertHistory.status.read') : t('alertHistory.status.unread') }}</span>
               </div>
             </td>
             <td>
               <div class="actions-cell">
-                <button v-if="item.status !== 'read'" class="btn btn-sm" @click="markAsRead(item)">标已读</button>
-                <button class="btn btn-sm btn-danger" @click="deleteAlert(item)">删除</button>
+                <button v-if="item.status !== 'read'" class="btn btn-sm" @click="markAsRead(item)">{{ t('alertHistory.markRead') }}</button>
+                <button class="btn btn-sm btn-danger" @click="deleteAlert(item)">{{ t('common.delete') }}</button>
               </div>
             </td>
           </tr>
@@ -89,26 +89,26 @@
           <div v-if="item.strategy_name" class="alert-card-strategy">{{ item.strategy_name }}</div>
           <div class="alert-card-meta">
             <span>{{ fmtDateTime(item.created_at) }}</span>
-            <span>{{ item.asset_name || '未关联资产' }}</span>
-            <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? '已读' : '未读' }}</span>
+            <span>{{ item.asset_name || t('alertHistory.unlinkedAsset') }}</span>
+            <span class="badge" :class="item.status === 'read' ? 'badge-pending' : 'badge-buy'">{{ item.status === 'read' ? t('alertHistory.status.read') : t('alertHistory.status.unread') }}</span>
           </div>
           <div class="alert-card-actions">
-            <button v-if="item.status !== 'read'" class="btn btn-sm" @click="markAsRead(item)">标已读</button>
-            <button class="btn btn-sm btn-danger" @click="deleteAlert(item)">删除</button>
+            <button v-if="item.status !== 'read'" class="btn btn-sm" @click="markAsRead(item)">{{ t('alertHistory.markRead') }}</button>
+            <button class="btn btn-sm btn-danger" @click="deleteAlert(item)">{{ t('common.delete') }}</button>
           </div>
         </div>
       </div>
 
       <div class="pagination" v-if="pagination.total_pages > 1">
-        <button class="btn btn-sm" @click="changePage(pagination.page - 1)" :disabled="pagination.page <= 1">上一页</button>
-        <span>第 {{ pagination.page }} / {{ pagination.total_pages }} 页</span>
-        <button class="btn btn-sm" @click="changePage(pagination.page + 1)" :disabled="pagination.page >= pagination.total_pages">下一页</button>
+        <button class="btn btn-sm" @click="changePage(pagination.page - 1)" :disabled="pagination.page <= 1">{{ t('alertHistory.pagination.prev') }}</button>
+        <span>{{ t('alertHistory.pagination.summary', { page: pagination.page, total: pagination.total_pages }) }}</span>
+        <button class="btn btn-sm" @click="changePage(pagination.page + 1)" :disabled="pagination.page >= pagination.total_pages">{{ t('alertHistory.pagination.next') }}</button>
       </div>
     </div>
 
     <div v-else class="card empty">
       <div class="empty-icon">🔔</div>
-      <p>暂无提醒历史</p>
+      <p>{{ t('alertHistory.empty') }}</p>
     </div>
   </div>
   </PullRefreshView>
@@ -116,13 +116,16 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
+import { formatDateTime } from '../utils/formatters.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
 const confirm = useConfirm()
+const { t } = useI18n()
 const loading = ref(true)
 const clearing = ref(false)
 const assets = ref([])
@@ -152,7 +155,7 @@ async function loadAlerts() {
       alerts.value = json.data.items || []
       pagination.value = json.data.pagination || pagination.value
     } else {
-      toast.error(json.error || '加载失败')
+      toast.error(json.error || t('alertHistory.loadFailed'))
     }
   } catch (e) {
     toast.error(e.message)
@@ -175,9 +178,9 @@ async function markAsRead(item) {
   try {
     const res = await api(`/api/notifications/${item.id}/read`, { method: 'PUT' })
     const json = await res.json()
-    if (!json.success) return toast.error(json.error || '操作失败')
+    if (!json.success) return toast.error(json.error || t('alertHistory.actionFailed'))
     item.status = 'read'
-    toast.success('已标记为已读')
+    toast.success(t('alertHistory.markReadSuccess'))
   } catch (e) {
     toast.error(e.message)
   }
@@ -185,9 +188,9 @@ async function markAsRead(item) {
 
 async function deleteAlert(item) {
   const ok = await confirm({
-    title: '删除提醒',
-    message: `确定删除提醒「${item.title}」？`,
-    confirmText: '删除',
+    title: t('alertHistory.deleteTitle'),
+    message: t('alertHistory.deleteMessage', { title: item.title }),
+    confirmText: t('common.delete'),
     icon: 'delete',
     danger: true,
   })
@@ -195,9 +198,9 @@ async function deleteAlert(item) {
   try {
     const res = await api(`/api/notifications/${item.id}`, { method: 'DELETE' })
     const json = await res.json()
-    if (!json.success) return toast.error(json.error || '删除失败')
+    if (!json.success) return toast.error(json.error || t('alertHistory.deleteFailed'))
     alerts.value = alerts.value.filter(alert => alert.id !== item.id)
-    toast.success('提醒已删除')
+    toast.success(t('alertHistory.deleteSuccess'))
     if (!alerts.value.length && pagination.value.page > 1) {
       filters.page = pagination.value.page - 1
     }
@@ -209,9 +212,9 @@ async function deleteAlert(item) {
 
 async function clearRead() {
   const ok = await confirm({
-    title: '清空已读',
-    message: '确定清空所有已读提醒？此操作不可恢复。',
-    confirmText: '清空',
+    title: t('alertHistory.clearReadTitle'),
+    message: t('alertHistory.clearReadMessage'),
+    confirmText: t('alertHistory.clearRead'),
     icon: 'delete',
     danger: true,
   })
@@ -220,8 +223,8 @@ async function clearRead() {
   try {
     const res = await api('/api/notifications/clear-all', { method: 'DELETE' })
     const json = await res.json()
-    if (!json.success) return toast.error(json.error || '清理失败')
-    toast.success('已清空已读提醒')
+    if (!json.success) return toast.error(json.error || t('alertHistory.clearFailed'))
+    toast.success(t('alertHistory.clearReadSuccess'))
     await loadAlerts()
   } catch (e) {
     toast.error(e.message)
@@ -234,16 +237,32 @@ function typeIcon(type) {
   return { plan_triggered: '📌', plan_approaching: '⏳', stop_loss: '🛑', price_swing: '📊', trade_executed: '💱' }[type] || '🔔'
 }
 function typeLabel(type) {
-  return { plan_triggered: '计划触发', plan_approaching: '接近触发', stop_loss: '止损', price_swing: '价格波动', trade_executed: '交易执行' }[type] || type
+  return {
+    plan_triggered: t('alertHistory.types.planTriggered'),
+    plan_approaching: t('alertHistory.types.planApproaching'),
+    stop_loss: t('alertHistory.types.stopLoss'),
+    price_swing: t('alertHistory.types.priceSwing'),
+    trade_executed: t('alertHistory.types.tradeExecuted'),
+  }[type] || type
 }
 function severityLabel(level) {
-  return { danger: '高', warning: '中', info: '低' }[level] || '低'
+  return {
+    danger: t('alertHistory.severity.highShort'),
+    warning: t('alertHistory.severity.mediumShort'),
+    info: t('alertHistory.severity.lowShort'),
+  }[level] || t('alertHistory.severity.lowShort')
 }
 function severityBadge(level) {
   return { danger: 'severity-danger', warning: 'severity-warning', info: 'severity-info' }[level] || 'severity-info'
 }
 function fmtDateTime(value) {
-  return value ? String(value).slice(0, 16).replace('T', ' ') : '-'
+  return value ? formatDateTime(value, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }) : '-'
 }
 
 onMounted(async () => {

@@ -5,7 +5,9 @@ import { runBacktest } from '../services/backtest.js';
 import { runStressTest } from '../services/stress-test.js';
 import { generateStrategyReview } from '../services/ai-review.js';
 import { processStrategyChat, applyStrategyChanges } from '../services/strategy-chat.js';
+import { queryTraces, getTraceDetails } from '../services/agent-trace.js';
 import { createLogger } from '../utils/logger.js';
+import { normalizeApiTimestampFields } from '../utils/datetime.js';
 
 const log = createLogger('strategies');
 const router = Router();
@@ -14,7 +16,26 @@ function normalizeReview(row) {
   if (!row) return null;
   try { row.deviation_analysis = row.deviation_analysis ? JSON.parse(row.deviation_analysis) : null; } catch {}
   try { row.recommendations = row.recommendations ? JSON.parse(row.recommendations) : []; } catch {}
-  return row;
+  return normalizeApiTimestampFields(row, ['created_at'], { assumeUtcWhenNoTimezone: true });
+}
+
+function normalizeStrategyRow(row) {
+  return normalizeApiTimestampFields(row, ['created_at', 'updated_at'], { assumeUtcWhenNoTimezone: true });
+}
+
+function normalizeGenerationLogRow(row) {
+  return normalizeApiTimestampFields(row, ['created_at', 'updated_at'], { assumeUtcWhenNoTimezone: true });
+}
+
+function normalizeBacktestRow(row) {
+  if (!row) return null;
+  const normalized = normalizeApiTimestampFields(row, ['created_at', 'start_date', 'end_date'], { assumeUtcWhenNoTimezone: true });
+  if (Array.isArray(normalized.details)) {
+    normalized.details = normalized.details.map((item) => (
+      normalizeApiTimestampFields(item, ['executed_at'], { assumeUtcWhenNoTimezone: true })
+    ));
+  }
+  return normalized;
 }
 
 // GET 策略列表
@@ -34,7 +55,7 @@ router.get('/', (req, res) => {
       } catch {}
     }
   }
-  res.json({ success: true, data: rows });
+  res.json({ success: true, data: rows.map(normalizeStrategyRow) });
 });
 
 // GET 草稿列表 (must be before /:id)
@@ -46,7 +67,7 @@ router.get('/drafts', (req, res) => {
   const data = rows.map(r => {
     let strategyName = '';
     try { strategyName = JSON.parse(r.strategy)?.name || ''; } catch {}
-    return { ...r, strategy_name: strategyName };
+    return normalizeGenerationLogRow({ ...r, strategy_name: strategyName });
   });
   res.json({ success: true, data });
 });
@@ -54,19 +75,20 @@ router.get('/drafts', (req, res) => {
 // GET 生成历史列表 (must be before /:id)
 router.get('/generation-logs', (req, res) => {
   const db = getDb();
-  const { status, asset_id } = req.query;
+  const { status, asset_id, strategy_id } = req.query;
   let sql = 'SELECT id, asset_ids, budget, goal, risk_level, strategy, model, elapsed_ms, status, parent_id, strategy_id, created_at FROM ai_generation_logs';
   const conditions = [];
   const params = [];
   if (status) { conditions.push('status = ?'); params.push(status); }
-  if (asset_id) { conditions.push("asset_ids LIKE ?"); params.push(`%${asset_id}%`); }
+  if (strategy_id) { conditions.push('strategy_id = ?'); params.push(Number(strategy_id)); }
+  else if (asset_id) { conditions.push("asset_ids LIKE ?"); params.push(`%${asset_id}%`); }
   if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
   sql += ' ORDER BY created_at DESC LIMIT 50';
   const rows = db.prepare(sql).all(...params);
   const data = rows.map(r => {
     let strategyName = '';
     try { strategyName = JSON.parse(r.strategy)?.name || ''; } catch {}
-    return { ...r, strategy_name: strategyName };
+    return normalizeGenerationLogRow({ ...r, strategy_name: strategyName });
   });
   res.json({ success: true, data });
 });
@@ -81,7 +103,7 @@ router.get('/generation-logs/:id', (req, res) => {
   try { row.plans = JSON.parse(row.plans); } catch {}
   try { row.risk_management = JSON.parse(row.risk_management); } catch {}
   try { row.asset_ids = JSON.parse(row.asset_ids); } catch {}
-  res.json({ success: true, data: row });
+  res.json({ success: true, data: normalizeGenerationLogRow(row) });
 });
 
 // POST AI 对比生成策略 (must be before /:id)
@@ -221,7 +243,7 @@ router.get('/:id', (req, res) => {
       }
     } catch {}
   }
-  res.json({ success: true, data: row });
+  res.json({ success: true, data: normalizeStrategyRow(row) });
 });
 
 // POST 创建
@@ -239,7 +261,7 @@ router.post('/', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)`).run(name, description || null, type, primaryAssetId, assetIdsJson, params);
 
   const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ success: true, data: row });
+  res.status(201).json({ success: true, data: normalizeStrategyRow(row) });
 });
 
 // PUT 编辑
@@ -261,7 +283,7 @@ router.put('/:id', (req, res) => {
   );
 
   const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(req.params.id);
-  res.json({ success: true, data: row });
+  res.json({ success: true, data: normalizeStrategyRow(row) });
 });
 
 // DELETE
@@ -319,7 +341,7 @@ router.post('/:id/generate-plan', (req, res) => {
 router.post('/:id/backtest', (req, res) => {
   try {
     const result = runBacktest(Number(req.params.id));
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: normalizeBacktestRow(result) });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
@@ -339,7 +361,7 @@ router.post('/:id/stress-test', (req, res) => {
 router.post('/:id/review', async (req, res) => {
   try {
     const review = await generateStrategyReview(Number(req.params.id));
-    res.json({ success: true, data: review });
+    res.json({ success: true, data: normalizeReview(review) });
   } catch (e) {
     log.warn('Generate review failed', { strategyId: req.params.id, error: e.message });
     res.status(400).json({ success: false, error: e.message });
@@ -361,7 +383,7 @@ router.get('/:id/backtest-results', (req, res) => {
     ORDER BY created_at DESC, id DESC`).all(req.params.id).map(row => {
       let details = [];
       try { details = row.details ? JSON.parse(row.details) : []; } catch {}
-      return { ...row, details };
+      return normalizeBacktestRow({ ...row, details });
     });
   res.json({ success: true, data: rows });
 });
@@ -391,7 +413,7 @@ router.post('/ai-generate', async (req, res) => {
 
 // POST AI Agent 智能生成策略 (SSE 流式)
 router.post('/ai-agent-generate', async (req, res) => {
-  const { asset_id, asset_ids, budget, goal, risk_level, parent_id, user_feedback } = req.body;
+  const { asset_id, asset_ids, budget, goal, risk_level, parent_id, user_feedback, existing_strategy_id } = req.body;
   const ids = asset_ids && asset_ids.length > 0 ? asset_ids : (asset_id ? [asset_id] : []);
   if (ids.length === 0) return res.status(400).json({ success: false, error: '请选择资产' });
 
@@ -434,14 +456,14 @@ router.post('/ai-agent-generate', async (req, res) => {
       }
     }
 
-    const result = await runStrategyAgent(db, agentOpts, (step, message) => {
-      sendEvent('progress', { step, message });
+    const result = await runStrategyAgent(db, agentOpts, (step, message, detail) => {
+      sendEvent('progress', { step, message, detail: detail || null });
     });
 
     // Auto-save to ai_generation_logs
     const logResult = db.prepare(`
-      INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id)
-      VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id)
+      INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id, strategy_id)
+      VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id, @strategy_id)
     `).run({
       asset_ids: JSON.stringify(ids),
       budget: Number(budget) || 20000,
@@ -457,11 +479,20 @@ router.post('/ai-agent-generate', async (req, res) => {
       elapsed_ms: result._meta?.elapsed_ms || 0,
       user_feedback: user_feedback || null,
       parent_id: parent_id || null,
+      strategy_id: existing_strategy_id ? Number(existing_strategy_id) : null,
     });
 
     const generationId = Number(logResult.lastInsertRowid);
+
+    // Link trace to generation log
+    if (result._meta?.trace_id) {
+      try {
+        db.prepare('UPDATE agent_traces SET generation_log_id = ? WHERE id = ?').run(generationId, result._meta.trace_id);
+      } catch {}
+    }
+
     sendEvent('result', { success: true, data: { ...result, generation_id: generationId } });
-    log.info('Agent generate success', { asset_ids: ids, strategy: result.strategy?.name, generation_id: generationId });
+    log.info('Agent generate success', { asset_ids: ids, strategy: result.strategy?.name, generation_id: generationId, trace_id: result._meta?.trace_id });
   } catch (e) {
     log.error('Agent generate failed', { asset_ids: ids, error: e.message, stack: e.stack?.split('\n').slice(0, 4).join(' | ') });
     sendEvent('error', { success: false, error: e.message });
@@ -587,6 +618,30 @@ router.post('/ai-confirm', (req, res) => {
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
+});
+
+// ============================================================
+// Agent Trace Endpoints (observability)
+// ============================================================
+
+// GET /api/strategies/agent/traces — list recent agent runs
+router.get('/agent/traces', (req, res) => {
+  const db = getDb();
+  const { asset_id, status, limit } = req.query;
+  const traces = queryTraces(db, {
+    assetId: asset_id ? Number(asset_id) : undefined,
+    status: status || undefined,
+    limit: Math.min(Number(limit) || 30, 100),
+  });
+  res.json({ success: true, data: traces });
+});
+
+// GET /api/strategies/agent/traces/:id — full trace with step details
+router.get('/agent/traces/:id', (req, res) => {
+  const db = getDb();
+  const trace = getTraceDetails(db, Number(req.params.id));
+  if (!trace) return res.status(404).json({ success: false, error: 'Trace not found' });
+  res.json({ success: true, data: trace });
 });
 
 export default router;

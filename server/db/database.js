@@ -20,6 +20,14 @@ export function getDb() {
   return db;
 }
 
+export function getDbPath() {
+  return DB_PATH;
+}
+
+export function getDataDirectory() {
+  return dirname(DB_PATH);
+}
+
 export function runMigrations() {
   const d = getDb();
   const migDir = join(__dirname, '..', '..', 'migrations');

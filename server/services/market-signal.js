@@ -116,7 +116,7 @@ function clampStrength(value, fallback = 5) {
   return Math.max(1, Math.min(10, Math.round(num)));
 }
 
-function fallbackSignal(asset, indicators) {
+function fallbackSignal(db, asset, indicators) {
   const latest = Number(indicators.latest_price);
   const ma5 = Number(indicators.ma5);
   const ma20 = Number(indicators.ma20);
@@ -184,7 +184,7 @@ export async function analyzeMarketSignals(assetId) {
   ) ORDER BY fetched_at ASC`).all(assetId);
 
   const indicators = buildIndicators(history);
-  const fallback = fallbackSignal(asset, indicators);
+  const fallback = fallbackSignal(db, asset, indicators);
   let signal = fallback;
 
   if (history.length >= 5) {

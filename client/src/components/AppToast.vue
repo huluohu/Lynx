@@ -50,7 +50,7 @@ const icons = {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 20px var(--shadow-color);
   white-space: nowrap;
 }
 .toast-success { border-color: var(--green); }

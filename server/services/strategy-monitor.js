@@ -11,7 +11,7 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function wasRecentlyNotified(db, { type, planId, strategyId, assetId }) {
+function wasRecentlyNotified(db, { type, planId, strategyId, assetId, severity = null }) {
   if (planId || strategyId) {
     const row = db.prepare(`SELECT id FROM notifications
       WHERE type = ?
@@ -23,12 +23,19 @@ function wasRecentlyNotified(db, { type, planId, strategyId, assetId }) {
     return !!row;
   }
   // For stop_loss and price_swing: deduplicate by asset_id
-  const row = db.prepare(`SELECT id FROM notifications
+  let sql = `SELECT id FROM notifications
     WHERE type = ?
       AND asset_id = ?
-      AND created_at >= datetime('now', '-1 day')
+      AND created_at >= datetime('now', '-1 day')`;
+  const params = [type, assetId || null];
+  if (severity) {
+    sql += ' AND severity = ?';
+    params.push(severity);
+  }
+  sql += `
     ORDER BY created_at DESC
-    LIMIT 1`).get(type, assetId || null);
+    LIMIT 1`;
+  const row = db.prepare(sql).get(...params);
   return !!row;
 }
 
@@ -120,16 +127,17 @@ export function checkStrategyAlerts() {
     const diffPct = (price - stopLoss) / stopLoss * 100;
 
     if (diffPct <= 5) {
-      const type = diffPct <= 0 ? 'stop_loss_triggered' : 'stop_loss_approaching';
-      if (!wasRecentlyNotified(db, { type, planId: null, strategyId: null, assetId: h.asset_id })) {
+      const triggered = diffPct <= 0;
+      const severity = triggered ? 'danger' : 'warning';
+      if (!wasRecentlyNotified(db, { type: 'stop_loss', planId: null, strategyId: null, assetId: h.asset_id, severity })) {
         createNotification(db, {
-          type,
-          title: diffPct <= 0 ? `止损触发：${h.name}` : `接近止损：${h.name}`,
-          message: diffPct <= 0
+          type: 'stop_loss',
+          title: triggered ? `止损触发：${h.name}` : `接近止损：${h.name}`,
+          message: triggered
             ? `${h.name} 当前价格 ${price} 已跌破止损线 ${stopLoss}！`
             : `${h.name} 距止损线 ${stopLoss} 仅 ${diffPct.toFixed(1)}%（当前 ${price}）`,
           asset_id: h.asset_id,
-          severity: diffPct <= 0 ? 'danger' : 'warning',
+          severity,
           channel: 'web',
         });
         stopLossCount += 1;

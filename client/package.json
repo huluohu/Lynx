@@ -1,5 +1,6 @@
 {
   "name": "lynx-invest-client",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +11,7 @@
   "dependencies": {
     "pinia": "^3.0.4",
     "vue": "^3.4.0",
+    "vue-i18n": "^11.4.5",
     "vue-router": "^5.1.0"
   },
   "devDependencies": {

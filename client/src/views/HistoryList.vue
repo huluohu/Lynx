@@ -1,71 +1,71 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">操盘历史</h1>
-      <button class="btn btn-primary" @click="showForm = true">+ 添加记录</button>
+      <h1 class="page-title">{{ t('history.title') }}</h1>
+      <button class="btn btn-primary" @click="showForm = true">+ {{ t('history.addRecord') }}</button>
     </div>
 
     <div class="card history-desktop-filters" style="margin-bottom:20px">
-      <div class="section-title">筛选记录</div>
+      <div class="section-title">{{ t('history.filterRecords') }}</div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">资产</label>
+          <label class="form-label">{{ t('history.asset') }}</label>
           <select class="form-select" v-model="filters.asset_id">
-            <option value="">全部资产</option>
+            <option value="">{{ t('history.allAssets') }}</option>
             <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">类型</label>
+          <label class="form-label">{{ t('history.type') }}</label>
           <select class="form-select" v-model="filters.type">
-            <option value="">全部类型</option>
-            <option value="buy">买入</option>
-            <option value="sell">卖出</option>
+            <option value="">{{ t('history.allTypes') }}</option>
+            <option value="buy">{{ t('history.buy') }}</option>
+            <option value="sell">{{ t('history.sell') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">状态</label>
+          <label class="form-label">{{ t('history.status') }}</label>
           <select class="form-select" v-model="filters.status">
-            <option value="">全部状态</option>
-            <option value="active">有效</option>
-            <option value="reverted">已撤销</option>
+            <option value="">{{ t('history.allStatuses') }}</option>
+            <option value="active">{{ t('history.effective') }}</option>
+            <option value="reverted">{{ t('history.reverted') }}</option>
           </select>
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">计价单位</label>
+          <label class="form-label">{{ t('history.currency') }}</label>
           <select class="form-select" v-model="filters.currency">
-            <option value="">全部币种</option>
+            <option value="">{{ t('history.allCurrencies') }}</option>
             <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">开始日期</label>
+          <label class="form-label">{{ t('history.startDate') }}</label>
           <input class="form-input" type="date" v-model="filters.start_date" />
         </div>
         <div class="form-group">
-          <label class="form-label">结束日期</label>
+          <label class="form-label">{{ t('history.endDate') }}</label>
           <input class="form-input" type="date" v-model="filters.end_date" />
         </div>
       </div>
       <div class="history-filter-actions">
-        <button class="btn btn-primary" @click="loadData">筛选</button>
-        <button class="btn" @click="resetFilters">重置</button>
+        <button class="btn btn-primary" @click="loadData">{{ t('history.applyFilter') }}</button>
+        <button class="btn" @click="resetFilters">{{ t('history.reset') }}</button>
       </div>
     </div>
 
     <div class="mobile-only history-mobile-toolbar">
       <div class="history-mobile-toolbar-top">
-        <div class="history-mobile-result">{{ totalCount }} 条记录</div>
+        <div class="history-mobile-result">{{ t('history.totalRecords', { count: totalCount }) }}</div>
         <button class="btn btn-inline-icon" @click="sortDrawerOpen = true">{{ currentSortLabel }}</button>
       </div>
       <div class="history-mobile-toolbar-actions">
         <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-          <span>筛选</span>
+          <span>{{ t('history.filter') }}</span>
           <span v-if="activeFilterCount" class="mobile-filter-badge">{{ activeFilterCount }}</span>
         </button>
-        <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">清空</button>
+        <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('history.clear') }}</button>
       </div>
       <div v-if="activeFilterChips.length" class="history-filter-chips">
         <button v-for="chip in activeFilterChips" :key="chip.key" class="history-filter-chip" @click="removeFilter(chip.key)">
@@ -76,62 +76,62 @@
     </div>
 
     <div class="card" v-if="showForm" style="max-width:540px;margin-bottom:20px">
-      <div class="section-title">记录交易</div>
+      <div class="section-title">{{ t('history.recordTrade') }}</div>
       <form @submit.prevent="addRecord">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">资产</label>
+              <label class="form-label">{{ t('history.asset') }}</label>
             <select class="form-select" v-model="form.asset_id" required>
-              <option value="">选择资产</option>
+                <option value="">{{ t('history.selectAsset') }}</option>
               <option v-for="a in assets" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">类型</label>
+              <label class="form-label">{{ t('history.type') }}</label>
             <select class="form-select" v-model="form.type" required>
-              <option value="buy">买入</option>
-              <option value="sell">卖出</option>
+                <option value="buy">{{ t('history.buy') }}</option>
+                <option value="sell">{{ t('history.sell') }}</option>
             </select>
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">数量</label><input class="form-input" type="number" step="any" v-model="form.quantity" required /></div>
-          <div class="form-group"><label class="form-label">价格</label><input class="form-input" type="number" step="any" v-model="form.price" required /></div>
+          <div class="form-group"><label class="form-label">{{ t('holdings.quantity') }}</label><input class="form-input" type="number" step="any" v-model="form.quantity" required /></div>
+          <div class="form-group"><label class="form-label">{{ t('history.price') }}</label><input class="form-input" type="number" step="any" v-model="form.price" required /></div>
         </div>
         <div v-if="showCurrencyField" class="form-group">
-          <label class="form-label">计价单位</label>
+          <label class="form-label">{{ t('history.currency') }}</label>
           <select class="form-select" v-model="form.currency">
             <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
           </select>
-          <div class="currency-help">加密货币交易通常使用 USDT 计价，可按实际成交币种调整。</div>
+          <div class="currency-help">{{ t('history.currencyHelp') }}</div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">总金额</label><input class="form-input" type="number" step="any" v-model="form.total" /></div>
-          <div class="form-group"><label class="form-label">日期</label><input class="form-input" type="date" v-model="form.executed_at" /></div>
+          <div class="form-group"><label class="form-label">{{ t('history.total') }}</label><input class="form-input" type="number" step="any" v-model="form.total" /></div>
+          <div class="form-group"><label class="form-label">{{ t('history.date') }}</label><input class="form-input" type="date" v-model="form.executed_at" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">盈亏</label><input class="form-input" type="number" step="any" v-model="form.pnl" /></div>
-          <div class="form-group"><label class="form-label">盈亏 %</label><input class="form-input" type="number" step="any" v-model="form.pnl_pct" /></div>
+          <div class="form-group"><label class="form-label">{{ t('holdings.pnl') }}</label><input class="form-input" type="number" step="any" v-model="form.pnl" /></div>
+          <div class="form-group"><label class="form-label">{{ t('history.pnlRate') }}</label><input class="form-input" type="number" step="any" v-model="form.pnl_pct" /></div>
         </div>
-        <div class="form-group"><label class="form-label">原因/复盘</label><textarea class="form-textarea" v-model="form.reason" placeholder="为什么操作..."></textarea></div>
+        <div class="form-group"><label class="form-label">{{ t('history.reason') }}</label><textarea class="form-textarea" v-model="form.reason" :placeholder="t('history.reasonPlaceholder')"></textarea></div>
         <div style="display:flex;gap:12px">
-          <button type="submit" class="btn btn-primary" :disabled="submitting">保存</button>
-          <button type="button" class="btn" @click="showForm=false">取消</button>
+          <button type="submit" class="btn btn-primary" :disabled="submitting">{{ t('history.save') }}</button>
+          <button type="button" class="btn" @click="showForm=false">{{ t('common.cancel') }}</button>
         </div>
       </form>
     </div>
 
     <div class="card" v-if="history.length">
       <table class="hide-mobile">
-        <thead><tr><th>日期</th><th>资产</th><th>类型</th><th>数量</th><th>价格</th><th>金额</th><th>盈亏</th><th>操作</th></tr></thead>
+        <thead><tr><th>{{ t('history.date') }}</th><th>{{ t('history.asset') }}</th><th>{{ t('history.type') }}</th><th>{{ t('holdings.quantity') }}</th><th>{{ t('history.price') }}</th><th>{{ t('history.total') }}</th><th>{{ t('holdings.pnl') }}</th><th>{{ t('common.confirm') }}</th></tr></thead>
         <tbody>
           <tr v-for="h in history" :key="h.id" class="history-row" :class="{ 'reverted-row': h.reverted }" @click="openDetail(h)">
             <td>{{ h.executed_at?.slice(0,10) }}</td>
             <td>{{ h.asset_name }}</td>
             <td>
               <div class="history-type-cell">
-                <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
-                <span v-if="h.reverted" class="badge badge-sell">已撤销</span>
+                <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?t('history.buy'):t('history.sell') }}</span>
+                <span v-if="h.reverted" class="badge badge-sell">{{ t('history.reverted') }}</span>
               </div>
             </td>
             <td>{{ h.quantity }}</td>
@@ -140,8 +140,8 @@
             <td :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl ? (h.pnl>=0?'+':'') + moneyPrefix(h.currency) + fmt(Math.abs(h.pnl)) : '-' }}</td>
             <td>
               <div class="history-actions">
-                <button v-if="!h.reverted" class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">撤销</button>
-                <button v-else class="btn btn-sm btn-danger" @click.stop="confirmDelete(h)">删除</button>
+                 <button v-if="!h.reverted" class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">{{ t('history.undo') }}</button>
+                 <button v-else class="btn btn-sm btn-danger" @click.stop="confirmDelete(h)">{{ t('history.delete') }}</button>
               </div>
             </td>
           </tr>
@@ -155,8 +155,8 @@
               <div>
                 <div class="history-card-title">
                   <span style="font-weight:600">{{ h.asset_name }}</span>
-                  <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?'买入':'卖出' }}</span>
-                  <span v-if="h.reverted" class="badge badge-sell">已撤销</span>
+                  <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?t('history.buy'):t('history.sell') }}</span>
+                  <span v-if="h.reverted" class="badge badge-sell">{{ t('history.reverted') }}</span>
                 </div>
                 <div class="history-card-meta">{{ h.executed_at?.slice(0,10) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
               </div>
@@ -171,11 +171,11 @@
           <template #actions>
             <button v-if="!h.reverted" class="swipe-action-btn danger" @click="openUndoDialog(h)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-              撤销
+               {{ t('history.undo') }}
             </button>
             <button v-else class="swipe-action-btn danger" @click="confirmDelete(h)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-              删除
+               {{ t('history.delete') }}
             </button>
           </template>
         </SwipeActionItem>
@@ -190,90 +190,90 @@
         </div>
       </div>
     </div>
-    <div v-else class="card empty"><div class="empty-icon">📝</div><p>暂无历史记录</p></div>
+    <div v-else class="card empty"><div class="empty-icon">📝</div><p>{{ t('history.empty') }}</p></div>
 
-    <AppDrawer v-model="showDetailDrawer" :title="detailRecord ? `${detailRecord.asset_name} - ${detailRecord.type==='buy'?'买入':'卖出'}` : '交易详情'">
+    <AppDrawer v-model="showDetailDrawer" :title="detailRecord ? `${detailRecord.asset_name} - ${detailRecord.type==='buy'?t('history.buy'):t('history.sell')}` : t('history.detailTitle')">
       <div v-if="detailRecord" class="detail-drawer-content">
         <div class="detail-section">
-          <div class="detail-row"><span>资产</span><span style="font-weight:600">{{ detailRecord.asset_name }}</span></div>
-          <div class="detail-row"><span>类型</span><span class="badge" :class="detailRecord.type==='buy'?'badge-buy':'badge-sell'">{{ detailRecord.type==='buy'?'买入':'卖出' }}</span></div>
-          <div class="detail-row"><span>状态</span><span class="badge" :class="detailRecord.reverted ? 'badge-sell' : 'badge-executed'">{{ detailRecord.reverted ? '已撤销' : '有效' }}</span></div>
-          <div class="detail-row"><span>日期</span><span>{{ detailRecord.executed_at?.slice(0,10) }}</span></div>
+          <div class="detail-row"><span>{{ t('history.asset') }}</span><span style="font-weight:600">{{ detailRecord.asset_name }}</span></div>
+          <div class="detail-row"><span>{{ t('history.type') }}</span><span class="badge" :class="detailRecord.type==='buy'?'badge-buy':'badge-sell'">{{ detailRecord.type==='buy'?t('history.buy'):t('history.sell') }}</span></div>
+          <div class="detail-row"><span>{{ t('history.status') }}</span><span class="badge" :class="detailRecord.reverted ? 'badge-sell' : 'badge-executed'">{{ detailRecord.reverted ? t('history.reverted') : t('history.effective') }}</span></div>
+          <div class="detail-row"><span>{{ t('history.date') }}</span><span>{{ formatDate(detailRecord.executed_at) }}</span></div>
         </div>
         <div class="detail-section">
-          <div class="detail-section-title">交易数据</div>
-          <div class="detail-row"><span>数量</span><b>{{ detailRecord.quantity }}</b></div>
-          <div class="detail-row"><span>计价单位</span><span>{{ detailRecord.currency || 'CNY' }}</span></div>
-          <div class="detail-row"><span>价格</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.price, 8) }}</span></div>
-          <div class="detail-row"><span>总金额</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.total) }}</span></div>
-          <div class="detail-row" v-if="detailRecord.reverted_at"><span>撤销时间</span><span>{{ detailRecord.reverted_at }}</span></div>
-          <div class="detail-row" v-if="detailRecord.pnl"><span>盈亏</span><span :class="(detailRecord.pnl||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl>=0?'+':'' }}{{ moneyPrefix(detailRecord.currency) }}{{ fmt(Math.abs(detailRecord.pnl)) }}</span></div>
-          <div class="detail-row" v-if="detailRecord.pnl_pct"><span>盈亏率</span><span :class="(detailRecord.pnl_pct||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl_pct>=0?'+':'' }}{{ detailRecord.pnl_pct }}%</span></div>
+          <div class="detail-section-title">{{ t('history.tradeData') }}</div>
+          <div class="detail-row"><span>{{ t('holdings.quantity') }}</span><b>{{ detailRecord.quantity }}</b></div>
+          <div class="detail-row"><span>{{ t('history.currency') }}</span><span>{{ detailRecord.currency || 'CNY' }}</span></div>
+          <div class="detail-row"><span>{{ t('history.price') }}</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.price, 8) }}</span></div>
+          <div class="detail-row"><span>{{ t('history.total') }}</span><span>{{ moneyPrefix(detailRecord.currency) }}{{ fmt(detailRecord.total) }}</span></div>
+          <div class="detail-row" v-if="detailRecord.reverted_at"><span>{{ t('history.revertedAt') }}</span><span>{{ formatDate(detailRecord.reverted_at) }}</span></div>
+          <div class="detail-row" v-if="detailRecord.pnl"><span>{{ t('holdings.pnl') }}</span><span :class="(detailRecord.pnl||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl>=0?'+':'' }}{{ moneyPrefix(detailRecord.currency) }}{{ fmt(Math.abs(detailRecord.pnl)) }}</span></div>
+          <div class="detail-row" v-if="detailRecord.pnl_pct"><span>{{ t('history.pnlRate') }}</span><span :class="(detailRecord.pnl_pct||0)>=0?'pnl positive':'pnl negative'">{{ detailRecord.pnl_pct>=0?'+':'' }}{{ detailRecord.pnl_pct }}%</span></div>
         </div>
         <div v-if="detailRecord.reason" class="detail-section">
-          <div class="detail-section-title">操作原因/复盘</div>
+          <div class="detail-section-title">{{ t('history.reason') }}</div>
           <div style="padding:10px 14px;font-size:14px;color:var(--text-dim);line-height:1.5">{{ detailRecord.reason }}</div>
         </div>
       </div>
       <template #footer v-if="detailRecord?.reverted">
-        <button class="btn btn-danger" style="width:100%" @click="confirmDelete(detailRecord)">删除已撤销记录</button>
+        <button class="btn btn-danger" style="width:100%" @click="confirmDelete(detailRecord)">{{ t('history.deleteRevertedRecord') }}</button>
       </template>
     </AppDrawer>
 
-    <AppDrawer v-model="filterDrawerOpen" title="筛选记录">
+    <AppDrawer v-model="filterDrawerOpen" :title="t('history.filterRecords')">
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">资产</label>
+          <label class="form-label">{{ t('history.asset') }}</label>
           <select class="form-select" v-model="draftFilters.asset_id">
-            <option value="">全部资产</option>
+            <option value="">{{ t('history.allAssets') }}</option>
             <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">类型</label>
+          <label class="form-label">{{ t('history.type') }}</label>
           <select class="form-select" v-model="draftFilters.type">
-            <option value="">全部类型</option>
-            <option value="buy">买入</option>
-            <option value="sell">卖出</option>
+            <option value="">{{ t('history.allTypes') }}</option>
+            <option value="buy">{{ t('history.buy') }}</option>
+            <option value="sell">{{ t('history.sell') }}</option>
           </select>
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">状态</label>
+          <label class="form-label">{{ t('history.status') }}</label>
           <select class="form-select" v-model="draftFilters.status">
-            <option value="">全部状态</option>
-            <option value="active">有效</option>
-            <option value="reverted">已撤销</option>
+            <option value="">{{ t('history.allStatuses') }}</option>
+            <option value="active">{{ t('history.effective') }}</option>
+            <option value="reverted">{{ t('history.reverted') }}</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">计价单位</label>
+          <label class="form-label">{{ t('history.currency') }}</label>
           <select class="form-select" v-model="draftFilters.currency">
-            <option value="">全部币种</option>
+            <option value="">{{ t('history.allCurrencies') }}</option>
             <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
           </select>
         </div>
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label">开始日期</label>
+          <label class="form-label">{{ t('history.startDate') }}</label>
           <input class="form-input" type="date" v-model="draftFilters.start_date" />
         </div>
         <div class="form-group">
-          <label class="form-label">结束日期</label>
+          <label class="form-label">{{ t('history.endDate') }}</label>
           <input class="form-input" type="date" v-model="draftFilters.end_date" />
         </div>
       </div>
       <template #footer>
         <div class="history-drawer-actions">
-          <button class="btn" @click="resetDraftFilters">重置</button>
-          <button class="btn btn-primary" @click="applyMobileFilters">应用筛选</button>
+          <button class="btn" @click="resetDraftFilters">{{ t('history.reset') }}</button>
+          <button class="btn btn-primary" @click="applyMobileFilters">{{ t('history.applyFilter') }}</button>
         </div>
       </template>
     </AppDrawer>
 
-    <AppDrawer v-model="sortDrawerOpen" title="排序方式">
+    <AppDrawer v-model="sortDrawerOpen" :title="t('history.sortTitle')">
       <div class="history-sort-options">
         <button
           v-for="option in sortOptions"
@@ -293,18 +293,18 @@
         <div v-if="undoDialog.open" class="dialog-overlay" @click.self="closeUndoDialog">
           <div class="dialog-box">
             <div class="dialog-header">
-              <h3 class="dialog-title">撤销交易记录</h3>
+              <h3 class="dialog-title">{{ t('history.undoTitle') }}</h3>
             </div>
             <div class="dialog-body">
-              <p>确认撤销这条交易记录吗？撤销后将标记为“已撤销”。</p>
+              <p>{{ t('history.undoMessage') }}</p>
               <label class="undo-checkbox">
                 <input type="checkbox" v-model="undoDialog.rollbackHoldings" />
-                <span>是否同步回滚持仓？</span>
+                <span>{{ t('history.rollbackHoldings') }}</span>
               </label>
             </div>
             <div class="dialog-actions">
-              <button class="btn" @click="closeUndoDialog">取消</button>
-              <button class="btn btn-danger" @click="confirmUndo" :disabled="undoSubmitting">{{ undoSubmitting ? '处理中...' : '确认撤销' }}</button>
+              <button class="btn" @click="closeUndoDialog">{{ t('common.cancel') }}</button>
+              <button class="btn btn-danger" @click="confirmUndo" :disabled="undoSubmitting">{{ undoSubmitting ? t('history.processing') : t('history.confirmUndo') }}</button>
             </div>
           </div>
         </div>
@@ -315,15 +315,18 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
 import { currencySymbol } from '../utils/currency.js'
+import { formatDateTime, formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
 const confirm = useConfirm()
+const { t } = useI18n()
 const history = ref([])
 const assets = ref([])
 const loading = ref(true)
@@ -336,12 +339,12 @@ const filterDrawerOpen = ref(false)
 const sortDrawerOpen = ref(false)
 const totalCount = ref(0)
 const currencyOptions = ['CNY', 'USD', 'USDT', 'BTC', 'ETH']
-const sortOptions = [
-  { value: 'executed_desc', label: '最新优先' },
-  { value: 'executed_asc', label: '最早优先' },
-  { value: 'total_desc', label: '金额从高到低' },
-  { value: 'total_asc', label: '金额从低到高' },
-]
+const sortOptions = computed(() => [
+  { value: 'executed_desc', label: t('history.latestFirst') },
+  { value: 'executed_asc', label: t('history.earliestFirst') },
+  { value: 'total_desc', label: t('history.amountDesc') },
+  { value: 'total_asc', label: t('history.amountAsc') },
+])
 const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', currency: 'CNY', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
 const undoDialog = reactive({ open: false, record: null, rollbackHoldings: true })
 const filters = reactive({ asset_id: '', type: '', status: '', currency: '', start_date: '', end_date: '', sort: 'executed_desc' })
@@ -349,17 +352,17 @@ const draftFilters = reactive({ asset_id: '', type: '', status: '', currency: ''
 
 const selectedAsset = computed(() => assets.value.find(asset => String(asset.id) === String(form.asset_id)) || null)
 const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto')
-const currentSortLabel = computed(() => sortOptions.find(option => option.value === filters.sort)?.label || '排序')
+const currentSortLabel = computed(() => sortOptions.value.find(option => option.value === filters.sort)?.label || t('history.sort'))
 const activeFilterCount = computed(() => ['asset_id', 'type', 'status', 'currency', 'start_date', 'end_date'].filter(key => filters[key]).length)
 const activeFilterChips = computed(() => {
   const assetName = assets.value.find(asset => String(asset.id) === filters.asset_id)?.name
   return [
-    filters.asset_id ? { key: 'asset_id', label: assetName || '资产' } : null,
-    filters.type ? { key: 'type', label: filters.type === 'buy' ? '买入' : '卖出' } : null,
-    filters.status ? { key: 'status', label: filters.status === 'active' ? '有效' : '已撤销' } : null,
+    filters.asset_id ? { key: 'asset_id', label: assetName || t('history.asset') } : null,
+    filters.type ? { key: 'type', label: filters.type === 'buy' ? t('history.buy') : t('history.sell') } : null,
+    filters.status ? { key: 'status', label: filters.status === 'active' ? t('history.effective') : t('history.reverted') } : null,
     filters.currency ? { key: 'currency', label: filters.currency } : null,
-    filters.start_date ? { key: 'start_date', label: `起 ${filters.start_date}` } : null,
-    filters.end_date ? { key: 'end_date', label: `止 ${filters.end_date}` } : null,
+    filters.start_date ? { key: 'start_date', label: `${t('history.startDate')} ${filters.start_date}` } : null,
+    filters.end_date ? { key: 'end_date', label: `${t('history.endDate')} ${filters.end_date}` } : null,
   ].filter(Boolean)
 })
 
@@ -493,15 +496,15 @@ async function addRecord() {
     const res = await api('/api/history', { method: 'POST', body: JSON.stringify(body) })
     const json = await res.json()
     if (!json.success) {
-      toast.error('保存失败: ' + (json.error || '未知错误'))
+      toast.error(t('history.saveFailed', { message: json.error || t('common.unknownError') }))
       return
     }
     showForm.value = false
     resetForm()
     await loadData()
-    toast.success('交易记录已保存')
+    toast.success(t('history.saved'))
   } catch (error) {
-    toast.error('保存失败: ' + error.message)
+    toast.error(t('history.saveFailed', { message: error.message }))
   } finally {
     submitting.value = false
   }
@@ -517,14 +520,14 @@ async function confirmUndo() {
     })
     const json = await res.json()
     if (!json.success) {
-      toast.error(json.error || '撤销失败')
+      toast.error(json.error || t('history.undoFailed'))
       return
     }
     closeUndoDialog(true)
     await loadData()
-    toast.success('交易记录已撤销')
+    toast.success(t('history.undone'))
   } catch (error) {
-    toast.error(error.message || '撤销失败')
+    toast.error(error.message || t('history.undoFailed'))
   } finally {
     undoSubmitting.value = false
   }
@@ -532,10 +535,10 @@ async function confirmUndo() {
 
 async function confirmDelete(record) {
   const ok = await confirm({
-    title: '删除交易记录',
-    message: '仅已撤销记录支持删除。删除后无法恢复，确定继续吗？',
-    confirmText: '删除',
-    cancelText: '取消',
+    title: t('history.deleteTitle'),
+    message: t('history.deleteMessage'),
+    confirmText: t('history.delete'),
+    cancelText: t('common.cancel'),
     danger: true,
     icon: 'delete',
   })
@@ -545,7 +548,7 @@ async function confirmDelete(record) {
     const res = await api(`/api/history/${record.id}`, { method: 'DELETE' })
     const json = await res.json()
     if (!json.success) {
-      toast.error(json.error || '删除失败')
+      toast.error(json.error || t('history.deleteFailed'))
       return
     }
     if (detailRecord.value?.id === record.id) {
@@ -553,20 +556,23 @@ async function confirmDelete(record) {
       detailRecord.value = null
     }
     await loadData()
-    toast.success('交易记录已删除')
+    toast.success(t('history.deleted'))
   } catch (error) {
-    toast.error(error.message || '删除失败')
+    toast.error(error.message || t('history.deleteFailed'))
   }
 }
 
 function fmt(n, maxFractionDigits = 2) {
-  if (n === null || n === undefined || n === '') return '0'
-  return Number(n).toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })
+  return formatNumber(n, { maximumFractionDigits: maxFractionDigits })
 }
 
 function moneyPrefix(currency = 'CNY') {
   const symbol = currencySymbol(currency)
   return symbol.length > 1 ? `${symbol} ` : symbol
+}
+
+function formatDate(value) {
+  return formatDateTime(value, { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 onMounted(loadData)

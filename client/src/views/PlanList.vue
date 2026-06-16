@@ -1,62 +1,62 @@
 <template>
   <div>
-    <div class="page-header"><h1 class="page-title">操盘计划</h1></div>
+    <div class="page-header"><h1 class="page-title">{{ t('plans.title') }}</h1></div>
 
     <div class="filter-bar">
       <select class="form-select filter-select" v-model="filterAsset" @change="loadData">
-        <option value="">全部资产</option>
+        <option value="">{{ t('plans.allAssets') }}</option>
         <option v-for="a in assets" :key="a.id" :value="a.id">{{ a.icon }} {{ a.name }}</option>
       </select>
       <select class="form-select filter-select" v-model="filterStrategy" @change="loadData">
-        <option value="">全部策略</option>
+        <option value="">{{ t('plans.allStrategies') }}</option>
         <option v-for="s in strategies" :key="s.id" :value="s.id">{{ s.name }}</option>
       </select>
       <select class="form-select filter-select" v-model="filterStatus" @change="loadData">
-        <option value="">全部状态</option>
-        <option value="pending">等待</option>
-        <option value="triggered">触发中</option>
-        <option value="partial">部分执行</option>
-        <option value="executed">已执行</option>
-        <option value="cancelled">已取消</option>
+        <option value="">{{ t('plans.allStatuses') }}</option>
+        <option value="pending">{{ t('plans.pending') }}</option>
+        <option value="triggered">{{ t('plans.triggered') }}</option>
+        <option value="partial">{{ t('plans.partial') }}</option>
+        <option value="executed">{{ t('plans.executed') }}</option>
+        <option value="cancelled">{{ t('plans.cancelled') }}</option>
       </select>
     </div>
 
     <div v-if="selectedPlan" class="card execute-card">
       <div class="execute-card-header">
         <div>
-          <div class="section-title" style="margin-bottom:8px">执行计划 #{{ selectedPlan.seq || selectedPlan.id }}</div>
+          <div class="section-title" style="margin-bottom:8px">{{ t('plans.executePlan') }} #{{ selectedPlan.seq || selectedPlan.id }}</div>
           <div class="execute-summary">{{ selectedPlan.asset_name }} · {{ triggerLabel(selectedPlan.trigger_type) }} {{ selectedPlan.trigger_value }}</div>
         </div>
-        <button class="btn btn-sm" @click="closeExecuteForm">关闭</button>
+        <button class="btn btn-sm" @click="closeExecuteForm">{{ t('plans.close') }}</button>
       </div>
 
       <div class="execute-grid">
-        <div class="execute-item"><span>计划方向</span><b>{{ selectedPlan.action === 'buy' ? '买入' : '卖出' }}</b></div>
-        <div class="execute-item"><span>计划数量</span><b>{{ quantityText(selectedPlan.quantity) }}</b></div>
-        <div class="execute-item"><span>计划金额</span><b>{{ moneyText(selectedPlan.amount, selectedPlan.asset_currency) }}</b></div>
-        <div class="execute-item"><span>执行进度</span><b>{{ executionProgressLabel(selectedPlan) }}</b></div>
-        <div class="execute-item"><span>剩余数量</span><b>{{ quantityText(remainingQuantity(selectedPlan)) }}</b></div>
-        <div class="execute-item"><span>剩余金额</span><b>{{ moneyText(remainingAmount(selectedPlan), selectedPlan.asset_currency) }}</b></div>
+        <div class="execute-item"><span>{{ t('plans.direction') }}</span><b>{{ selectedPlan.action === 'buy' ? t('plans.buy') : t('plans.sell') }}</b></div>
+        <div class="execute-item"><span>{{ t('plans.plannedQuantity') }}</span><b>{{ quantityText(selectedPlan.quantity) }}</b></div>
+        <div class="execute-item"><span>{{ t('plans.plannedAmount') }}</span><b>{{ moneyText(selectedPlan.amount, selectedPlan.asset_currency) }}</b></div>
+        <div class="execute-item"><span>{{ t('plans.progress') }}</span><b>{{ executionProgressLabel(selectedPlan) }}</b></div>
+        <div class="execute-item"><span>{{ t('plans.remainingQuantity') }}</span><b>{{ quantityText(remainingQuantity(selectedPlan)) }}</b></div>
+        <div class="execute-item"><span>{{ t('plans.remainingAmount') }}</span><b>{{ moneyText(remainingAmount(selectedPlan), selectedPlan.asset_currency) }}</b></div>
       </div>
 
       <form @submit.prevent="submitExecution">
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">实际成交价</label>
+            <label class="form-label">{{ t('plans.actualPrice') }}</label>
             <input class="form-input" type="number" step="any" min="0" v-model="executeForm.price" required />
           </div>
           <div class="form-group">
-            <label class="form-label">实际成交数量（可选）</label>
-            <input class="form-input" type="number" step="any" min="0" v-model="executeForm.quantity" :placeholder="remainingQuantity(selectedPlan) ? String(remainingQuantity(selectedPlan)) : '留空使用计划值'" />
+            <label class="form-label">{{ t('plans.actualQuantity') }}</label>
+            <input class="form-input" type="number" step="any" min="0" v-model="executeForm.quantity" :placeholder="remainingQuantity(selectedPlan) ? String(remainingQuantity(selectedPlan)) : t('plans.actualQuantityPlaceholder')" />
           </div>
         </div>
         <label class="execute-checkbox">
           <input type="checkbox" v-model="executeForm.partial" />
-          <span>标记为部分执行</span>
+          <span>{{ t('plans.partialExecute') }}</span>
         </label>
         <div class="execute-actions">
-          <button type="submit" class="btn btn-primary" :disabled="executeSubmitting">{{ executeSubmitting ? '执行中...' : '确认执行' }}</button>
-          <button type="button" class="btn" @click="closeExecuteForm">取消</button>
+          <button type="submit" class="btn btn-primary" :disabled="executeSubmitting">{{ executeSubmitting ? t('plans.executing') : t('plans.confirmExecute') }}</button>
+          <button type="button" class="btn" @click="closeExecuteForm">{{ t('common.cancel') }}</button>
         </div>
       </form>
     </div>
@@ -72,14 +72,14 @@
 
     <div class="card" v-else-if="filteredPlans.length">
       <table class="hide-mobile">
-        <thead><tr><th>#</th><th>资产</th><th>策略</th><th>触发</th><th>操作</th><th>数量</th><th>金额</th><th>补后均价</th><th>执行进度</th><th>状态</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>{{ t('history.asset') }}</th><th>{{ t('nav.strategies') }}</th><th>{{ t('plans.triggered') }}</th><th>{{ t('plans.direction') }}</th><th>{{ t('plans.quantityLabel') }}</th><th>{{ t('plans.amountLabel') }}</th><th>{{ t('assetList.avgCost') }}</th><th>{{ t('plans.progress') }}</th><th>{{ t('history.status') }}</th><th>{{ t('common.confirm') }}</th></tr></thead>
         <tbody>
           <tr v-for="p in filteredPlans" :key="p.id">
             <td>{{ p.seq }}</td>
             <td><span class="icon-text">{{ p.asset_name }}</span> <span class="plan-symbol">{{ p.symbol }}</span></td>
             <td class="plan-strategy">{{ strategyName(p.strategy_id) }}</td>
             <td>{{ triggerLabel(p.trigger_type) }} <b>{{ p.trigger_value }}</b></td>
-            <td><span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'">{{ p.action==='buy'?'买入':'卖出' }}</span></td>
+             <td><span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'">{{ p.action==='buy'?t('plans.buy'):t('plans.sell') }}</span></td>
             <td>{{ quantityText(p.quantity) }}</td>
             <td>{{ moneyText(p.amount, p.asset_currency) }}</td>
             <td>{{ moneyText(p.new_avg_cost, p.asset_currency) }}</td>
@@ -91,7 +91,7 @@
             </td>
             <td><span class="badge" :class="statusBadge(p.status)">{{ statusLabel(p.status) }}</span></td>
             <td>
-              <button v-if="canExecute(p)" class="btn btn-sm btn-primary" @click="openExecuteForm(p)">执行</button>
+               <button v-if="canExecute(p)" class="btn btn-sm btn-primary" @click="openExecuteForm(p)">{{ t('plans.execute') }}</button>
               <span v-else class="plan-action-placeholder">-</span>
             </td>
           </tr>
@@ -101,7 +101,7 @@
       <div class="show-mobile plan-cards">
         <div v-for="p in filteredPlans" :key="p.id" class="plan-card">
           <div class="plan-card-header">
-            <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'">{{ p.action==='buy'?'买入':'卖出' }}</span>
+             <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'">{{ p.action==='buy'?t('plans.buy'):t('plans.sell') }}</span>
             <span style="font-weight:600">{{ p.asset_name }}</span>
             <span class="badge" :class="statusBadge(p.status)" style="margin-left:auto">{{ statusLabel(p.status) }}</span>
           </div>
@@ -109,32 +109,35 @@
             <div class="plan-card-strategy">{{ strategyName(p.strategy_id) }}</div>
             <div class="plan-card-trigger">{{ triggerLabel(p.trigger_type) }} <b>{{ p.trigger_value }}</b></div>
             <div class="plan-card-meta">
-              <span v-if="p.quantity">数量: {{ quantityText(p.quantity) }}</span>
-              <span v-if="p.amount">金额: {{ moneyText(p.amount, p.asset_currency) }}</span>
-              <span v-if="p.new_avg_cost">均价→{{ moneyText(p.new_avg_cost, p.asset_currency) }}</span>
+               <span v-if="p.quantity">{{ t('plans.quantityLabel') }}: {{ quantityText(p.quantity) }}</span>
+               <span v-if="p.amount">{{ t('plans.amountLabel') }}: {{ moneyText(p.amount, p.asset_currency) }}</span>
+               <span v-if="p.new_avg_cost">{{ t('plans.avgCostArrow') }}{{ moneyText(p.new_avg_cost, p.asset_currency) }}</span>
             </div>
             <div class="plan-card-progress">{{ executionProgressLabel(p) }}</div>
             <div v-if="Number(p.quantity || 0) > 0" class="progress-bar">
               <div class="progress-fill plan-progress-fill" :style="{ width: `${executionRatio(p)}%` }"></div>
             </div>
             <div v-if="canExecute(p)" class="plan-card-actions">
-              <button class="btn btn-sm btn-primary" @click="openExecuteForm(p)">执行</button>
+               <button class="btn btn-sm btn-primary" @click="openExecuteForm(p)">{{ t('plans.execute') }}</button>
             </div>
           </div>
         </div>
       </div>
     </div>
-    <div v-else class="card empty"><div class="empty-icon">📋</div><p>暂无操盘计划，去创建一个策略并生成计划</p></div>
+    <div v-else class="card empty"><div class="empty-icon">📋</div><p>{{ t('plans.noPlans') }}</p></div>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { currencySymbol } from '../utils/currency.js'
+import { formatNumber } from '../utils/formatters.js'
 
 const toast = useToast()
+const { t } = useI18n()
 const plans = ref([])
 const assets = ref([])
 const strategies = ref([])
@@ -175,15 +178,15 @@ async function loadData() {
 
 function strategyName(id) {
   const s = strategies.value.find(strategy => strategy.id === id)
-  return s ? s.name : `策略#${id}`
+  return s ? s.name : t('plans.strategyFallback', { id })
 }
 
 function triggerLabel(type) {
-  return { price_above: '≥', price_below: '≤', time: '时间' }[type] || type
+  return { price_above: '≥', price_below: '≤', time: t('plans.timeTrigger') }[type] || type
 }
 
 function statusLabel(status) {
-  return { pending: '等待', triggered: '⚡触发中', partial: '部分执行', executed: '已执行', cancelled: '取消' }[status] || status
+  return { pending: t('plans.pending'), triggered: `⚡${t('plans.triggered')}`, partial: t('plans.partial'), executed: t('plans.executed'), cancelled: t('plans.cancelled') }[status] || status
 }
 
 function statusBadge(status) {
@@ -196,14 +199,14 @@ function canExecute(plan) {
 
 function quantityText(value) {
   if (value === null || value === undefined || value === '') return '-'
-  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 })
+  return formatNumber(value, { maximumFractionDigits: 4 })
 }
 
 function moneyText(value, currency = 'CNY') {
   if (value === null || value === undefined || value === '') return '-'
   const symbol = currencySymbol(currency)
   const prefix = symbol.length > 1 ? `${symbol} ` : symbol
-  return `${prefix}${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+  return `${prefix}${formatNumber(value, { maximumFractionDigits: 2 })}`
 }
 
 function remainingQuantity(plan) {
@@ -229,15 +232,15 @@ function executionRatio(plan) {
 
 function executionProgressLabel(plan) {
   if (Number(plan.amount || 0) > 0) {
-    return `已执行 ${moneyText(plan.executed_amount || 0, plan.asset_currency)} / ${moneyText(plan.amount, plan.asset_currency)}`
+    return t('plans.executedProgressAmount', { done: moneyText(plan.executed_amount || 0, plan.asset_currency), total: moneyText(plan.amount, plan.asset_currency) })
   }
   if (Number(plan.quantity || 0) > 0) {
-    return `已执行 ${quantityText(plan.executed_quantity || 0)} / ${quantityText(plan.quantity)}`
+    return t('plans.executedProgressQuantity', { done: quantityText(plan.executed_quantity || 0), total: quantityText(plan.quantity) })
   }
   if (Number(plan.executed_quantity || 0) > 0) {
-    return `已执行 ${quantityText(plan.executed_quantity)}`
+    return t('plans.executedQuantityOnly', { done: quantityText(plan.executed_quantity) })
   }
-  return '未执行'
+  return t('plans.notExecuted')
 }
 
 function openExecuteForm(plan) {
@@ -276,15 +279,15 @@ async function submitExecution() {
     })
     const json = await res.json()
     if (!json.success) {
-      toast.error(json.error || '计划执行失败')
+      toast.error(json.error || t('plans.executeFailed'))
       return
     }
 
-    toast.success('计划执行成功')
+    toast.success(t('plans.executeSuccess'))
     closeExecuteForm()
     await loadData()
   } catch (error) {
-    toast.error(error.message || '计划执行失败')
+    toast.error(error.message || t('plans.executeFailed'))
   } finally {
     executeSubmitting.value = false
   }

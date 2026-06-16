@@ -2,18 +2,18 @@
   <PullRefreshView :onRefresh="refresh">
   <div>
     <div class="page-header">
-      <h1 class="page-title">资讯</h1>
+      <h1 class="page-title">{{ t('newsList.title') }}</h1>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span v-if="lastUpdated" class="update-hint">{{ fmtUpdateTime(lastUpdated) }} 更新</span>
+        <span v-if="lastUpdated" class="update-hint">{{ t('newsList.updatedAt', { time: fmtUpdateTime(lastUpdated) }) }}</span>
         <button class="btn btn-sm" @click="cacheAll" :disabled="caching" v-if="pendingCacheCount > 0">
-          {{ caching ? '缓存中...' : `缓存 (${pendingCacheCount})` }}
+          {{ caching ? t('newsList.caching') : t('newsList.cacheAction', { count: pendingCacheCount }) }}
         </button>
         <button class="btn btn-sm btn-inline-icon" @click="refresh" :disabled="refreshing">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-2.64-6.36" />
             <path d="M21 3v6h-6" />
           </svg>
-          <span>{{ refreshing ? '刷新中...' : '刷新' }}</span>
+          <span>{{ refreshing ? t('newsList.refreshing') : t('common.refresh') }}</span>
         </button>
       </div>
     </div>
@@ -29,25 +29,25 @@
       <div v-for="n in news" :key="n.id" class="news-item" @click="openNews(n)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <span class="news-title" :class="{ read: n.read }">{{ n.title }}</span>
-          <span v-if="!n.read" class="badge badge-buy" style="font-size:10px;flex-shrink:0;margin-left:8px">NEW</span>
+          <span v-if="!n.read" class="badge badge-buy" style="font-size:10px;flex-shrink:0;margin-left:8px">{{ t('newsList.newBadge') }}</span>
         </div>
         <div v-if="n.summary" class="news-summary">{{ n.summary }}</div>
         <div class="news-meta">
           <span v-if="n.source" class="news-source">{{ n.source }}</span>
           <span>{{ formatTime(n.published_at) }}</span>
           <span class="cache-badge" :class="'cache-' + (n.cache_status || 'pending')">{{ cacheLabel(n.cache_status) }}</span>
-          <a v-if="n.url" :href="n.url" target="_blank" @click.stop class="news-link">查看原文 ↗</a>
+          <a v-if="n.url" :href="n.url" target="_blank" @click.stop class="news-link">{{ t('newsList.readOriginal') }}</a>
         </div>
       </div>
       <div v-if="total > news.length" style="text-align:center;padding:12px">
-        <button class="btn btn-sm" @click="loadMore">加载更多</button>
+        <button class="btn btn-sm" @click="loadMore">{{ t('newsList.loadMore') }}</button>
       </div>
     </div>
 
     <div v-else class="card empty">
       <div class="empty-icon">📰</div>
-      <p>暂无资讯</p>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:8px">点击刷新按钮获取最新资讯</p>
+      <p>{{ t('newsList.empty') }}</p>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:8px">{{ t('newsList.emptyHint') }}</p>
     </div>
   </div>
   </PullRefreshView>
@@ -55,11 +55,14 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { formatRelativeTimeFromNow, formatTime as formatClockTime } from '../utils/formatters.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 
 const toast = useToast()
+const { t } = useI18n()
 const news = ref([])
 const total = ref(0)
 const loading = ref(true)
@@ -101,13 +104,12 @@ async function refresh() {
     const json = await res.json()
     await loadData()
     if (json.success) {
-      const msg = json.message || '刷新完成'
-      toast.success(msg)
+      toast.success(t('newsList.refreshSuccess'))
     } else {
-      toast.error(json.error || '刷新失败')
+      toast.error(json.error || t('newsList.refreshFailed'))
     }
   } catch (e) {
-    toast.error('刷新失败: ' + e.message)
+    toast.error(t('newsList.refreshFailedWithMessage', { message: e.message }))
   } finally {
     refreshing.value = false
   }
@@ -134,10 +136,10 @@ async function cacheAll() {
     const res = await api('/api/news/cache-batch', { method: 'POST', body: JSON.stringify({ limit: 10 }) })
     const json = await res.json()
     if (json.success) {
-      toast.success(`已缓存 ${json.cached} 条`)
+      toast.success(t('newsList.cacheSuccess', { count: json.cached }))
       await loadData()
     } else {
-      toast.error('缓存失败')
+      toast.error(json.error || t('newsList.cacheFailed'))
     }
   } catch (e) {
     toast.error(e.message)
@@ -146,21 +148,18 @@ async function cacheAll() {
 }
 
 function formatTime(ts) {
-  if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now - d
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
-  return ts.slice(0, 10)
+  return formatRelativeTimeFromNow(ts)
 }
 function fmtUpdateTime(d) {
-  if (!d) return ''
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return formatClockTime(d)
 }
 function cacheLabel(status) {
-  return { cached: '已缓存', fetching: '缓存中', failed: '缓存失败', pending: '待缓存' }[status || 'pending'] || '待缓存'
+  return {
+    cached: t('newsList.cacheStatus.cached'),
+    fetching: t('newsList.cacheStatus.fetching'),
+    failed: t('newsList.cacheStatus.failed'),
+    pending: t('newsList.cacheStatus.pending'),
+  }[status || 'pending'] || t('newsList.cacheStatus.pending')
 }
 
 onMounted(loadData)

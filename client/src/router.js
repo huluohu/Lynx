@@ -20,6 +20,7 @@ const routes = [
   { path: '/history', name: 'History', component: () => import('./views/HistoryList.vue') },
   { path: '/alerts', name: 'Alerts', component: () => import('./views/AlertHistory.vue') },
   { path: '/settings', name: 'Settings', component: () => import('./views/Settings.vue') },
+  { path: '/about', name: 'About', component: () => import('./views/About.vue') },
   { path: '/:pathMatch(.*)*', name: 'NotFound', redirect: '/' },
 ]
 

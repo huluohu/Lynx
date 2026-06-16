@@ -4,24 +4,24 @@
       <div class="login-header">
         <img src="/logo.svg" alt="Lynx" class="login-logo" />
         <h1>L¥NX</h1>
-        <p>登录以继续</p>
+        <p>{{ t('login.subtitle') }}</p>
       </div>
       <form @submit.prevent="doLogin">
         <div class="form-group">
-          <label class="form-label">用户名</label>
+          <label class="form-label">{{ t('login.username') }}</label>
           <input class="form-input" v-model="username" placeholder="admin" autocomplete="username" />
         </div>
         <div class="form-group">
-          <label class="form-label">密码</label>
+          <label class="form-label">{{ t('login.password') }}</label>
           <input class="form-input" type="password" v-model="password" placeholder="••••••" autocomplete="current-password" />
         </div>
         <label class="remember-me">
           <input type="checkbox" v-model="rememberMe" />
-          <span>记住密码（保持登录 30 天）</span>
+          <span>{{ t('login.remember') }}</span>
         </label>
         <div v-if="error" class="login-error">{{ error }}</div>
         <button type="submit" class="btn btn-primary login-btn" :disabled="loading">
-          {{ loading ? '登录中...' : '登录' }}
+          {{ loading ? t('login.submitting') : t('login.submit') }}
         </button>
       </form>
     </div>
@@ -31,10 +31,12 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth.js'
 
 const router = useRouter()
 const auth = useAuthStore()
+const { t } = useI18n()
 
 const username = ref('')
 const password = ref('')
@@ -101,8 +103,8 @@ async function doLogin() {
 .login-btn { width: 100%; margin-top: 20px; padding: 12px; font-size: 15px; }
 .login-error {
   padding: 10px 14px;
-  background: rgba(239,68,68,0.1);
-  border: 1px solid rgba(239,68,68,0.3);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
   border-radius: 8px;
   color: var(--red);
   font-size: 13px;

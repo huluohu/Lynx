@@ -1,37 +1,37 @@
 <template>
   <div>
     <div class="page-header">
-      <h1 class="page-title">{{ isEdit ? '编辑策略' : '创建策略' }}</h1>
+      <h1 class="page-title">{{ isEdit ? t('strategyForm.editTitle') : t('strategyForm.createTitle') }}</h1>
     </div>
 
     <div class="card" style="max-width:700px">
       <form @submit.prevent="submit">
         <div class="form-group">
-          <label class="form-label">策略名称 *</label>
-          <input class="form-input" v-model="form.name" placeholder="例如：黄金扭亏计划" required />
+          <label class="form-label">{{ t('strategyForm.name') }} *</label>
+          <input class="form-input" v-model="form.name" :placeholder="t('strategyForm.namePlaceholder')" required />
         </div>
         <div class="form-group">
-          <label class="form-label">描述</label>
-          <textarea class="form-textarea" v-model="form.description" placeholder="简短描述策略目标..."></textarea>
+          <label class="form-label">{{ t('strategyForm.description') }}</label>
+          <textarea class="form-textarea" v-model="form.description" :placeholder="t('strategyForm.descriptionPlaceholder')"></textarea>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">策略类型 *</label>
+            <label class="form-label">{{ t('strategyForm.type') }} *</label>
             <select class="form-select" v-model="form.type" @change="onTypeChange" required>
-              <option value="">选择类型</option>
-              <option value="dca">📅 定投 (DCA)</option>
-              <option value="grid">📐 网格交易</option>
-              <option value="value_avg">📈 价值平均</option>
-              <option value="recovery">💉 扭亏/补仓</option>
-              <option value="trend">📊 趋势跟踪</option>
-              <option value="rebalance">⚖️ 组合再平衡</option>
+              <option value="">{{ t('strategyForm.selectType') }}</option>
+              <option value="dca">{{ t('strategyForm.types.dca') }}</option>
+              <option value="grid">{{ t('strategyForm.types.grid') }}</option>
+              <option value="value_avg">{{ t('strategyForm.types.value_avg') }}</option>
+              <option value="recovery">{{ t('strategyForm.types.recovery') }}</option>
+              <option value="trend">{{ t('strategyForm.types.trend') }}</option>
+              <option value="rebalance">{{ t('strategyForm.types.rebalance') }}</option>
             </select>
           </div>
         </div>
 
         <!-- 资产选择 -->
         <div class="form-group">
-          <label class="form-label">关联资产（可多选）</label>
+          <label class="form-label">{{ t('strategyForm.relatedAssets') }}</label>
           <div class="asset-multi-select">
             <div v-for="a in assets" :key="a.id" class="asset-chip"
                  :class="{ selected: selectedAssetIds.includes(a.id) }"
@@ -39,17 +39,17 @@
               {{ a.icon }} {{ a.name }}
             </div>
           </div>
-          <div v-if="selectedAssetIds.length > 0" class="selected-hint">已选 {{ selectedAssetIds.length }} 个资产</div>
+          <div v-if="selectedAssetIds.length > 0" class="selected-hint">{{ t('strategyForm.selectedCount', { count: selectedAssetIds.length }) }}</div>
         </div>
 
         <!-- 动态参数：按资产分组 -->
         <div v-if="form.type && selectedAssetIds.length > 0" class="params-section">
-          <div class="section-title">策略参数</div>
+          <div class="section-title">{{ t('strategyForm.params') }}</div>
 
           <!-- Recovery: 按资产分组 -->
           <div v-if="form.type === 'recovery'">
             <div class="form-group">
-              <label class="form-label">总预算 (¥)</label>
+               <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
               <input class="form-input" type="number" v-model="globalBudget" placeholder="20000" inputmode="numeric" />
             </div>
 
@@ -60,48 +60,48 @@
               </div>
 
               <div class="sub-section">
-                <div class="sub-section-title">📉 补仓线</div>
+                 <div class="sub-section-title">📉 {{ t('strategyForm.buyLines') }}</div>
                 <div class="lines-editor">
                   <div v-for="(line, i) in getAssetBuyLines(assetId)" :key="'b'+assetId+'-'+i" class="line-row">
                     <div class="line-field">
                       <span class="line-prefix">≤</span>
-                      <input class="form-input" type="number" step="any" v-model="line.price" placeholder="触发价格" inputmode="decimal" />
+                       <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
                     </div>
                     <div class="line-field">
                       <span class="line-prefix">¥</span>
-                      <input class="form-input" type="number" step="any" v-model="line.amount" placeholder="买入金额" inputmode="numeric" />
+                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.buyAmount')" inputmode="numeric" />
                     </div>
                     <button type="button" class="btn btn-sm btn-danger" @click="removeAssetBuyLine(assetId, i)">✕</button>
                   </div>
-                  <button type="button" class="btn btn-sm" @click="addAssetBuyLine(assetId)">+ 补仓线</button>
+                   <button type="button" class="btn btn-sm" @click="addAssetBuyLine(assetId)">+ {{ t('strategyForm.addBuyLine') }}</button>
                 </div>
               </div>
 
               <div class="sub-section">
-                <div class="sub-section-title">📈 减仓线</div>
+                 <div class="sub-section-title">📈 {{ t('strategyForm.sellLines') }}</div>
                 <div class="lines-editor">
                   <div v-for="(line, i) in getAssetSellLines(assetId)" :key="'s'+assetId+'-'+i" class="line-row">
                     <div class="line-field">
                       <span class="line-prefix">≥</span>
-                      <input class="form-input" type="number" step="any" v-model="line.price" placeholder="触发价格" inputmode="decimal" />
+                       <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
                     </div>
                     <div class="line-field">
                       <span class="line-prefix">¥</span>
-                      <input class="form-input" type="number" step="any" v-model="line.amount" placeholder="卖出金额" inputmode="numeric" />
+                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.sellAmount')" inputmode="numeric" />
                     </div>
                     <button type="button" class="btn btn-sm btn-danger" @click="removeAssetSellLine(assetId, i)">✕</button>
                   </div>
-                  <button type="button" class="btn btn-sm" @click="addAssetSellLine(assetId)">+ 减仓线</button>
+                   <button type="button" class="btn btn-sm" @click="addAssetSellLine(assetId)">+ {{ t('strategyForm.addSellLine') }}</button>
                 </div>
               </div>
             </div>
 
             <!-- 预算汇总 -->
             <div class="budget-summary" :class="{ over: allocatedBudget > Number(globalBudget) }">
-              <span>已分配: ¥{{ allocatedBudget.toLocaleString() }}</span>
-              <span>/</span>
-              <span>总预算: ¥{{ Number(globalBudget || 0).toLocaleString() }}</span>
-              <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn">⚠️ 超预算</span>
+               <span>{{ t('strategyForm.allocated') }}: ¥{{ formatNumber(allocatedBudget) }}</span>
+               <span>/</span>
+               <span>{{ t('strategyForm.totalBudget') }}: ¥{{ formatNumber(Number(globalBudget || 0)) }}</span>
+               <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn">⚠️ {{ t('strategyForm.overBudget') }}</span>
             </div>
           </div>
 
@@ -109,17 +109,17 @@
           <div v-if="form.type === 'dca'">
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">频率</label>
-                <select class="form-select" v-model="globalFrequency">
-                  <option value="daily">每日</option>
-                  <option value="weekly">每周</option>
-                  <option value="monthly">每月</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">期数</label>
-                <input class="form-input" type="number" v-model="globalPeriods" placeholder="10" />
-              </div>
+                 <label class="form-label">{{ t('strategyForm.frequency') }}</label>
+                 <select class="form-select" v-model="globalFrequency">
+                   <option value="daily">{{ t('strategyForm.frequencies.daily') }}</option>
+                   <option value="weekly">{{ t('strategyForm.frequencies.weekly') }}</option>
+                   <option value="monthly">{{ t('strategyForm.frequencies.monthly') }}</option>
+                 </select>
+               </div>
+               <div class="form-group">
+                 <label class="form-label">{{ t('strategyForm.periods') }}</label>
+                 <input class="form-input" type="number" v-model="globalPeriods" placeholder="10" />
+               </div>
             </div>
 
             <div v-for="assetId in selectedAssetIds" :key="'d-'+assetId" class="asset-param-group compact">
@@ -128,7 +128,7 @@
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label class="form-label">每期金额 (¥)</label>
+                   <label class="form-label">{{ t('strategyForm.amountPerPeriod') }} (¥)</label>
                   <input class="form-input" type="number" v-model="getAssetDCA(assetId).amount_per" placeholder="1000" inputmode="numeric" />
                 </div>
               </div>
@@ -138,7 +138,7 @@
           <!-- Grid: 按资产分组 -->
           <div v-if="form.type === 'grid'">
             <div class="form-group">
-              <label class="form-label">总预算 (¥)</label>
+               <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
               <input class="form-input" type="number" v-model="globalBudget" placeholder="20000" inputmode="numeric" />
             </div>
 
@@ -147,17 +147,17 @@
                 <span class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</span>
               </div>
               <div class="form-row">
-                <div class="form-group"><label class="form-label">下限</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).low" placeholder="下限价格" inputmode="decimal" /></div>
-                <div class="form-group"><label class="form-label">上限</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).high" placeholder="上限价格" inputmode="decimal" /></div>
-                <div class="form-group"><label class="form-label">网格数</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).grids" placeholder="5" /></div>
-              </div>
+                 <div class="form-group"><label class="form-label">{{ t('strategyForm.lowerBound') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).low" :placeholder="t('strategyForm.lowerBound')" inputmode="decimal" /></div>
+                 <div class="form-group"><label class="form-label">{{ t('strategyForm.upperBound') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).high" :placeholder="t('strategyForm.upperBound')" inputmode="decimal" /></div>
+                 <div class="form-group"><label class="form-label">{{ t('strategyForm.gridCount') }}</label><input class="form-input" type="number" v-model="getAssetGrid(assetId).grids" placeholder="5" /></div>
+               </div>
             </div>
           </div>
 
           <!-- Value Avg: 按资产分组 -->
           <div v-if="form.type === 'value_avg'">
             <div class="form-group">
-              <label class="form-label">期数</label>
+               <label class="form-label">{{ t('strategyForm.periods') }}</label>
               <input class="form-input" type="number" v-model="globalPeriods" placeholder="10" />
             </div>
 
@@ -166,28 +166,28 @@
                 <span class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</span>
               </div>
               <div class="form-row">
-                <div class="form-group"><label class="form-label">目标市值 (¥)</label><input class="form-input" type="number" v-model="getAssetValueAvg(assetId).target_value" placeholder="50000" inputmode="numeric" /></div>
-                <div class="form-group"><label class="form-label">增长率 (%)</label><input class="form-input" type="number" step="0.1" v-model="getAssetValueAvg(assetId).growth_rate_val" placeholder="2" /></div>
-              </div>
-            </div>
-          </div>
-        </div>
+                 <div class="form-group"><label class="form-label">{{ t('strategyForm.targetValue') }} (¥)</label><input class="form-input" type="number" v-model="getAssetValueAvg(assetId).target_value" placeholder="50000" inputmode="numeric" /></div>
+                 <div class="form-group"><label class="form-label">{{ t('strategyForm.growthRate') }} (%)</label><input class="form-input" type="number" step="0.1" v-model="getAssetValueAvg(assetId).growth_rate_val" placeholder="2" /></div>
+               </div>
+             </div>
+           </div>
+         </div>
 
         <!-- No assets selected hint -->
         <div v-if="form.type && selectedAssetIds.length === 0" class="empty-hint">
-          请先选择关联资产
+          {{ t('strategyForm.selectAssetHint') }}
         </div>
 
         <div style="display:flex;gap:12px;margin-top:16px">
-          <button type="submit" class="btn btn-primary" :disabled="submitting || selectedAssetIds.length === 0">{{ submitting ? '创建中...' : (isEdit ? '保存修改' : '创建策略') }}</button>
-          <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> AI 重新生成</button>
-          <router-link to="/strategies" class="btn">取消</router-link>
+          <button type="submit" class="btn btn-primary" :disabled="submitting || selectedAssetIds.length === 0">{{ submitting ? t('strategyForm.creating') : (isEdit ? t('strategyForm.save') : t('strategyForm.create')) }}</button>
+          <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyForm.aiRegenerate') }}</button>
+          <router-link to="/strategies" class="btn">{{ t('strategyForm.cancel') }}</router-link>
         </div>
       </form>
     </div>
 
     <!-- AI Regenerate Drawer -->
-    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" title="✨ AI 重新生成策略">
+    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" :title="`✨ ${t('strategyForm.aiRegenerateTitle')}`">
       <AIStrategyGenerator :preset-asset-id="selectedAssetIds[0]" :existing-strategy-id="strategyId" @done="onAIRegenDone" />
     </AppDrawer>
   </div>
@@ -196,14 +196,17 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import { formatNumber } from '../utils/formatters.js'
 
 const router = useRouter()
 const route = useRoute()
 const toast = useToast()
+const { t } = useI18n()
 const submitting = ref(false)
 const showAIRegenerate = ref(false)
 const assets = ref([])
@@ -344,52 +347,52 @@ function buildParameters() {
 
 async function submit() {
   // Validate required fields
-  if (!form.name || !form.type) {
-    toast.error('请填写策略名称和类型')
-    return
-  }
-  if (selectedAssetIds.value.length === 0) {
-    toast.error('请选择至少一个关联资产')
-    return
-  }
+    if (!form.name || !form.type) {
+      toast.error(t('strategyForm.validationNameType'))
+      return
+    }
+    if (selectedAssetIds.value.length === 0) {
+      toast.error(t('strategyForm.validationAssets'))
+      return
+    }
 
   // Validate parameters per type
   if (form.type === 'recovery') {
     if (!globalBudget.value || Number(globalBudget.value) <= 0) {
-      toast.error('请设置有效的预算金额')
-      return
-    }
+        toast.error(t('strategyForm.validationBudget'))
+        return
+      }
   } else if (form.type === 'grid') {
     for (const id of selectedAssetIds.value) {
       const g = getAssetGrid(id)
-      if (!g.low || !g.high || Number(g.low) <= 0 || Number(g.high) <= 0) {
-        toast.error(`请为 ${getAsset(id)?.name || '资产'} 设置有效的网格高低价`)
-        return
-      }
-      if (Number(g.low) >= Number(g.high)) {
-        toast.error(`${getAsset(id)?.name || '资产'} 的网格低价必须小于高价`)
-        return
-      }
-      if (!g.grids || Number(g.grids) < 2) {
-        toast.error(`${getAsset(id)?.name || '资产'} 的网格数必须大于1`)
-        return
-      }
+        if (!g.low || !g.high || Number(g.low) <= 0 || Number(g.high) <= 0) {
+          toast.error(t('strategyForm.validationGridPrice', { name: getAsset(id)?.name || 'Asset' }))
+          return
+        }
+        if (Number(g.low) >= Number(g.high)) {
+          toast.error(t('strategyForm.validationGridOrder', { name: getAsset(id)?.name || 'Asset' }))
+          return
+        }
+        if (!g.grids || Number(g.grids) < 2) {
+          toast.error(t('strategyForm.validationGridCount', { name: getAsset(id)?.name || 'Asset' }))
+          return
+        }
     }
   } else if (form.type === 'dca') {
     for (const id of selectedAssetIds.value) {
       const d = getAssetDCA(id)
-      if (!d.amount_per || Number(d.amount_per) <= 0) {
-        toast.error(`请为 ${getAsset(id)?.name || '资产'} 设置有效的定投金额`)
-        return
-      }
+        if (!d.amount_per || Number(d.amount_per) <= 0) {
+          toast.error(t('strategyForm.validationDcaAmount', { name: getAsset(id)?.name || 'Asset' }))
+          return
+        }
     }
   } else if (form.type === 'value_avg') {
     for (const id of selectedAssetIds.value) {
       const v = getAssetValueAvg(id)
-      if (!v.target_value || Number(v.target_value) <= 0) {
-        toast.error(`请为 ${getAsset(id)?.name || '资产'} 设置有效的目标市值`)
-        return
-      }
+        if (!v.target_value || Number(v.target_value) <= 0) {
+          toast.error(t('strategyForm.validationTargetValue', { name: getAsset(id)?.name || 'Asset' }))
+          return
+        }
     }
   }
 
@@ -406,9 +409,9 @@ async function submit() {
     }
     const res = await api(url, { method, body: JSON.stringify(body) })
     const json = await res.json()
-    if (!json.success) return toast.error(json.error || '保存失败')
+    if (!json.success) return toast.error(json.error || t('common.saveFailed'))
 
-    toast.success(isEdit.value ? '策略已更新' : '策略已创建')
+    toast.success(isEdit.value ? t('strategyForm.updated') : t('strategyForm.created'))
     router.push(isEdit.value ? `/strategies/${strategyId.value}` : '/strategies')
   } catch (e) { toast.error(e.message) }
   finally { submitting.value = false }
@@ -416,7 +419,7 @@ async function submit() {
 
 function onAIRegenDone(strategyId) {
   showAIRegenerate.value = false
-  toast.success('策略已更新')
+  toast.success(t('strategyForm.updated'))
   router.push(`/strategies/${strategyId}`)
 }
 
