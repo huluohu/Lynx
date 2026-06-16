@@ -255,18 +255,18 @@ async function markDone(id) {
 }
 
 function fmt(n) {
-  if (!n && n !== 0) return '-'
-  const abs = Math.abs(n)
-  if (abs >= 100000000) return (n / 100000000).toFixed(2) + '亿'
-  if (abs >= 10000) return (n / 10000).toFixed(1) + '万'
-  if (abs < 1) return Number(n).toFixed(2)
-  return Math.round(n).toLocaleString()
+  if (n === null || n === undefined || n === '') return '-'
+  const num = Number(n)
+  if (!Number.isFinite(num)) return '-'
+  return num.toLocaleString(undefined, { maximumFractionDigits: 2 })
 }
 function fmtPl(n) {
-  if (n === null || n === undefined) return '-'
-  if (Math.abs(n) < 1) return '±0'
-  const sign = n >= 0 ? '+' : '-'
-  return `${sign}${fmt(Math.abs(n))}`
+  if (n === null || n === undefined || n === '') return '-'
+  const num = Number(n)
+  if (!Number.isFinite(num)) return '-'
+  if (num === 0) return '0'
+  const sign = num >= 0 ? '+' : '-'
+  return `${sign}${fmt(Math.abs(num))}`
 }
 function cs(a) { return currencySymbol(a?.currency) }
 function fmtPct(n) {

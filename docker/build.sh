@@ -1,159 +1,228 @@
 #!/bin/bash
-# L¥NX Docker 构建脚本 (使用 buildx 多平台构建)
-set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
-cd "$PROJECT_DIR"
-
-IMAGE_NAME="lynx"
-
-# 读取当前最新版本
-ENV_FILE="${SCRIPT_DIR}/.env"
-CURRENT_VERSION=""
-if [[ -f "$ENV_FILE" ]] && grep -q "^APP_VERSION=" "$ENV_FILE"; then
-  CURRENT_VERSION=$(grep "^APP_VERSION=" "$ENV_FILE" | cut -d'=' -f2)
-fi
-
-# 版本号：优先使用环境变量，否则交互式输入
-if [[ -n "$APP_VERSION" ]]; then
-  VERSION="$APP_VERSION"
-else
-  if [[ -n "$CURRENT_VERSION" && "$CURRENT_VERSION" != "latest" ]]; then
-    echo "📌 当前最新版本: ${CURRENT_VERSION}"
-  fi
-  read -p "📋 请输入版本号 (直接回车使用 latest): " VERSION
-  VERSION="${VERSION:-latest}"
-fi
-TAG="$VERSION"
-
-# 版本号校验：新版本不能小于当前版本
-version_compare() {
-  # 比较两个语义化版本号，返回: 0=相等, 1=v1>v2, 2=v1<v2
-  local v1="$1" v2="$2"
-  if [[ "$v1" == "$v2" ]]; then return 0; fi
-  local IFS=.
-  local i v1_parts=($v1) v2_parts=($v2)
-  for ((i=0; i<${#v1_parts[@]} || i<${#v2_parts[@]}; i++)); do
-    local n1="${v1_parts[i]:-0}" n2="${v2_parts[i]:-0}"
-    if ((n1 > n2)); then return 1; fi
-    if ((n1 < n2)); then return 2; fi
-  done
-  return 0
+# 打印函数
+print_step() {
+    local current=$1
+    local total=$2
+    local description=$3
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN} 步骤 $current/$total: $description${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
-if [[ -n "$CURRENT_VERSION" && "$CURRENT_VERSION" != "latest" && "$VERSION" != "latest" ]]; then
-  version_compare "$VERSION" "$CURRENT_VERSION"
-  cmp_result=$?
-  if [[ $cmp_result -eq 2 ]]; then
-    echo "❌ 错误: 新版本 ${VERSION} 小于当前版本 ${CURRENT_VERSION}"
-    read -p "确认要降级构建吗？[y/N] " FORCE
-    if [[ ! "$FORCE" =~ ^[Yy]$ ]]; then
-      echo "⏭️  已取消"
-      exit 1
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+# 镜像名称和仓库地址
+REGISTRY="docker.io"
+IMAGE_NAME="fooololo/lynx"
+LATEST_TAG="latest"
+
+# 获取脚本所在目录的绝对路径
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# ============================================
+# 步骤 0: 选择版本类型
+# ============================================
+TOTAL_STEPS=4
+
+echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║         L¥NX 构建部署脚本                  ║${NC}"
+echo -e "${CYAN}╚════════════════════════════════════════════╝${NC}"
+echo ""
+
+print_step "0" "$TOTAL_STEPS" "选择版本类型"
+
+echo "请选择构建类型:"
+echo "  1) 正常版本 (校验版本号)"
+echo "  2) Beta 版本 (不校验版本号)"
+echo ""
+
+while true; do
+    echo -n "请输入选项 (1/2): "
+    read VERSION_TYPE
+    case $VERSION_TYPE in
+        1)
+            IS_BETA_VERSION=false
+            print_info "已选择：正常版本"
+            break
+            ;;
+        2)
+            IS_BETA_VERSION=true
+            print_info "已选择：Beta 版本"
+            break
+            ;;
+        *)
+            print_error "无效选项，请输入 1 或 2"
+            ;;
+    esac
+done
+echo ""
+
+# ============================================
+# 步骤 1: 获取版本信息
+# ============================================
+print_step "1" "$TOTAL_STEPS" "配置版本信息"
+
+# 从 .env 获取上一个版本号
+ENV_FILE="${SCRIPT_DIR}/.env"
+LATEST_VERSION=""
+if [ -f "$ENV_FILE" ] && grep -q "^APP_VERSION=" "$ENV_FILE"; then
+    LATEST_VERSION=$(grep "^APP_VERSION=" "$ENV_FILE" | cut -d'=' -f2)
+fi
+
+if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "latest" ]; then
+    print_success "当前版本号：$LATEST_VERSION"
+fi
+
+echo ""
+echo -n "请输入版本号"
+if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "latest" ] && [ "$IS_BETA_VERSION" = false ]; then
+    echo -n " (必须大于或等于 $LATEST_VERSION)"
+fi
+echo -n " (默认：${LATEST_VERSION:-0.0.1}): "
+read VERSION_TAG_INPUT
+VERSION_TAG_BASE=${VERSION_TAG_INPUT:-${LATEST_VERSION:-"0.0.1"}}
+
+# 版本号校验
+if [ "$IS_BETA_VERSION" = false ] && [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "latest" ]; then
+    if [ "$(printf '%s\n' "$LATEST_VERSION" "$VERSION_TAG_BASE" | sort -V | head -n 1)" != "$LATEST_VERSION" ]; then
+        print_error "版本号必须大于或等于 $LATEST_VERSION！当前输入：$VERSION_TAG_BASE"
+        exit 1
     fi
-  fi
+    print_success "版本号校验通过：$VERSION_TAG_BASE >= $LATEST_VERSION"
 fi
 
-# 官方镜像仓库地址
-REGISTRY="${DOCKER_REGISTRY:-docker.io}"
-REGISTRY_REPO="fooololo"
-FULL_IMAGE="${REGISTRY}/${REGISTRY_REPO}/${IMAGE_NAME}"
-
-# 目标平台（单平台用 docker driver，多平台需 docker-container driver）
-PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
-
-# 判断是否多平台（包含逗号）
-if [[ "$PLATFORM" == *","* ]]; then
-  # 多平台需要 docker-container driver
-  BUILDER_NAME="lynx-invest-builder"
-  if docker buildx inspect "$BUILDER_NAME" &>/dev/null; then
-    docker buildx use "$BUILDER_NAME"
-  else
-    echo "🔧 首次创建多平台 builder: ${BUILDER_NAME}"
-    docker buildx create --name "$BUILDER_NAME" --use --driver docker-container --bootstrap
-  fi
-  MULTI_PLATFORM=true
+# 最终版本号
+if [ "$IS_BETA_VERSION" = true ]; then
+    VERSION_TAG="beta-${VERSION_TAG_BASE}-$(date +%Y%m%d-%H%M%S)"
 else
-  # 单平台直接用默认 builder（docker driver，无需拉镜像）
-  docker buildx use default 2>/dev/null || true
-  MULTI_PLATFORM=false
+    VERSION_TAG="${VERSION_TAG_BASE}"
 fi
 
-echo ""
-echo "🏗️  目标平台: ${PLATFORM}"
+print_info "最终版本号：${VERSION_TAG}"
 echo ""
 
-# 询问是否推送到官方仓库
-echo "📦 目标镜像: ${FULL_IMAGE}:${TAG}"
-read -p "构建并推送到官方仓库？[y/N] " CONFIRM
+# ============================================
+# 步骤 2: 构建 Docker 镜像
+# ============================================
+print_step "2" "$TOTAL_STEPS" "构建 Docker 镜像"
 
-if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
-  if [[ "$MULTI_PLATFORM" == "true" ]]; then
-    # 多平台：必须用 --push 直接推送（不支持 --load）
-    TAGS="--tag ${FULL_IMAGE}:${TAG}"
-    if [[ "$TAG" != "latest" ]]; then
-      TAGS="${TAGS} --tag ${FULL_IMAGE}:latest"
+cd "$PROJECT_ROOT"
+
+echo "检查并配置 buildx..."
+if ! docker buildx inspect mybuilder > /dev/null 2>&1; then
+    print_info "创建新的 buildx 构建器..."
+    docker buildx create --name mybuilder --use --driver docker-container --bootstrap
+else
+    docker buildx use mybuilder
+fi
+
+print_info "开始构建镜像..."
+print_info "IMAGE: ${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"
+
+TAGS="-t ${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"
+
+docker buildx build \
+  --build-arg "APP_VERSION=${VERSION_TAG}" \
+  --platform linux/amd64 \
+  --provenance=false \
+  --sbom=false \
+  -f docker/Dockerfile \
+  ${TAGS} \
+  --push .
+
+if [ $? -eq 0 ]; then
+    print_success "版本镜像构建并推送成功：${VERSION_TAG}"
+else
+    print_error "镜像构建失败!"
+    exit 1
+fi
+echo ""
+
+# ============================================
+# 步骤 3: 处理 latest 标签
+# ============================================
+print_step "3" "$TOTAL_STEPS" "处理 latest 标签"
+
+if [ "$IS_BETA_VERSION" = false ]; then
+    print_info "当前版本标签已推送：${VERSION_TAG}"
+    echo -n "是否同步推送 latest 标签？(Y/n): "
+    read CONFIRM_LATEST
+    CONFIRM_LATEST=${CONFIRM_LATEST:-"Y"}
+
+    if [[ "$CONFIRM_LATEST" =~ ^[Yy]$ ]]; then
+        print_info "正在同步 latest -> ${VERSION_TAG}"
+        docker buildx imagetools create \
+          -t ${REGISTRY}/${IMAGE_NAME}:${LATEST_TAG} \
+          ${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}
+
+        if [ $? -eq 0 ]; then
+            print_success "latest 标签已同步"
+        else
+            print_error "latest 标签同步失败!"
+            exit 1
+        fi
+    else
+        print_warning "已跳过 latest 标签同步"
     fi
-
-    echo ""
-    echo "🔨 多平台构建并推送 ${FULL_IMAGE}:${TAG} ..."
-    docker buildx build -f docker/Dockerfile \
-      --platform "${PLATFORM}" \
-      --build-arg APP_VERSION="${VERSION}" \
-      ${TAGS} \
-      --push .
-  else
-    # 单平台：先 load 到本地，再 push（使用默认 builder，速度快）
-    echo ""
-    echo "🔨 构建 ${FULL_IMAGE}:${TAG} ..."
-    docker buildx build -f docker/Dockerfile \
-      --platform "${PLATFORM}" \
-      --build-arg APP_VERSION="${VERSION}" \
-      --tag "${FULL_IMAGE}:${TAG}" \
-      --load .
-
-    echo "📤 推送 ${FULL_IMAGE}:${TAG} ..."
-    docker push "${FULL_IMAGE}:${TAG}"
-
-    if [[ "$TAG" != "latest" ]]; then
-      docker tag "${FULL_IMAGE}:${TAG}" "${FULL_IMAGE}:latest"
-      docker push "${FULL_IMAGE}:latest"
-    fi
-  fi
-
-  echo ""
-  echo "✅ 构建并推送完成: ${FULL_IMAGE}:${TAG}"
 else
-  # 仅构建到本地
-  echo ""
-  echo "🔨 构建镜像到本地 ${IMAGE_NAME}:${TAG} ..."
-  docker buildx build -f docker/Dockerfile \
-    --platform "${PLATFORM}" \
-    --build-arg APP_VERSION="${VERSION}" \
-    --tag "${IMAGE_NAME}:${TAG}" \
-    --load .
-
-  echo ""
-  echo "✅ 构建完成: ${IMAGE_NAME}:${TAG}"
+    print_warning "Beta 版本不推送 latest 标签"
 fi
 
-# 构建成功后，回写版本号到 docker/.env
-if [[ -f "$ENV_FILE" ]]; then
-  if grep -q "^APP_VERSION=" "$ENV_FILE"; then
-    sed -i '' "s/^APP_VERSION=.*/APP_VERSION=${VERSION}/" "$ENV_FILE"
-  else
-    echo "APP_VERSION=${VERSION}" >> "$ENV_FILE"
-  fi
+echo ""
+
+# ============================================
+# 步骤 4: 更新版本号
+# ============================================
+print_step "4" "$TOTAL_STEPS" "更新版本号"
+
+# 写入 .env
+if [ -f "$ENV_FILE" ] && grep -q "^APP_VERSION=" "$ENV_FILE"; then
+    sed -i '' "s/^APP_VERSION=.*/APP_VERSION=${VERSION_TAG_BASE}/" "$ENV_FILE"
 else
-  echo "APP_VERSION=${VERSION}" > "$ENV_FILE"
+    echo "APP_VERSION=${VERSION_TAG_BASE}" > "$ENV_FILE"
 fi
-echo "📝 版本号已写入: docker/.env → APP_VERSION=${VERSION}"
+print_success "版本号已写入: docker/.env → APP_VERSION=${VERSION_TAG_BASE}"
 
 echo ""
-echo "运行方式："
-echo "  cd docker && docker compose up -d"
+
+# ============================================
+# 完成
+# ============================================
+print_step "✓" "$TOTAL_STEPS" "构建完成"
+print_success "所有步骤已完成!"
+print_info "版本类型：$([ "$IS_BETA_VERSION" = true ] && echo "Beta 版本" || echo "正常版本")"
+print_info "最终版本号：${VERSION_TAG}"
+if [ "$IS_BETA_VERSION" = false ]; then
+    print_info "latest 同步状态：$([[ "${CONFIRM_LATEST:-Y}" =~ ^[Yy]$ ]] && echo "已同步" || echo "未同步")"
+else
+    print_info "latest 同步状态：Beta 版本已跳过"
+fi
 echo ""
-echo "或直接运行："
-echo "  docker run -d --name lynx-invest -p 3456:3456 -v \$(pwd)/data:/app/data ${IMAGE_NAME}:${TAG}"
+print_info "部署方式：cd docker && docker compose pull && docker compose up -d"
+echo ""
+print_success "🎉 完成！"
+echo ""

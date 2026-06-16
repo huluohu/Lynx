@@ -5,6 +5,76 @@
       <button class="btn btn-primary" @click="showForm = true">+ 添加记录</button>
     </div>
 
+    <div class="card history-desktop-filters" style="margin-bottom:20px">
+      <div class="section-title">筛选记录</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">资产</label>
+          <select class="form-select" v-model="filters.asset_id">
+            <option value="">全部资产</option>
+            <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">类型</label>
+          <select class="form-select" v-model="filters.type">
+            <option value="">全部类型</option>
+            <option value="buy">买入</option>
+            <option value="sell">卖出</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">状态</label>
+          <select class="form-select" v-model="filters.status">
+            <option value="">全部状态</option>
+            <option value="active">有效</option>
+            <option value="reverted">已撤销</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">计价单位</label>
+          <select class="form-select" v-model="filters.currency">
+            <option value="">全部币种</option>
+            <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">开始日期</label>
+          <input class="form-input" type="date" v-model="filters.start_date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">结束日期</label>
+          <input class="form-input" type="date" v-model="filters.end_date" />
+        </div>
+      </div>
+      <div class="history-filter-actions">
+        <button class="btn btn-primary" @click="loadData">筛选</button>
+        <button class="btn" @click="resetFilters">重置</button>
+      </div>
+    </div>
+
+    <div class="mobile-only history-mobile-toolbar">
+      <div class="history-mobile-toolbar-top">
+        <div class="history-mobile-result">{{ totalCount }} 条记录</div>
+        <button class="btn btn-inline-icon" @click="sortDrawerOpen = true">{{ currentSortLabel }}</button>
+      </div>
+      <div class="history-mobile-toolbar-actions">
+        <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
+          <span>筛选</span>
+          <span v-if="activeFilterCount" class="mobile-filter-badge">{{ activeFilterCount }}</span>
+        </button>
+        <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">清空</button>
+      </div>
+      <div v-if="activeFilterChips.length" class="history-filter-chips">
+        <button v-for="chip in activeFilterChips" :key="chip.key" class="history-filter-chip" @click="removeFilter(chip.key)">
+          <span>{{ chip.label }}</span>
+          <span>×</span>
+        </button>
+      </div>
+    </div>
+
     <div class="card" v-if="showForm" style="max-width:540px;margin-bottom:20px">
       <div class="section-title">记录交易</div>
       <form @submit.prevent="addRecord">
@@ -69,8 +139,10 @@
             <td>{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</td>
             <td :class="(h.pnl||0)>=0?'pnl positive':'pnl negative'">{{ h.pnl ? (h.pnl>=0?'+':'') + moneyPrefix(h.currency) + fmt(Math.abs(h.pnl)) : '-' }}</td>
             <td>
-              <button v-if="!h.reverted" class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">撤销</button>
-              <span v-else class="history-action-placeholder">-</span>
+              <div class="history-actions">
+                <button v-if="!h.reverted" class="btn btn-sm btn-danger" @click.stop="openUndoDialog(h)">撤销</button>
+                <button v-else class="btn btn-sm btn-danger" @click.stop="confirmDelete(h)">删除</button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -100,6 +172,10 @@
             <button v-if="!h.reverted" class="swipe-action-btn danger" @click="openUndoDialog(h)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
               撤销
+            </button>
+            <button v-else class="swipe-action-btn danger" @click="confirmDelete(h)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              删除
             </button>
           </template>
         </SwipeActionItem>
@@ -139,6 +215,77 @@
           <div style="padding:10px 14px;font-size:14px;color:var(--text-dim);line-height:1.5">{{ detailRecord.reason }}</div>
         </div>
       </div>
+      <template #footer v-if="detailRecord?.reverted">
+        <button class="btn btn-danger" style="width:100%" @click="confirmDelete(detailRecord)">删除已撤销记录</button>
+      </template>
+    </AppDrawer>
+
+    <AppDrawer v-model="filterDrawerOpen" title="筛选记录">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">资产</label>
+          <select class="form-select" v-model="draftFilters.asset_id">
+            <option value="">全部资产</option>
+            <option v-for="a in assets" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">类型</label>
+          <select class="form-select" v-model="draftFilters.type">
+            <option value="">全部类型</option>
+            <option value="buy">买入</option>
+            <option value="sell">卖出</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">状态</label>
+          <select class="form-select" v-model="draftFilters.status">
+            <option value="">全部状态</option>
+            <option value="active">有效</option>
+            <option value="reverted">已撤销</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">计价单位</label>
+          <select class="form-select" v-model="draftFilters.currency">
+            <option value="">全部币种</option>
+            <option v-for="currency in currencyOptions" :key="currency" :value="currency">{{ currency }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">开始日期</label>
+          <input class="form-input" type="date" v-model="draftFilters.start_date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">结束日期</label>
+          <input class="form-input" type="date" v-model="draftFilters.end_date" />
+        </div>
+      </div>
+      <template #footer>
+        <div class="history-drawer-actions">
+          <button class="btn" @click="resetDraftFilters">重置</button>
+          <button class="btn btn-primary" @click="applyMobileFilters">应用筛选</button>
+        </div>
+      </template>
+    </AppDrawer>
+
+    <AppDrawer v-model="sortDrawerOpen" title="排序方式">
+      <div class="history-sort-options">
+        <button
+          v-for="option in sortOptions"
+          :key="option.value"
+          class="history-sort-option"
+          :class="{ active: filters.sort === option.value }"
+          @click="applySort(option.value)"
+        >
+          <span>{{ option.label }}</span>
+          <span v-if="filters.sort === option.value">✓</span>
+        </button>
+      </div>
     </AppDrawer>
 
     <Teleport to="body">
@@ -170,11 +317,13 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { useConfirm } from '../utils/confirm.js'
 import { currencySymbol } from '../utils/currency.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
+const confirm = useConfirm()
 const history = ref([])
 const assets = ref([])
 const loading = ref(true)
@@ -183,12 +332,36 @@ const submitting = ref(false)
 const showDetailDrawer = ref(false)
 const detailRecord = ref(null)
 const undoSubmitting = ref(false)
+const filterDrawerOpen = ref(false)
+const sortDrawerOpen = ref(false)
+const totalCount = ref(0)
 const currencyOptions = ['CNY', 'USD', 'USDT', 'BTC', 'ETH']
+const sortOptions = [
+  { value: 'executed_desc', label: '最新优先' },
+  { value: 'executed_asc', label: '最早优先' },
+  { value: 'total_desc', label: '金额从高到低' },
+  { value: 'total_asc', label: '金额从低到高' },
+]
 const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', currency: 'CNY', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
 const undoDialog = reactive({ open: false, record: null, rollbackHoldings: true })
+const filters = reactive({ asset_id: '', type: '', status: '', currency: '', start_date: '', end_date: '', sort: 'executed_desc' })
+const draftFilters = reactive({ asset_id: '', type: '', status: '', currency: '', start_date: '', end_date: '' })
 
 const selectedAsset = computed(() => assets.value.find(asset => String(asset.id) === String(form.asset_id)) || null)
 const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto')
+const currentSortLabel = computed(() => sortOptions.find(option => option.value === filters.sort)?.label || '排序')
+const activeFilterCount = computed(() => ['asset_id', 'type', 'status', 'currency', 'start_date', 'end_date'].filter(key => filters[key]).length)
+const activeFilterChips = computed(() => {
+  const assetName = assets.value.find(asset => String(asset.id) === filters.asset_id)?.name
+  return [
+    filters.asset_id ? { key: 'asset_id', label: assetName || '资产' } : null,
+    filters.type ? { key: 'type', label: filters.type === 'buy' ? '买入' : '卖出' } : null,
+    filters.status ? { key: 'status', label: filters.status === 'active' ? '有效' : '已撤销' } : null,
+    filters.currency ? { key: 'currency', label: filters.currency } : null,
+    filters.start_date ? { key: 'start_date', label: `起 ${filters.start_date}` } : null,
+    filters.end_date ? { key: 'end_date', label: `止 ${filters.end_date}` } : null,
+  ].filter(Boolean)
+})
 
 watch(selectedAsset, (asset) => {
   if (showCurrencyField.value) {
@@ -200,8 +373,15 @@ watch(selectedAsset, (asset) => {
 
 async function loadData() {
   try {
-    const [hres, ares] = await Promise.all([api('/api/history'), api('/api/assets')])
-    history.value = (await hres.json()).data || []
+    const query = new URLSearchParams()
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) query.set(key, value)
+    }
+    const historyUrl = query.toString() ? `/api/history?${query.toString()}` : '/api/history'
+    const [hres, ares] = await Promise.all([api(historyUrl), api('/api/assets')])
+    const historyJson = await hres.json()
+    history.value = historyJson.data || []
+    totalCount.value = Number(historyJson.total || 0)
     assets.value = (await ares.json()).data || []
     if (detailRecord.value) {
       detailRecord.value = history.value.find(item => item.id === detailRecord.value.id) || detailRecord.value
@@ -222,6 +402,59 @@ function resetForm() {
   form.pnl_pct = ''
   form.executed_at = new Date().toISOString().slice(0, 10)
   form.reason = ''
+}
+
+function resetFilters() {
+  filters.asset_id = ''
+  filters.type = ''
+  filters.status = ''
+  filters.currency = ''
+  filters.start_date = ''
+  filters.end_date = ''
+  filters.sort = 'executed_desc'
+  syncDraftFilters()
+  loadData()
+}
+
+function syncDraftFilters() {
+  draftFilters.asset_id = filters.asset_id
+  draftFilters.type = filters.type
+  draftFilters.status = filters.status
+  draftFilters.currency = filters.currency
+  draftFilters.start_date = filters.start_date
+  draftFilters.end_date = filters.end_date
+}
+
+function resetDraftFilters() {
+  draftFilters.asset_id = ''
+  draftFilters.type = ''
+  draftFilters.status = ''
+  draftFilters.currency = ''
+  draftFilters.start_date = ''
+  draftFilters.end_date = ''
+}
+
+async function applyMobileFilters() {
+  filters.asset_id = draftFilters.asset_id
+  filters.type = draftFilters.type
+  filters.status = draftFilters.status
+  filters.currency = draftFilters.currency
+  filters.start_date = draftFilters.start_date
+  filters.end_date = draftFilters.end_date
+  filterDrawerOpen.value = false
+  await loadData()
+}
+
+async function applySort(value) {
+  filters.sort = value
+  sortDrawerOpen.value = false
+  await loadData()
+}
+
+function removeFilter(key) {
+  filters[key] = ''
+  syncDraftFilters()
+  loadData()
 }
 
 function openDetail(record) {
@@ -297,6 +530,35 @@ async function confirmUndo() {
   }
 }
 
+async function confirmDelete(record) {
+  const ok = await confirm({
+    title: '删除交易记录',
+    message: '仅已撤销记录支持删除。删除后无法恢复，确定继续吗？',
+    confirmText: '删除',
+    cancelText: '取消',
+    danger: true,
+    icon: 'delete',
+  })
+  if (!ok) return
+
+  try {
+    const res = await api(`/api/history/${record.id}`, { method: 'DELETE' })
+    const json = await res.json()
+    if (!json.success) {
+      toast.error(json.error || '删除失败')
+      return
+    }
+    if (detailRecord.value?.id === record.id) {
+      showDetailDrawer.value = false
+      detailRecord.value = null
+    }
+    await loadData()
+    toast.success('交易记录已删除')
+  } catch (error) {
+    toast.error(error.message || '删除失败')
+  }
+}
+
 function fmt(n, maxFractionDigits = 2) {
   if (n === null || n === undefined || n === '') return '0'
   return Number(n).toLocaleString(undefined, { maximumFractionDigits: maxFractionDigits })
@@ -308,15 +570,97 @@ function moneyPrefix(currency = 'CNY') {
 }
 
 onMounted(loadData)
+watch(filterDrawerOpen, (open) => {
+  if (open) syncDraftFilters()
+})
 </script>
 
 <style scoped>
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
+.history-desktop-filters { display: block; }
 .currency-help { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
+.history-filter-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.history-mobile-toolbar {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.history-mobile-toolbar-top,
+.history-mobile-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.history-mobile-result {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.mobile-filter-badge {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.history-filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.history-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+.history-drawer-actions {
+  display: flex;
+  gap: 12px;
+}
+.history-drawer-actions .btn {
+  flex: 1;
+}
+.history-sort-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-sort-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.history-sort-option.active {
+  border-color: var(--blue);
+  color: var(--blue);
+}
 .history-row { cursor: pointer; }
 .history-type-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.history-action-placeholder { color: var(--text-muted); }
+.history-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .reverted-row td { opacity: 0.5; text-decoration: line-through; }
 .history-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
 .history-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: background 0.15s; }
@@ -375,9 +719,13 @@ onMounted(loadData)
 .dialog-leave-to .dialog-box { transform: scale(0.95); }
 
 @media (max-width: 768px) {
+  .history-desktop-filters { display: none; }
+  .history-mobile-toolbar { display: flex; }
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
+  .history-mobile-toolbar-actions .btn { flex: 1; }
   .history-card-header { align-items: flex-start; }
+  .history-filter-actions .btn { flex: 1; }
   .dialog-box { width: 100%; margin: 16px; }
   .dialog-actions { flex-wrap: wrap; gap: 8px; }
   .dialog-actions .btn { flex: 1; min-width: 0; }
