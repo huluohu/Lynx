@@ -988,6 +988,7 @@ export default {
     evalScore: 'Quality score',
     evalGrade: 'Grade',
     viewResult: 'View strategy result',
+    waitingForResult: 'Preparing strategy result...',
     resumeFromFailure: 'Resume from failure',
     cancelGenerate: 'Cancel',
     cancelConfirm: 'Confirm cancel',

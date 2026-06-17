@@ -988,6 +988,7 @@ export default {
     evalScore: '质量评分',
     evalGrade: '评级',
     viewResult: '查看策略结果',
+    waitingForResult: '正在整理策略结果...',
     resumeFromFailure: '从失败点继续',
     cancelGenerate: '取消生成',
     cancelConfirm: '确认取消',

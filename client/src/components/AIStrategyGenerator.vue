@@ -297,6 +297,7 @@
       :eval-score="evalResult?.score ?? null"
       :grade="evalResult?.grade ?? null"
       :can-resume="!!currentTraceId"
+      :result-ready="step === 'preview' && !!result"
       @close="closeProgressOverlay"
       @cancel="cancelGenerate"
       @resume="resumeGenerate"
@@ -323,7 +324,7 @@ const props = defineProps({
   presetRiskLevel: { type: String, default: '' },
   existingStrategyId: { type: [Number, String], default: null },
 })
-const emit = defineEmits(['done'])
+const emit = defineEmits(['done', 'generated'])
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -760,7 +761,7 @@ function handleSSEEvent(event, data) {
     } else if (stepName === 'evaluating') {
       updateAgentStep('evaluating', 'active', message)
     } else if (stepName === 'done') {
-      updateAgentStep('evaluating', 'done', message)
+      updateAgentStep('evaluating', 'active', message || t('aiStrategyGenerator.waitingForResult'))
       if (detail?.eval_score != null) evalResult.value = detail
     }
   } else if (event === 'result') {
@@ -768,6 +769,7 @@ function handleSSEEvent(event, data) {
       result.value = data.data
       editablePlans.value = JSON.parse(JSON.stringify(data.data.plans || []))
       generationId.value = data.data.generation_id || null
+      agentSteps.value.forEach(s => { s.status = 'done' })
       // Extract eval and trace info from result
       if (data.data.eval) evalResult.value = data.data.eval
       if (data.data.data_quality_score != null) dataQualityScore.value = data.data.data_quality_score
@@ -777,6 +779,7 @@ function handleSSEEvent(event, data) {
       }
       step.value = 'preview'
       showAnalysis.value = true
+      emit('generated', generationId.value)
     } else {
       error.value = data.error || t('aiStrategyGenerator.generateFailed')
     }

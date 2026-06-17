@@ -2,19 +2,19 @@
   <Teleport to="body">
     <Transition name="agent-overlay">
       <div v-if="visible" class="agent-overlay" @click.self.prevent @touchmove.prevent>
-        <div class="agent-panel" :class="{ 'has-error': !!error, 'is-done': isDone }">
+        <div class="agent-panel" :class="{ 'has-error': !!error, 'is-done': canViewResult }">
 
           <!-- Header -->
           <div class="agent-panel-header">
             <div class="agent-icon-title">
-              <span class="header-icon" :class="{ success: isDone, danger: !!error }">
-                <AppIcon :name="isDone ? 'check' : error ? 'x' : 'sparkles'" size="18" />
+              <span class="header-icon" :class="{ success: canViewResult, danger: !!error }">
+                <AppIcon :name="canViewResult ? 'check' : error ? 'x' : 'sparkles'" size="18" />
               </span>
               <span class="header-title">{{ t('aiStrategyGenerator.agentWorking') }}</span>
             </div>
             <div class="header-right">
-              <div v-if="!isDone && !error" class="header-spinner"></div>
-              <button v-if="!isDone && !error" class="btn-cancel" @click="$emit('cancel')">
+              <div v-if="!canViewResult && !error" class="header-spinner"></div>
+              <button v-if="!canViewResult && !error" class="btn-cancel" @click="$emit('cancel')">
                 {{ t('aiStrategyGenerator.cancelGenerate') }}
               </button>
             </div>
@@ -52,7 +52,7 @@
                 <div
                   class="progress-fill"
                   :style="{ width: overallPct + '%' }"
-                  :class="{ 'fill-done': isDone }"
+                  :class="{ 'fill-done': canViewResult }"
                 ></div>
               </div>
               <span class="progress-pct">{{ overallPct }}%</span>
@@ -67,7 +67,7 @@
             </div>
 
             <!-- Done state CTA -->
-            <div v-if="isDone" class="done-cta">
+            <div v-if="canViewResult" class="done-cta">
               <div class="done-summary">
                 <span v-if="evalScore != null" class="done-score">
                   {{ t('aiStrategyGenerator.evalScore') }}
@@ -102,9 +102,11 @@ const props = defineProps({
   evalScore: { type: Number, default: null },
   grade: { type: String, default: null },
   canResume: { type: Boolean, default: false },
+  resultReady: { type: Boolean, default: false },
 })
 
 const isDone = computed(() => !props.error && props.steps.length > 0 && props.steps.every(s => s.status === 'done'))
+const canViewResult = computed(() => isDone.value && props.resultReady)
 
 const overallPct = computed(() => {
   if (!props.steps.length) return 0

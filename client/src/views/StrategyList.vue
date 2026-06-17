@@ -88,7 +88,7 @@
 
     <!-- AI Drawer -->
     <AppDrawer v-model="showAI" :title="t('strategyList.aiDrawerTitle')">
-      <AIStrategyGenerator @done="onAIDone" />
+      <AIStrategyGenerator @done="onAIDone" @generated="onAIGenerated" />
     </AppDrawer>
 
     <!-- Detail Drawer -->
@@ -325,6 +325,7 @@ async function discardDraft(d) {
 }
 
 function onAIDone() { showAI.value = false; loadData(); loadDrafts() }
+function onAIGenerated() { loadDrafts() }
 
 async function deleteStrategy(s) {
   const ok = await confirm({
