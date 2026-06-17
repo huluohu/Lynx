@@ -4,20 +4,20 @@
       <h1 class="page-title">{{ pageTitle }}</h1>
       <div v-if="!loading" class="page-header-right desktop-only">
         <div class="page-header-actions">
-          <button class="btn" @click="runBacktestAction" :disabled="backtesting">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 2 4-5"/></svg>
+          <button class="btn btn-inline-icon" @click="runBacktestAction" :disabled="backtesting">
+            <AppIcon name="backtest" size="16" />
             {{ backtesting ? t('strategyDetail.backtesting') : t('strategyDetail.backtest') }}
           </button>
-          <button class="btn" @click="runStressTestAction" :disabled="stressTesting">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 3h6"/><path d="M10 9h4"/><path d="M8 3v3.5a1 1 0 0 0 .3.7l5.4 5.4a4 4 0 1 1-5.66 5.66l-5.4-5.4A1 1 0 0 1 2 12.16V3h6"/><path d="M14 3v3.5a1 1 0 0 1-.3.7l-.7.7"/></svg>
+          <button class="btn btn-inline-icon" @click="runStressTestAction" :disabled="stressTesting">
+            <AppIcon name="stress-test" size="16" />
             {{ stressTesting ? t('strategyDetail.stressTesting') : t('strategyDetail.stressTest') }}
           </button>
-          <button class="btn" @click="runReviewAction" :disabled="reviewing">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M12 8h.01"/><path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg>
+          <button class="btn btn-inline-icon" @click="runReviewAction" :disabled="reviewing">
+            <AppIcon name="review" size="16" />
             {{ reviewing ? t('strategyDetail.reviewing') : t('strategyDetail.review') }}
           </button>
-          <button class="btn" @click="showChatDrawer = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> {{ t('strategyDetail.chatAdjust') }}</button>
-          <button class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyDetail.regenerate') }}</button>
+          <button class="btn btn-inline-icon" @click="showChatDrawer = true"><AppIcon name="chat" size="16" /> {{ t('strategyDetail.chatAdjust') }}</button>
+          <button class="btn btn-inline-icon" @click="showAIRegenerate = true"><AppIcon name="sparkles" size="16" /> {{ t('strategyDetail.regenerate') }}</button>
           <button class="btn btn-primary" @click="generatePlan" :disabled="generating">{{ generating ? t('strategyDetail.generatingPlan') : t('strategyDetail.generatePlan') }}</button>
           <router-link :to="`/strategies/${route.params.id}/edit`" class="btn">{{ t('strategyDetail.edit') }}</router-link>
           <button class="btn btn-danger" @click="confirmDelete">{{ t('strategyDetail.delete') }}</button>
@@ -343,8 +343,15 @@
       </div>
     </AppDrawer>
 
-    <AppDrawer v-model="showAIRegenerate" :title="`✨ ${t('strategyForm.aiRegenerateTitle')}`">
-      <AIStrategyGenerator :preset-asset-id="strategy.asset_id" :existing-strategy-id="strategy.id" @done="onAIRegenDone" />
+    <AppDrawer v-model="showAIRegenerate" :title="t('strategyForm.aiRegenerateTitle')">
+      <AIStrategyGenerator
+        :preset-asset-ids="strategyPresetAssetIds"
+        :preset-budget="strategyAIPreset.budget"
+        :preset-goal="strategyAIPreset.goal"
+        :preset-risk-level="strategyAIPreset.riskLevel"
+        :existing-strategy-id="strategy.id"
+        @done="onAIRegenDone"
+      />
     </AppDrawer>
   </div>
 </template>
@@ -358,6 +365,7 @@ import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { formatCurrencyAmount, formatSignedCurrencyAmount } from '../utils/currency.js'
@@ -426,6 +434,83 @@ const valueAvgAssetRows = computed(() => buildPerAssetRows((params) => ({ target
 const latestBacktest = computed(() => backtestResults.value[0] || null)
 const latestReview = computed(() => reviews.value[0] || null)
 const olderReviews = computed(() => reviews.value.slice(1))
+const strategyPresetAssetIds = computed(() => {
+  const ids = normalizeAssetIdList(strategy.value?.asset_ids)
+  if (!ids.length && strategy.value?.asset_id) return normalizeAssetIdList(strategy.value.asset_id)
+  return ids
+})
+const strategyAIPreset = computed(() => {
+  const params = safeParseParameters(strategy.value?.parameters)
+  return {
+    budget: inferBudget(params),
+    goal: inferGoal(strategy.value?.type, params),
+    riskLevel: inferRiskLevel(params),
+  }
+})
+
+function normalizeAssetIdList(value) {
+  let ids = []
+  if (Array.isArray(value)) {
+    ids = value
+  } else if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value)
+      ids = Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+      ids = value.split(',')
+    }
+  } else if (value !== undefined && value !== null && value !== '') {
+    ids = [value]
+  }
+  const normalized = []
+  for (const id of ids) {
+    const number = Number(id)
+    if (Number.isFinite(number) && !normalized.includes(number)) normalized.push(number)
+  }
+  return normalized
+}
+
+function safeParseParameters(value) {
+  try {
+    if (!value) return {}
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return {}
+  }
+}
+
+function inferBudget(params) {
+  const direct = Number(params?.budget)
+  if (Number.isFinite(direct) && direct > 0) return direct
+  if (Array.isArray(params?.buy_lines)) {
+    const total = params.buy_lines.reduce((sum, line) => sum + (Number(line?.amount) || 0), 0)
+    if (total > 0) return total
+  }
+  if (params?.per_asset && typeof params.per_asset === 'object') {
+    const total = Object.values(params.per_asset).reduce((sum, item) => sum + (Number(item?.amount_per || item?.target_value) || 0), 0)
+    if (total > 0) return total
+  }
+  const amountPer = Number(params?.amount_per)
+  const periods = Number(params?.periods)
+  if (Number.isFinite(amountPer) && amountPer > 0 && Number.isFinite(periods) && periods > 0) return amountPer * periods
+  return 20000
+}
+
+function inferGoal(type, params) {
+  if (['recovery', 'growth', 'balanced', 'trend', 'rebalance'].includes(params?.goal)) return params.goal
+  return {
+    recovery: 'recovery',
+    dca: 'balanced',
+    grid: 'balanced',
+    value_avg: 'growth',
+    trend: 'trend',
+    rebalance: 'rebalance',
+  }[type] || 'balanced'
+}
+
+function inferRiskLevel(params) {
+  return ['low', 'medium', 'high'].includes(params?.risk_level) ? params.risk_level : 'medium'
+}
 
 function safeParse(value, fallback) {
   try { return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback) } catch { return fallback }

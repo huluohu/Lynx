@@ -2,7 +2,7 @@
   <PullRefreshView :onRefresh="refresh">
   <div>
     <div class="page-header">
-      <h1 class="page-title">{{ asset.icon || '📈' }} {{ asset.name || t('marketDetail.title') }}</h1>
+      <h1 class="page-title page-title-inline"><span v-if="asset.icon">{{ asset.icon }}</span><AppIcon v-else name="market" size="20" /> {{ asset.name || t('marketDetail.title') }}</h1>
       <div class="page-header-right desktop-only">
         <div class="page-header-actions">
           <router-link to="/market" class="btn">{{ t('marketDetail.back') }}</router-link>
@@ -60,11 +60,12 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { formatCurrencyAmount } from '../utils/currency.js'
-import { formatDate } from '../utils/formatters.js'
+import { formatDateTimeSeconds } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import TrendChart from '../components/TrendChart.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 useSwipeBack()
 
@@ -125,7 +126,7 @@ function assetTypeLabel(type) {
   return type ? t(`assets.types.${type}`, type) : '-'
 }
 function formatDateTime(value) {
-  return formatDate(value)
+  return formatDateTimeSeconds(value)
 }
 
 watch(priceTrendRange, () => {

@@ -105,7 +105,7 @@
         </div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">{{ t('history.total') }}</label><input class="form-input" type="number" step="any" v-model="form.total" /></div>
-          <div class="form-group"><label class="form-label">{{ t('history.date') }}</label><input class="form-input" type="date" v-model="form.executed_at" /></div>
+          <div class="form-group"><label class="form-label">{{ t('history.date') }}</label><input class="form-input" type="datetime-local" step="1" v-model="form.executed_at" /></div>
         </div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">{{ t('holdings.pnl') }}</label><input class="form-input" type="number" step="any" v-model="form.pnl" /></div>
@@ -124,7 +124,7 @@
         <thead><tr><th>{{ t('history.date') }}</th><th>{{ t('history.asset') }}</th><th>{{ t('history.type') }}</th><th>{{ t('holdings.quantity') }}</th><th>{{ t('history.price') }}</th><th>{{ t('history.total') }}</th><th>{{ t('holdings.pnl') }}</th><th>{{ t('common.confirm') }}</th></tr></thead>
         <tbody>
           <tr v-for="h in history" :key="h.id" class="history-row" :class="{ 'reverted-row': h.reverted }" @click="openDetail(h)">
-            <td>{{ h.executed_at?.slice(0,10) }}</td>
+            <td>{{ formatDate(h.executed_at) }}</td>
             <td>{{ h.asset_name }}</td>
             <td>
               <div class="history-type-cell">
@@ -156,7 +156,7 @@
                   <span class="badge" :class="h.type==='buy'?'badge-buy':'badge-sell'">{{ h.type==='buy'?t('history.buy'):t('history.sell') }}</span>
                   <span v-if="h.reverted" class="badge badge-sell">{{ t('history.reverted') }}</span>
                 </div>
-                <div class="history-card-meta">{{ h.executed_at?.slice(0,10) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
+                <div class="history-card-meta">{{ formatDate(h.executed_at) }} · {{ h.quantity }} × {{ moneyPrefix(h.currency) }}{{ fmt(h.price, 8) }}</div>
               </div>
               <div class="history-card-total">{{ moneyPrefix(h.currency) }}{{ fmt(h.total) }}</div>
             </div>
@@ -179,7 +179,12 @@
         </SwipeActionItem>
       </div>
     </div>
-    <div v-else-if="loading" class="card">
+    <div class="pagination history-pagination" v-if="history.length && totalPages > 1">
+      <button class="btn btn-sm" @click="changePage(currentPage - 1)" :disabled="currentPage <= 1">{{ t('alertHistory.pagination.prev') }}</button>
+      <span>{{ t('alertHistory.pagination.summary', { page: currentPage, total: totalPages }) }}</span>
+      <button class="btn btn-sm" @click="changePage(currentPage + 1)" :disabled="currentPage >= totalPages">{{ t('alertHistory.pagination.next') }}</button>
+    </div>
+    <div v-if="loading && !history.length" class="card">
       <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
         <div style="display:flex;gap:12px;align-items:center">
           <div class="skeleton skeleton-badge"></div>
@@ -188,7 +193,7 @@
         </div>
       </div>
     </div>
-    <div v-else class="card empty"><div class="empty-icon">📝</div><p>{{ t('history.empty') }}</p></div>
+    <div v-else-if="!history.length" class="card empty"><div class="empty-icon"><AppIcon name="history" size="34" /></div><p>{{ t('history.empty') }}</p></div>
 
     <AppDrawer v-model="showDetailDrawer" :title="detailRecord ? `${detailRecord.asset_name} - ${detailRecord.type==='buy'?t('history.buy'):t('history.sell')}` : t('history.detailTitle')">
       <div v-if="detailRecord" class="detail-drawer-content">
@@ -319,10 +324,11 @@ import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
 import { currencySymbol } from '../utils/currency.js'
-import { formatDateTime, formatNumber } from '../utils/formatters.js'
+import { formatDateTimeSeconds, formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
@@ -339,6 +345,8 @@ const undoSubmitting = ref(false)
 const filterDrawerOpen = ref(false)
 const sortDrawerOpen = ref(false)
 const totalCount = ref(0)
+const currentPage = ref(1)
+const pageSize = 20
 const mobilePageActions = useMobilePageActions()
 const currencyOptions = ['CNY', 'USD', 'USDT', 'BTC', 'ETH']
 const sortOptions = computed(() => [
@@ -347,7 +355,19 @@ const sortOptions = computed(() => [
   { value: 'total_desc', label: t('history.amountDesc') },
   { value: 'total_asc', label: t('history.amountAsc') },
 ])
-const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', currency: 'CNY', total: '', pnl: '', pnl_pct: '', executed_at: new Date().toISOString().slice(0,10), reason: '' })
+function nowDateTimeLocal() {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 19)
+}
+
+function normalizeLocalDateTime(value) {
+  if (!value) return nowDateTimeLocal().replace('T', ' ')
+  const normalized = String(value).replace('T', ' ')
+  return normalized.length === 16 ? `${normalized}:00` : normalized.slice(0, 19)
+}
+
+const form = reactive({ asset_id: '', type: 'buy', quantity: '', price: '', currency: 'CNY', total: '', pnl: '', pnl_pct: '', executed_at: nowDateTimeLocal(), reason: '' })
 const undoDialog = reactive({ open: false, record: null, rollbackHoldings: true })
 const filters = reactive({ asset_id: '', type: '', status: '', currency: '', start_date: '', end_date: '', sort: 'executed_desc' })
 const draftFilters = reactive({ asset_id: '', type: '', status: '', currency: '', start_date: '', end_date: '' })
@@ -355,6 +375,7 @@ const draftFilters = reactive({ asset_id: '', type: '', status: '', currency: ''
 const selectedAsset = computed(() => assets.value.find(asset => String(asset.id) === String(form.asset_id)) || null)
 const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto')
 const currentSortLabel = computed(() => sortOptions.value.find(option => option.value === filters.sort)?.label || t('history.sort'))
+const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize)))
 const activeFilterCount = computed(() => ['asset_id', 'type', 'status', 'currency', 'start_date', 'end_date'].filter(key => filters[key]).length)
 const activeFilterChips = computed(() => {
   const assetName = assets.value.find(asset => String(asset.id) === filters.asset_id)?.name
@@ -382,11 +403,17 @@ async function loadData() {
     for (const [key, value] of Object.entries(filters)) {
       if (value) query.set(key, value)
     }
+    query.set('limit', String(pageSize))
+    query.set('offset', String((currentPage.value - 1) * pageSize))
     const historyUrl = query.toString() ? `/api/history?${query.toString()}` : '/api/history'
     const [hres, ares] = await Promise.all([api(historyUrl), api('/api/assets')])
     const historyJson = await hres.json()
     history.value = historyJson.data || []
     totalCount.value = Number(historyJson.total || 0)
+    if (!history.value.length && currentPage.value > 1) {
+      currentPage.value = Math.max(1, totalPages.value)
+      return loadData()
+    }
     assets.value = (await ares.json()).data || []
     if (detailRecord.value) {
       detailRecord.value = history.value.find(item => item.id === detailRecord.value.id) || detailRecord.value
@@ -405,7 +432,7 @@ function resetForm() {
   form.total = ''
   form.pnl = ''
   form.pnl_pct = ''
-  form.executed_at = new Date().toISOString().slice(0, 10)
+  form.executed_at = nowDateTimeLocal()
   form.reason = ''
 }
 
@@ -417,6 +444,7 @@ function resetFilters() {
   filters.start_date = ''
   filters.end_date = ''
   filters.sort = 'executed_desc'
+  currentPage.value = 1
   syncDraftFilters()
   loadData()
 }
@@ -446,20 +474,30 @@ async function applyMobileFilters() {
   filters.currency = draftFilters.currency
   filters.start_date = draftFilters.start_date
   filters.end_date = draftFilters.end_date
+  currentPage.value = 1
   filterDrawerOpen.value = false
   await loadData()
 }
 
 async function applySort(value) {
   filters.sort = value
+  currentPage.value = 1
   sortDrawerOpen.value = false
   await loadData()
 }
 
 function removeFilter(key) {
   filters[key] = ''
+  currentPage.value = 1
   syncDraftFilters()
   loadData()
+}
+
+async function changePage(page) {
+  const nextPage = Math.min(Math.max(1, page), totalPages.value)
+  if (nextPage === currentPage.value) return
+  currentPage.value = nextPage
+  await loadData()
 }
 
 watchEffect(() => {
@@ -515,7 +553,7 @@ async function addRecord() {
       price: Number(form.price),
       currency: form.currency || selectedAsset.value?.currency || 'CNY',
       total: Number(form.total) || Number(form.quantity) * Number(form.price),
-      executed_at: form.executed_at,
+      executed_at: normalizeLocalDateTime(form.executed_at),
       reason: form.reason,
       pnl: form.pnl ? Number(form.pnl) : null,
       pnl_pct: form.pnl_pct ? Number(form.pnl_pct) : null,
@@ -599,7 +637,7 @@ function moneyPrefix(currency = 'CNY') {
 }
 
 function formatDate(value) {
-  return formatDateTime(value, { year: 'numeric', month: '2-digit', day: '2-digit' })
+  return formatDateTimeSeconds(value)
 }
 
 onMounted(loadData)
@@ -651,6 +689,15 @@ watch(filterDrawerOpen, (open) => {
 .history-type-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .history-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .reverted-row td { opacity: 0.5; text-decoration: line-through; }
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: -4px 0 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
 .history-cards { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
 .history-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: background 0.15s; }
 .history-card:hover { background: var(--bg-hover); }

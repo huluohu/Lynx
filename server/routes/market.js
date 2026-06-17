@@ -3,6 +3,7 @@ import { getDb } from '../db/database.js';
 import { createLogger } from '../utils/logger.js';
 import { getCachedMarketSnapshot, getMarketSnapshot } from '../services/market-cache.js';
 import { buildAssetPriceTrend } from '../services/trend.js';
+import { normalizeSqliteUtcTimestamp } from '../utils/datetime.js';
 
 const router = Router();
 const log = createLogger('market');
@@ -51,8 +52,16 @@ router.post('/prices/:assetId/manual', (req, res) => {
 
   const currency = String(req.body?.currency || asset.currency || 'CNY').trim().toUpperCase();
   const fetchedAt = req.body?.fetched_at
-    ? String(req.body.fetched_at).replace('T', ' ').slice(0, 19).padEnd(19, ':00')
+    ? normalizeSqliteUtcTimestamp(req.body.fetched_at, { assumeLocalWhenNoTimezone: true })
     : null;
+
+  if (req.body?.fetched_at && !fetchedAt) {
+    return res.status(400).json({ success: false, error: 'invalid fetched_at' });
+  }
+
+  if (fetchedAt && new Date(`${fetchedAt.replace(' ', 'T')}Z`).getTime() - Date.now() > 60 * 1000) {
+    return res.status(400).json({ success: false, error: 'fetched_at cannot be in the future' });
+  }
 
   if (fetchedAt) {
     db.prepare('INSERT INTO price_cache (asset_id, price, currency, source, fetched_at) VALUES (?, ?, ?, ?, ?)')

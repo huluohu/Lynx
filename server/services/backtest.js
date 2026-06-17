@@ -16,6 +16,19 @@ function parseJson(text, fallback = {}) {
   }
 }
 
+export function loadActivePlanSetPlans(db, strategyId) {
+  const planSet = db.prepare(`SELECT * FROM plan_sets
+    WHERE strategy_id = ? AND status = 'active'
+    ORDER BY version_no DESC, id DESC
+    LIMIT 1`).get(strategyId);
+  if (!planSet) throw new Error('策略暂无 active plan set');
+
+  const plans = db.prepare(`SELECT tp.* FROM trading_plans tp
+    WHERE tp.strategy_id = ? AND tp.plan_set_id = ? AND tp.status != 'cancelled'
+    ORDER BY seq ASC, id ASC`).all(strategyId, planSet.id);
+  return { planSet, plans };
+}
+
 function calculateSharpeRatio(equityCurve) {
   if (!Array.isArray(equityCurve) || equityCurve.length < 2) return 0;
   const returns = [];
@@ -192,9 +205,7 @@ export function runBacktest(strategyId) {
 
   if (!strategy) throw new Error('策略不存在');
 
-  const plans = db.prepare(`SELECT * FROM trading_plans
-    WHERE strategy_id = ?
-    ORDER BY seq ASC, id ASC`).all(strategyId);
+  const { plans } = loadActivePlanSetPlans(db, strategyId);
   if (!plans.length) throw new Error('策略暂无操盘计划');
 
   const assetId = strategy.asset_id || plans[0]?.asset_id;

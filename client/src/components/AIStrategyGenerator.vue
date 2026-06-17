@@ -47,19 +47,19 @@
         <div class="form-group">
           <label class="form-label">{{ t('strategyCompare.goal') }}</label>
           <select class="form-select" v-model="form.goal">
-            <option value="recovery">💉 {{ t('strategyCompare.goals.recovery') }}</option>
-            <option value="growth">📈 {{ t('strategyCompare.goals.growth') }}</option>
-            <option value="balanced">⚖️ {{ t('strategyCompare.goals.balanced') }}</option>
-            <option value="trend">📊 {{ t('strategyCompare.goals.trend') }}</option>
-            <option value="rebalance">⚖️ {{ t('strategyCompare.goals.rebalance') }}</option>
+            <option value="recovery">{{ t('strategyCompare.goals.recovery') }}</option>
+            <option value="growth">{{ t('strategyCompare.goals.growth') }}</option>
+            <option value="balanced">{{ t('strategyCompare.goals.balanced') }}</option>
+            <option value="trend">{{ t('strategyCompare.goals.trend') }}</option>
+            <option value="rebalance">{{ t('strategyCompare.goals.rebalance') }}</option>
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">{{ t('strategyCompare.riskLevel') }}</label>
           <select class="form-select" v-model="form.risk_level">
-            <option value="low">🛡️ {{ t('strategyCompare.risks.low') }}</option>
-            <option value="medium">⚖️ {{ t('strategyCompare.risks.medium') }}</option>
-            <option value="high">🔥 {{ t('strategyCompare.risks.high') }}</option>
+            <option value="low">{{ t('strategyCompare.risks.low') }}</option>
+            <option value="medium">{{ t('strategyCompare.risks.medium') }}</option>
+            <option value="high">{{ t('strategyCompare.risks.high') }}</option>
           </select>
         </div>
       </div>
@@ -92,7 +92,7 @@
             <span class="dq-value" :style="{ color: dataQualityColor(dataQualityScore) }">{{ Math.round(dataQualityScore * 100) }}%</span>
           </div>
           <button v-if="evalResult" class="btn-link" @click="showQualityDetails = !showQualityDetails">
-            {{ t('aiStrategyGenerator.qualityDetails') }} {{ showQualityDetails ? '▲' : '▼' }}
+            {{ t('aiStrategyGenerator.qualityDetails') }} <AppIcon :name="showQualityDetails ? 'chevron-down' : 'chevron-right'" size="14" />
           </button>
         </div>
 
@@ -106,13 +106,13 @@
 
         <!-- Data quality low warning -->
         <div v-if="dataQualityScore != null && dataQualityScore < 0.4" class="agent-warning">
-          ⚠️ {{ t('aiStrategyGenerator.dataQualityLow') }}
+          <AppIcon name="warning" size="14" /> {{ t('aiStrategyGenerator.dataQualityLow') }}
         </div>
 
         <!-- Quality check details (collapsible) -->
         <div v-if="showQualityDetails && evalResult?.checks" class="quality-checks">
           <div v-for="c in evalResult.checks" :key="c.name" class="quality-check-row">
-            <span class="check-icon">{{ c.passed ? '✅' : '❌' }}</span>
+            <span class="check-icon" :class="c.passed ? 'passed' : 'failed'"><AppIcon :name="c.passed ? 'check' : 'x'" size="14" /></span>
             <span class="check-name">{{ c.name.replace(/_/g, ' ') }}</span>
             <span v-if="c.detail" class="check-detail">{{ c.detail }}</span>
           </div>
@@ -122,16 +122,16 @@
         <div v-if="result.consistency_warnings?.length" class="agent-warnings-section">
           <div class="warnings-header clickable" @click="showConsistencyWarnings = !showConsistencyWarnings">
             {{ t('aiStrategyGenerator.consistencyWarnings') }} ({{ result.consistency_warnings.length }})
-            <span>{{ showConsistencyWarnings ? '▲' : '▼' }}</span>
+            <AppIcon :name="showConsistencyWarnings ? 'chevron-down' : 'chevron-right'" size="14" />
           </div>
           <div v-if="showConsistencyWarnings" class="warnings-list">
-            <div v-for="(w, i) in result.consistency_warnings" :key="i" class="warning-item">⚠️ {{ w }}</div>
+            <div v-for="(w, i) in result.consistency_warnings" :key="i" class="warning-item"><AppIcon name="warning" size="14" /> {{ w }}</div>
           </div>
         </div>
 
         <!-- Fix log -->
         <div v-if="result.fix_log?.length" class="fix-log">
-          <span class="fix-log-label">🔧 {{ t('aiStrategyGenerator.fixLog') }}:</span>
+          <span class="fix-log-label"><AppIcon name="tool" size="14" /> {{ t('aiStrategyGenerator.fixLog') }}:</span>
           {{ result.fix_log.join(' · ') }}
         </div>
 
@@ -144,7 +144,7 @@
       <div v-if="result.analysis" class="preview-section analysis-section">
         <div class="section-title clickable" @click="showAnalysis = !showAnalysis">
           {{ t('aiStrategyGenerator.analysisReport') }}
-          <span class="toggle-icon">{{ showAnalysis ? '▼' : '▶' }}</span>
+          <AppIcon class="toggle-icon" :name="showAnalysis ? 'chevron-down' : 'chevron-right'" size="14" />
           <span v-if="result.analysis.confidence_level" class="confidence-badge">
             {{ t('aiStrategyGenerator.confidence', { value: formatRounded(result.analysis.confidence_level * 100) }) }}
           </span>
@@ -238,9 +238,9 @@
               <span v-if="selectedAssetIds.length > 1 && p.asset_id" class="plan-asset-tag">{{ getAssetName(p.asset_id) }}</span>
               <div class="plan-actions">
                 <button class="plan-action-btn" @click="editingPlanIdx = editingPlanIdx === idx ? -1 : idx" :title="editingPlanIdx === idx ? t('aiStrategyGenerator.done') : t('aiStrategyGenerator.edit')">
-                  {{ editingPlanIdx === idx ? '✓' : '✏️' }}
+                  <AppIcon :name="editingPlanIdx === idx ? 'check' : 'edit'" size="14" />
                 </button>
-                <button class="plan-action-btn del" @click="removePlan(idx)" :title="t('aiStrategyGenerator.delete')">✕</button>
+                <button class="plan-action-btn del" @click="removePlan(idx)" :title="t('aiStrategyGenerator.delete')"><AppIcon name="x" size="14" /></button>
               </div>
             </div>
             <div class="plan-preview-meta">
@@ -254,7 +254,7 @@
                 <span v-if="p.new_avg_cost">{{ t('aiStrategyGenerator.averageCostArrow', { value: planMoney(p.new_avg_cost, p.asset_id) }) }}</span>
               </template>
             </div>
-            <div v-if="p.rationale && editingPlanIdx !== idx" class="plan-rationale">📌 {{ p.rationale }}</div>
+            <div v-if="p.rationale && editingPlanIdx !== idx" class="plan-rationale"><AppIcon name="pin" size="13" /> {{ p.rationale }}</div>
             <div v-else-if="p.notes && editingPlanIdx !== idx" style="font-size:11px;color:var(--text-muted);margin-top:2px">{{ p.notes }}</div>
           </div>
         </div>
@@ -263,7 +263,7 @@
       <div class="preview-section regenerate-section">
         <div class="section-title clickable" @click="showRegenerate = !showRegenerate">
           {{ t('aiStrategyGenerator.regenerateTitle') }}
-          <span class="toggle-icon">{{ showRegenerate ? '▼' : '▶' }}</span>
+          <AppIcon class="toggle-icon" :name="showRegenerate ? 'chevron-down' : 'chevron-right'" size="14" />
           <span v-if="regenerateCount > 0" class="regen-count">{{ t('aiStrategyGenerator.iterationCount', { count: regenerateCount }) }}</span>
         </div>
         <div v-if="showRegenerate" class="regenerate-form">
@@ -296,8 +296,10 @@
       :data-quality-score="dataQualityScore"
       :eval-score="evalResult?.score ?? null"
       :grade="evalResult?.grade ?? null"
+      :can-resume="!!currentTraceId"
       @close="closeProgressOverlay"
       @cancel="cancelGenerate"
+      @resume="resumeGenerate"
     />
   </div>
 </template>
@@ -311,9 +313,14 @@ import { useToast } from '../utils/toast.js'
 import { currencyInputLabel, formatCurrencyAmount } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
 import AgentProgressOverlay from './AgentProgressOverlay.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps({
   presetAssetId: { type: [Number, String], default: null },
+  presetAssetIds: { type: Array, default: () => [] },
+  presetBudget: { type: [Number, String], default: null },
+  presetGoal: { type: String, default: '' },
+  presetRiskLevel: { type: String, default: '' },
   existingStrategyId: { type: [Number, String], default: null },
 })
 const emit = defineEmits(['done'])
@@ -358,6 +365,7 @@ const agentSteps = ref([
 const dataQualityScore = ref(null)
 const evalResult = ref(null)
 const traceInfo = ref(null)
+const currentTraceId = ref(null)
 const progressDetail = reactive({})
 const showQualityDetails = ref(false)
 const showTraceInfo = ref(false)
@@ -409,6 +417,33 @@ function toggleAsset(id) {
   if (idx >= 0) selectedAssetIds.value.splice(idx, 1)
   else selectedAssetIds.value.push(id)
   loadAssetInfo()
+}
+
+function normalizeAssetIds(ids) {
+  const items = Array.isArray(ids) ? ids : []
+  const normalized = []
+  for (const id of items) {
+    const number = Number(id)
+    if (Number.isFinite(number) && !normalized.includes(number)) normalized.push(number)
+  }
+  return normalized
+}
+
+function applyPreset() {
+  const ids = normalizeAssetIds(props.presetAssetIds)
+  if (!ids.length && props.presetAssetId) {
+    const id = Number(props.presetAssetId)
+    if (Number.isFinite(id)) ids.push(id)
+  }
+  selectedAssetIds.value = ids
+
+  const budget = Number(props.presetBudget)
+  if (Number.isFinite(budget) && budget > 0) form.budget = budget
+
+  if (['recovery', 'growth', 'balanced', 'trend', 'rebalance'].includes(props.presetGoal)) form.goal = props.presetGoal
+  if (['low', 'medium', 'high'].includes(props.presetRiskLevel)) form.risk_level = props.presetRiskLevel
+
+  if (selectedAssetIds.value.length) loadAssetInfo()
 }
 
 function getAssetName(id) {
@@ -544,6 +579,7 @@ async function generate() {
   dataQualityScore.value = null
   evalResult.value = null
   traceInfo.value = null
+  currentTraceId.value = null
   agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = '' })
   showProgressOverlay.value = true
 
@@ -567,6 +603,7 @@ async function regenerate() {
   dataQualityScore.value = null
   evalResult.value = null
   traceInfo.value = null
+  currentTraceId.value = null
   agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = '' })
   showProgressOverlay.value = true
   step.value = 'config'
@@ -583,6 +620,25 @@ async function regenerate() {
     regenerateCount.value++
     userFeedback.value = ''
     showRegenerate.value = false
+  } catch (e) {
+    error.value = e.message
+  }
+  generating.value = false
+}
+
+async function resumeGenerate() {
+  if (!currentTraceId.value || generating.value) return
+  error.value = ''
+  generating.value = true
+  showProgressOverlay.value = true
+  try {
+    await doGenerate({
+      asset_ids: selectedAssetIds.value,
+      budget: form.budget,
+      goal: form.goal,
+      risk_level: form.risk_level,
+      resume_trace_id: currentTraceId.value,
+    })
   } catch (e) {
     error.value = e.message
   }
@@ -659,6 +715,13 @@ function handleSSEEvent(event, data) {
   if (event === 'progress') {
     const { step: stepName, message, detail } = data
     if (detail) Object.assign(progressDetail, { [stepName]: detail })
+    if (stepName === 'started') {
+      if (detail?.trace_id) {
+        currentTraceId.value = detail.trace_id
+        traceInfo.value = detail
+      }
+      return
+    }
 
     // Precheck
     if (stepName === 'precheck') {
@@ -708,7 +771,10 @@ function handleSSEEvent(event, data) {
       // Extract eval and trace info from result
       if (data.data.eval) evalResult.value = data.data.eval
       if (data.data.data_quality_score != null) dataQualityScore.value = data.data.data_quality_score
-      if (data.data._meta?.trace_id) traceInfo.value = data.data._meta
+      if (data.data._meta?.trace_id) {
+        traceInfo.value = data.data._meta
+        currentTraceId.value = data.data._meta.trace_id
+      }
       step.value = 'preview'
       showAnalysis.value = true
     } else {
@@ -779,12 +845,9 @@ function fmt(n) {
   return formatRounded(n)
 }
 
-onMounted(() => {
-  loadAssets()
-  if (props.presetAssetId) {
-    selectedAssetIds.value = [Number(props.presetAssetId)]
-    loadAssetInfo()
-  }
+onMounted(async () => {
+  await loadAssets()
+  applyPreset()
 })
 </script>
 
@@ -910,7 +973,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
 }
-.toggle-icon { font-size: 10px; color: var(--text-dim); }
+.toggle-icon { color: var(--text-dim); }
 .confidence-badge {
   margin-left: auto;
   font-size: 11px;
@@ -998,6 +1061,9 @@ onMounted(() => {
 .plan-preview-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-dim); align-items: center; }
 .plan-preview-meta label { display: flex; align-items: center; gap: 4px; font-size: 12px; }
 .plan-rationale {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
   font-size: 11px;
   color: var(--primary);
   margin-top: 4px;
@@ -1040,7 +1106,7 @@ onMounted(() => {
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 12px;
-  background: var(--card-bg);
+  background: var(--bg-card);
   color: var(--text);
 }
 .inline-input:focus { border-color: var(--primary); outline: none; }
@@ -1049,7 +1115,7 @@ onMounted(() => {
   border-radius: 4px;
   padding: 3px 6px;
   font-size: 12px;
-  background: var(--card-bg);
+  background: var(--bg-card);
   color: var(--text);
 }
 
@@ -1207,8 +1273,14 @@ onMounted(() => {
   font-size: 12px;
   cursor: pointer;
   padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .agent-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 8px;
   font-size: 12px;
   color: #f59e0b;
@@ -1229,7 +1301,9 @@ onMounted(() => {
   gap: 6px;
   font-size: 12px;
 }
-.check-icon { font-size: 12px; }
+.check-icon { display: inline-flex; align-items: center; }
+.check-icon.passed { color: var(--green); }
+.check-icon.failed { color: var(--red); }
 .check-name { color: var(--text-dim); text-transform: capitalize; }
 .check-detail { color: var(--text-muted); font-size: 11px; margin-left: auto; }
 .agent-warnings-section { margin-top: 8px; }
@@ -1249,6 +1323,9 @@ onMounted(() => {
   gap: 2px;
 }
 .warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
   font-size: 11px;
   color: var(--text-dim);
   padding: 3px 6px;
@@ -1261,7 +1338,13 @@ onMounted(() => {
   background: rgba(59,130,246,0.06);
   border-radius: 4px;
 }
-.fix-log-label { font-weight: 600; color: var(--primary); }
+.fix-log-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--primary);
+}
 .trace-info {
   margin-top: 8px;
   display: flex;

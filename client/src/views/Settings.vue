@@ -93,7 +93,7 @@
               <div v-for="cs in customSources" :key="cs.id" class="custom-source-item">
                 <span class="custom-source-name">{{ cs.name }}</span>
                 <span class="custom-source-url">{{ cs.url }}</span>
-                <button class="btn-tiny danger" :title="t('settings.news.deleteSource')" @click="deleteCustomSource(cs.id)">✕</button>
+                <button class="btn-tiny danger" :title="t('settings.news.deleteSource')" @click="deleteCustomSource(cs.id)"><AppIcon name="x" size="13" /></button>
               </div>
             </div>
             <div class="add-source-row">
@@ -357,6 +357,7 @@ import { api } from '../utils/api.js'
 import { useConfirm } from '../utils/confirm.js'
 import { useToast } from '../utils/toast.js'
 import { appVersion } from '../utils/appVersion.js'
+import AppIcon from '../components/AppIcon.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -371,7 +372,7 @@ const form = reactive({
   market_color_scheme: preferencesStore.marketColorScheme,
   refresh_interval: '60',
   market_refresh_interval: '5',
-  market_btc_sources_enabled: 'coingecko,binance,coinbase,kraken,okx',
+  market_btc_sources_enabled: 'coingecko,binance,coinbase,kraken,okx,bitstamp,gemini',
   market_gold_sources_enabled: 'neodata,swissquote',
   rate_cache_duration: '60',
   strategy_monitor_interval: '5',
@@ -402,7 +403,7 @@ const form = reactive({
 const dirty = reactive({ appearance: false, market: false, ai: false, news: false, push: false })
 const saveState = reactive({ appearance: '', market: '', ai: '', news: '', push: '' })
 const enabledSources = ref(['coindesk', 'cointelegraph', 'decrypt', 'panews', 'coingecko'])
-const enabledBtcSources = ref(['coingecko', 'binance', 'coinbase', 'kraken', 'okx'])
+const enabledBtcSources = ref(['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'])
 const enabledGoldSources = ref(['neodata', 'swissquote'])
 const customSources = ref([])
 const newSource = reactive({ name: '', url: '' })
@@ -427,6 +428,9 @@ const builtinNewsSources = computed(() => [
   { key: 'blockchain_news', label: t('settings.news.builtinSourceLabels.blockchain_news') },
   { key: 'panews', label: t('settings.news.builtinSourceLabels.panews') },
   { key: 'coingecko', label: t('settings.news.builtinSourceLabels.coingecko') },
+  { key: 'bitcoin_magazine', label: t('settings.news.builtinSourceLabels.bitcoin_magazine') },
+  { key: 'kitco', label: t('settings.news.builtinSourceLabels.kitco') },
+  { key: 'fxstreet', label: t('settings.news.builtinSourceLabels.fxstreet') },
 ])
 
 const btcMarketSources = computed(() => [
@@ -435,6 +439,8 @@ const btcMarketSources = computed(() => [
   { key: 'coinbase', label: t('settings.market.sourceLabels.coinbase') },
   { key: 'kraken', label: t('settings.market.sourceLabels.kraken') },
   { key: 'okx', label: t('settings.market.sourceLabels.okx') },
+  { key: 'bitstamp', label: t('settings.market.sourceLabels.bitstamp') },
+  { key: 'gemini', label: t('settings.market.sourceLabels.gemini') },
 ])
 
 const goldMarketSources = computed(() => [

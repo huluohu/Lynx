@@ -93,7 +93,7 @@
               </div>
 
               <div class="sub-section">
-                <div class="sub-section-title">📉 {{ t('strategyForm.buyLines') }}</div>
+                <div class="sub-section-title"><AppIcon name="buy" size="15" /> {{ t('strategyForm.buyLines') }}</div>
                 <div class="lines-editor">
                   <div v-for="(line, i) in getAssetBuyLines(assetId)" :key="'b'+assetId+'-'+i" class="line-row">
                     <div class="line-field">
@@ -104,14 +104,14 @@
                       <span class="line-prefix">{{ assetCurrencySymbol(assetId) }}</span>
                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.buyAmount')" inputmode="numeric" />
                     </div>
-                    <button type="button" class="btn btn-sm btn-danger" @click="removeAssetBuyLine(assetId, i)">✕</button>
+                    <button type="button" class="btn btn-sm btn-danger btn-icon-inline" @click="removeAssetBuyLine(assetId, i)" :title="t('common.delete')"><AppIcon name="x" size="14" /></button>
                   </div>
                   <button type="button" class="btn btn-sm" @click="addAssetBuyLine(assetId)">+ {{ t('strategyForm.addBuyLine') }}</button>
                 </div>
               </div>
 
               <div class="sub-section">
-                <div class="sub-section-title">📈 {{ t('strategyForm.sellLines') }}</div>
+                <div class="sub-section-title"><AppIcon name="sell" size="15" /> {{ t('strategyForm.sellLines') }}</div>
                 <div class="lines-editor">
                   <div v-for="(line, i) in getAssetSellLines(assetId)" :key="'s'+assetId+'-'+i" class="line-row">
                     <div class="line-field">
@@ -122,7 +122,7 @@
                       <span class="line-prefix">{{ assetCurrencySymbol(assetId) }}</span>
                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.sellAmount')" inputmode="numeric" />
                     </div>
-                    <button type="button" class="btn btn-sm btn-danger" @click="removeAssetSellLine(assetId, i)">✕</button>
+                    <button type="button" class="btn btn-sm btn-danger btn-icon-inline" @click="removeAssetSellLine(assetId, i)" :title="t('common.delete')"><AppIcon name="x" size="14" /></button>
                   </div>
                   <button type="button" class="btn btn-sm" @click="addAssetSellLine(assetId)">+ {{ t('strategyForm.addSellLine') }}</button>
                 </div>
@@ -134,7 +134,7 @@
               <span>{{ t('strategyForm.allocated') }}: {{ scopedMoney(allocatedBudget, allocatedBudgetCurrency) }}</span>
               <span>/</span>
               <span>{{ t('strategyForm.totalBudget') }}: {{ scopedMoney(Number(globalBudget || 0), recoveryBudgetCurrency) }}</span>
-              <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn">⚠️ {{ t('strategyForm.overBudget') }}</span>
+              <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn"><AppIcon name="warning" size="14" /> {{ t('strategyForm.overBudget') }}</span>
             </div>
           </div>
 
@@ -227,14 +227,21 @@
 
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" :disabled="submitting || (!unsupportedStrategyType && selectedAssetIds.length === 0)">{{ submitting ? t('strategyForm.creating') : (isEdit ? t('strategyForm.save') : t('strategyForm.create')) }}</button>
-        <button v-if="isEdit" type="button" class="btn" @click="showAIRegenerate = true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg> {{ t('strategyForm.aiRegenerate') }}</button>
+        <button v-if="isEdit" type="button" class="btn btn-inline-icon" @click="showAIRegenerate = true"><AppIcon name="sparkles" size="16" /> {{ t('strategyForm.aiRegenerate') }}</button>
         <router-link to="/strategies" class="btn">{{ t('strategyForm.cancel') }}</router-link>
       </div>
     </form>
 
     <!-- AI Regenerate Drawer -->
-    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" :title="`✨ ${t('strategyForm.aiRegenerateTitle')}`">
-      <AIStrategyGenerator :preset-asset-id="selectedAssetIds[0]" :existing-strategy-id="strategyId" @done="onAIRegenDone" />
+    <AppDrawer v-if="isEdit" v-model="showAIRegenerate" :title="t('strategyForm.aiRegenerateTitle')">
+      <AIStrategyGenerator
+        :preset-asset-ids="selectedAssetIds"
+        :preset-budget="aiRegeneratePreset.budget"
+        :preset-goal="aiRegeneratePreset.goal"
+        :preset-risk-level="aiRegeneratePreset.riskLevel"
+        :existing-strategy-id="strategyId"
+        @done="onAIRegenDone"
+      />
     </AppDrawer>
   </div>
 </template>
@@ -247,6 +254,7 @@ import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { formatNumber } from '../utils/formatters.js'
 import { currencyInputLabel, currencySymbol, formatCurrencyAmount } from '../utils/currency.js'
 
@@ -332,6 +340,78 @@ const strategySummaryRows = computed(() => {
   }
   return rows
 })
+const aiRegeneratePreset = computed(() => {
+  const params = safeParseParameters(rawParameters.value)
+  return {
+    budget: inferBudget(params),
+    goal: inferGoal(form.type, params),
+    riskLevel: inferRiskLevel(params),
+  }
+})
+
+function normalizeAssetIdList(value) {
+  let ids = []
+  if (Array.isArray(value)) {
+    ids = value
+  } else if (typeof value === 'string' && value.trim()) {
+    try {
+      const parsed = JSON.parse(value)
+      ids = Array.isArray(parsed) ? parsed : [parsed]
+    } catch {
+      ids = value.split(',')
+    }
+  } else if (value !== undefined && value !== null && value !== '') {
+    ids = [value]
+  }
+  const normalized = []
+  for (const id of ids) {
+    const num = Number(id)
+    if (Number.isFinite(num) && !normalized.includes(num)) normalized.push(num)
+  }
+  return normalized
+}
+
+function safeParseParameters(value) {
+  try {
+    if (!value) return {}
+    return typeof value === 'string' ? JSON.parse(value) : value
+  } catch {
+    return {}
+  }
+}
+
+function inferBudget(params) {
+  const direct = Number(params?.budget)
+  if (Number.isFinite(direct) && direct > 0) return direct
+  if (Array.isArray(params?.buy_lines)) {
+    const total = params.buy_lines.reduce((sum, line) => sum + (Number(line?.amount) || 0), 0)
+    if (total > 0) return total
+  }
+  if (params?.per_asset && typeof params.per_asset === 'object') {
+    const total = Object.values(params.per_asset).reduce((sum, item) => sum + (Number(item?.amount_per || item?.target_value) || 0), 0)
+    if (total > 0) return total
+  }
+  const amountPer = Number(params?.amount_per)
+  const periods = Number(params?.periods)
+  if (Number.isFinite(amountPer) && amountPer > 0 && Number.isFinite(periods) && periods > 0) return amountPer * periods
+  return 20000
+}
+
+function inferGoal(type, params) {
+  if (['recovery', 'growth', 'balanced', 'trend', 'rebalance'].includes(params?.goal)) return params.goal
+  return {
+    recovery: 'recovery',
+    dca: 'balanced',
+    grid: 'balanced',
+    value_avg: 'growth',
+    trend: 'trend',
+    rebalance: 'rebalance',
+  }[type] || 'balanced'
+}
+
+function inferRiskLevel(params) {
+  return ['low', 'medium', 'high'].includes(params?.risk_level) ? params.risk_level : 'medium'
+}
 
 function getAsset(id) {
   return assets.value.find(a => a.id === id)
@@ -582,11 +662,8 @@ onMounted(async () => {
       form.type = s.type
       rawParameters.value = s.parameters || '{}'
 
-      if (s.asset_ids) {
-        try { selectedAssetIds.value = JSON.parse(s.asset_ids) } catch { selectedAssetIds.value = s.asset_id ? [s.asset_id] : [] }
-      } else if (s.asset_id) {
-        selectedAssetIds.value = [s.asset_id]
-      }
+      selectedAssetIds.value = normalizeAssetIdList(s.asset_ids)
+      if (!selectedAssetIds.value.length && s.asset_id) selectedAssetIds.value = normalizeAssetIdList(s.asset_id)
 
       // Initialize per-asset structures
       for (const id of selectedAssetIds.value) {
@@ -810,6 +887,9 @@ onMounted(async () => {
 }
 .sub-section:last-child { margin-bottom: 0; }
 .sub-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 8px;
@@ -862,6 +942,9 @@ onMounted(async () => {
 .budget-warn {
   margin-left: auto;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .empty-hint {

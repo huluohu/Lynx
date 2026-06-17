@@ -15,61 +15,61 @@
       <nav class="sidebar-nav">
         <div class="nav-section">{{ t('nav.sections.overview') }}</div>
         <router-link to="/" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <AppIcon name="dashboard" class="nav-icon" />
           {{ t('nav.dashboard') }}
           <span v-if="notificationsStore.unreadCount" class="nav-badge">{{ notificationsStore.unreadCount }}</span>
         </router-link>
 
         <div class="nav-section">{{ t('nav.sections.management') }}</div>
         <router-link to="/assets" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>
+          <AppIcon name="assets" class="nav-icon" />
           {{ t('nav.assets') }}
         </router-link>
         <router-link to="/holdings" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+          <AppIcon name="holdings" class="nav-icon" />
           {{ t('nav.holdings') }}
         </router-link>
         <router-link to="/history" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <AppIcon name="history" class="nav-icon" />
           {{ t('nav.history') }}
         </router-link>
         <router-link to="/alerts" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+          <AppIcon name="alerts" class="nav-icon" />
           {{ t('nav.alerts') }}
           <span v-if="notificationsStore.unreadCount" class="nav-badge">{{ notificationsStore.unreadCount }}</span>
         </router-link>
 
         <div class="nav-section">{{ t('nav.sections.strategy') }}</div>
         <router-link to="/strategies" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+          <AppIcon name="strategies" class="nav-icon" />
           {{ t('nav.strategies') }}
         </router-link>
         <router-link to="/plans" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <AppIcon name="plans" class="nav-icon" />
           {{ t('nav.plans') }}
         </router-link>
 
         <div class="nav-section">{{ t('nav.sections.market') }}</div>
         <router-link to="/market" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <AppIcon name="market" class="nav-icon" />
           {{ t('nav.market') }}
         </router-link>
         <router-link to="/signals" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 12h3l2 5 4-10 3 7 2-4h4"/></svg>
+          <AppIcon name="signals" class="nav-icon" />
           {{ t('nav.signals') }}
         </router-link>
         <router-link to="/news" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M18 18h-8M18 10h-8"/></svg>
+          <AppIcon name="news" class="nav-icon" />
           {{ t('nav.news') }}
         </router-link>
 
         <div class="nav-section">{{ t('nav.sections.system') }}</div>
         <router-link to="/settings" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <AppIcon name="settings" class="nav-icon" />
           {{ t('nav.settings') }}
         </router-link>
         <router-link to="/about" class="nav-item" @click="sidebarOpen = false">
-          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/></svg>
+          <AppIcon name="about" class="nav-icon" />
           {{ t('nav.about') }}
         </router-link>
       </nav>
@@ -86,11 +86,14 @@
       <header class="app-shell-header">
         <div class="app-shell-header-left mobile-only">
           <button class="menu-toggle-inline mobile-only" @click="toggleSidebar" :title="t('nav.more')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+            <img class="menu-toggle-logo" src="/logo.svg" alt="Lynx" />
           </button>
         </div>
         <div class="shell-mobile-title mobile-only">
           <span class="shell-mobile-title-text">{{ mobileHeaderTitle }}</span>
+        </div>
+        <div class="shell-desktop-title desktop-only">
+          <span class="shell-desktop-title-text">{{ mobileHeaderTitle }}</span>
         </div>
         <div class="app-shell-header-right">
           <div class="header-toolbar desktop-only">
@@ -154,24 +157,24 @@
     <nav class="mobile-nav">
       <div class="mobile-nav-inner">
         <router-link to="/" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <AppIcon name="dashboard" class="nav-icon" />
           <span>{{ t('nav.dashboard') }}</span>
         </router-link>
         <router-link to="/holdings" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+          <AppIcon name="holdings" class="nav-icon" />
           <span>{{ t('nav.holdings') }}</span>
         </router-link>
         <router-link to="/market" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <AppIcon name="market" class="nav-icon" />
           <span>{{ t('nav.market') }}</span>
         </router-link>
         <router-link to="/strategies" class="mobile-nav-item">
-          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+          <AppIcon name="strategies" class="nav-icon" />
           <span>{{ t('nav.strategies') }}</span>
         </router-link>
         <button class="mobile-nav-item mobile-nav-more" @click="openMoreMenu">
           <span class="mobile-nav-icon-wrap">
-            <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            <AppIcon name="more" class="nav-icon" />
             <span v-if="hasUnreadNotifications" class="mobile-nav-alert-badge">{{ mobileUnreadBadgeLabel }}</span>
           </span>
           <span>{{ t('nav.more') }}</span>
@@ -186,39 +189,39 @@
             <div class="action-sheet-header">{{ t('nav.more') }}</div>
             <div class="action-sheet-group-label">{{ t('nav.sections.management') }}</div>
             <router-link to="/assets" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9 11l3-3 3 3"/></svg>
+              <AppIcon name="assets" class="nav-icon" />
               {{ t('nav.assets') }}
             </router-link>
             <router-link to="/history" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <AppIcon name="history" class="nav-icon" />
               {{ t('nav.history') }}
             </router-link>
             <router-link to="/alerts" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+              <AppIcon name="alerts" class="nav-icon" />
               {{ t('nav.alerts') }}
               <span v-if="notificationsStore.unreadCount" class="nav-badge" style="margin-left:auto">{{ notificationsStore.unreadCount }}</span>
             </router-link>
             <div class="action-sheet-group-label">{{ t('nav.sections.market') }}</div>
             <router-link to="/signals" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 12h3l2 5 4-10 3 7 2-4h4"/></svg>
+              <AppIcon name="signals" class="nav-icon" />
               {{ t('nav.signals') }}
             </router-link>
             <router-link to="/news" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M18 18h-8M18 10h-8"/></svg>
+              <AppIcon name="news" class="nav-icon" />
               {{ t('nav.news') }}
             </router-link>
             <div class="action-sheet-group-label">{{ t('nav.sections.strategy') }}</div>
             <router-link to="/plans" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <AppIcon name="plans" class="nav-icon" />
               {{ t('nav.plans') }}
             </router-link>
             <div class="action-sheet-group-label">{{ t('nav.sections.system') }}</div>
             <router-link to="/settings" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <AppIcon name="settings" class="nav-icon" />
               {{ t('nav.settings') }}
             </router-link>
             <router-link to="/about" class="action-sheet-item" @click="moreMenuOpen = false">
-              <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/></svg>
+              <AppIcon name="about" class="nav-icon" />
               {{ t('nav.about') }}
             </router-link>
             <div class="action-sheet-cancel" @click="moreMenuOpen = false">{{ t('common.cancel') }}</div>
@@ -279,6 +282,7 @@ import { useConfirm } from './utils/confirm.js'
 import { useToast } from './utils/toast.js'
 import AppToast from './components/AppToast.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
+import AppIcon from './components/AppIcon.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -300,6 +304,21 @@ const {
   resetActions: resetMobilePageActions,
 } = useMobilePageActionsState()
 let pollTimer
+
+function shouldAllowContextMenu(target) {
+  return !!target?.closest?.('input, textarea, select, [contenteditable="true"], .allow-context-menu')
+}
+
+function shouldSuppressContextMenu() {
+  const standalone = document.documentElement.dataset.displayMode === 'standalone'
+  const touchLayout = window.matchMedia?.('(max-width: 768px)')?.matches && navigator.maxTouchPoints > 0
+  return standalone || touchLayout
+}
+
+function preventLongPressContextMenu(event) {
+  if (!shouldSuppressContextMenu() || shouldAllowContextMenu(event.target)) return
+  event.preventDefault()
+}
 
 const mobileHeaderTitle = computed(() => {
   const titleKey = route.meta?.titleKey
@@ -425,6 +444,7 @@ watch(() => route.fullPath, () => {
 })
 
 onMounted(() => {
+  document.addEventListener('contextmenu', preventLongPressContextMenu, { capture: true })
   resetMobilePageActions()
   if (authStore.isLoggedIn) {
     syncPreferences()
@@ -433,6 +453,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  document.removeEventListener('contextmenu', preventLongPressContextMenu, { capture: true })
   stopPolling()
 })
 </script>
@@ -516,6 +537,19 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--text);
 }
+.shell-desktop-title {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.shell-desktop-title-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
 .header-toolbar {
   display: inline-flex;
   align-items: center;
@@ -563,7 +597,7 @@ onUnmounted(() => {
   .app-shell-header {
     position: static;
     margin-bottom: 12px;
-    padding: 0;
+    padding: 0 0 8px;
     background: transparent;
     border-bottom: none;
     backdrop-filter: none;
@@ -581,6 +615,13 @@ onUnmounted(() => {
   background: var(--bg-card);
   color: var(--text);
   cursor: pointer;
+}
+.menu-toggle-logo {
+  width: 21px;
+  height: 21px;
+  display: block;
+  object-fit: contain;
+  border-radius: 6px;
 }
 .action-sheet-header {
   padding: 12px calc(24px + var(--safe-right)) 8px calc(24px + var(--safe-left));

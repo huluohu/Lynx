@@ -51,10 +51,35 @@
     </div>
 
     <div v-else class="card empty">
-      <div class="empty-icon">📰</div>
+      <div class="empty-icon"><AppIcon name="news" size="34" /></div>
       <p>{{ t('newsList.empty') }}</p>
       <p style="font-size:12px;color:var(--text-dim);margin-top:8px">{{ t('newsList.emptyHint') }}</p>
     </div>
+
+    <AppDrawer v-model="detailDrawerOpen" :title="selectedNews?.title || t('newsList.detailTitle')" mobileHeight="fixed">
+      <div v-if="detailLoading" class="news-detail-loading">
+        <div class="skeleton skeleton-text long"></div>
+        <div class="skeleton skeleton-text"></div>
+        <div class="skeleton skeleton-text short"></div>
+      </div>
+      <div v-else-if="selectedNews" class="news-detail">
+        <div class="news-detail-meta">
+          <span v-if="selectedNews.source" class="news-source">{{ selectedNews.source }}</span>
+          <span>{{ formatClockTime(selectedNews.published_at, { second: '2-digit' }) }}</span>
+          <span class="cache-badge cache-cached">{{ cacheLabel(selectedNews.cache_status) }}</span>
+        </div>
+        <div class="news-detail-content">
+          <template v-for="(block, index) in formattedDetailBlocks" :key="index">
+            <h3 v-if="block.type === 'heading'">{{ block.text }}</h3>
+            <ul v-else-if="block.type === 'list'">
+              <li v-for="(item, itemIndex) in block.items" :key="itemIndex">{{ item }}</li>
+            </ul>
+            <p v-else>{{ block.text }}</p>
+          </template>
+        </div>
+        <a v-if="selectedNews.url" :href="selectedNews.url" target="_blank" class="btn news-detail-original">{{ t('newsList.readOriginal') }}</a>
+      </div>
+    </AppDrawer>
   </div>
   </PullRefreshView>
 </template>
@@ -67,6 +92,8 @@ import { useToast } from '../utils/toast.js'
 import { formatRelativeTimeFromNow, formatTime as formatClockTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import AppDrawer from '../components/AppDrawer.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
 const { t } = useI18n()
@@ -79,8 +106,12 @@ const page = ref(0)
 const PAGE_SIZE = 20
 const lastUpdated = ref(null)
 const mobilePageActions = useMobilePageActions()
+const detailDrawerOpen = ref(false)
+const detailLoading = ref(false)
+const selectedNews = ref(null)
 
 const pendingCacheCount = computed(() => news.value.filter(n => n.cache_status === 'pending' && n.url).length)
+const formattedDetailBlocks = computed(() => formatArticleBlocks(selectedNews.value?.content || selectedNews.value?.summary || ''))
 
 async function loadData() {
   try {
@@ -123,10 +154,24 @@ async function refresh() {
   }
 }
 
-function openNews(n) {
+async function openNews(n) {
   if (!n.read) {
     api(`/api/news/${n.id}`, { method: 'PUT' })
     n.read = 1
+  }
+  if (n.cache_status === 'cached') {
+    detailDrawerOpen.value = true
+    detailLoading.value = true
+    selectedNews.value = { ...n }
+    try {
+      const res = await api(`/api/news/${n.id}/content`)
+      const json = await res.json()
+      if (json.data) selectedNews.value = { ...n, ...json.data, cache_status: json.data.cache_status || n.cache_status }
+    } catch (e) {
+      toast.error(e.message)
+    }
+    detailLoading.value = false
+    return
   }
   // Lazy cache: trigger content fetch if pending
   if (n.cache_status === 'pending' && n.url) {
@@ -168,6 +213,36 @@ function cacheLabel(status) {
     failed: t('newsList.cacheStatus.failed'),
     pending: t('newsList.cacheStatus.pending'),
   }[status || 'pending'] || t('newsList.cacheStatus.pending')
+}
+
+function formatArticleBlocks(content) {
+  const lines = String(content || '')
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  const blocks = []
+  let listItems = []
+  const flushList = () => {
+    if (listItems.length) {
+      blocks.push({ type: 'list', items: listItems })
+      listItems = []
+    }
+  }
+
+  for (const line of lines) {
+    const listMatch = line.match(/^[-*•]\s+(.+)/)
+    if (listMatch) {
+      listItems.push(listMatch[1])
+      continue
+    }
+    flushList()
+    const heading = line.length <= 42 && !/[。.!?！？]$/.test(line)
+    blocks.push({ type: heading ? 'heading' : 'paragraph', text: line })
+  }
+  flushList()
+  return blocks
 }
 
 watchEffect(() => {
@@ -217,6 +292,16 @@ onUnmounted(() => {
 .cache-fetching { background: rgba(59,130,246,0.1); color: var(--primary); }
 .cache-failed { background: rgba(239,68,68,0.1); color: var(--red); }
 .cache-pending { background: var(--bg-dim, #f0f0f0); color: var(--text-muted); }
+.news-detail-loading { padding: 8px 0; }
+.news-detail { display: flex; flex-direction: column; gap: 14px; }
+.news-detail-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
+.news-detail-content { color: var(--text-dim); line-height: 1.75; font-size: 14px; }
+.news-detail-content h3 { margin: 18px 0 8px; color: var(--text); font-size: 16px; line-height: 1.45; }
+.news-detail-content h3:first-child { margin-top: 0; }
+.news-detail-content p { margin: 0 0 12px; }
+.news-detail-content ul { margin: 0 0 12px; padding-left: 20px; }
+.news-detail-content li { margin-bottom: 6px; }
+.news-detail-original { align-self: flex-start; margin-top: 4px; text-decoration: none; }
 .btn-sm { font-size: 12px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; }
 .btn-sm:hover { background: var(--bg-hover, #f5f5f5); }
 .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }

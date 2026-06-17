@@ -52,6 +52,24 @@ const BUILTIN_SOURCES = {
     name: 'CoinGecko Trending',
     type: 'trending',
   },
+  bitcoin_magazine: {
+    name: 'Bitcoin Magazine',
+    url: 'https://bitcoinmagazine.com/.rss/full/',
+    type: 'crypto',
+    assetType: 'crypto',
+  },
+  kitco: {
+    name: 'Kitco News',
+    url: 'https://www.kitco.com/rss/news',
+    type: 'gold',
+    assetType: 'gold',
+  },
+  fxstreet: {
+    name: 'FXStreet',
+    url: 'https://www.fxstreet.com/rss/news',
+    type: 'markets',
+    assetType: 'general',
+  },
 };
 
 // 简易 XML 解析 — 提取 RSS <item> 节点

@@ -1,4 +1,4 @@
-<template>
+列表页<template>
   <Teleport to="body">
     <Transition :name="isMobile ? 'sheet' : 'drawer'">
       <div v-if="modelValue" class="overlay" :class="{ 'overlay-mobile': isMobile }" @click.self="close">
@@ -6,7 +6,7 @@
         <div v-if="!isMobile" class="drawer-panel" :style="drawerStyle">
           <div class="panel-header">
             <h3 class="panel-title">{{ title }}</h3>
-            <button class="panel-close" @click="close">✕</button>
+            <button class="panel-close" @click="close"><AppIcon name="x" size="16" /></button>
           </div>
           <div class="panel-body">
             <slot />
@@ -29,7 +29,7 @@
             </div>
             <div class="panel-header panel-header-mobile">
               <h3 class="panel-title">{{ title }}</h3>
-              <button class="panel-close" @click="close">✕</button>
+              <button class="panel-close" @click="close"><AppIcon name="x" size="16" /></button>
             </div>
           </div>
           <div ref="bodyRef" class="panel-body">
@@ -47,6 +47,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useDocumentScrollLock } from '../composables/useDocumentScrollLock.js'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps({
   modelValue: Boolean,

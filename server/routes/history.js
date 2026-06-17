@@ -217,6 +217,9 @@ router.post('/', (req, res) => {
   const prc = Number(price);
   const amt = Number(total) || qty * prc;
   const tradeCurrency = currency || db.prepare('SELECT currency FROM assets WHERE id = ?').get(asset_id)?.currency || 'CNY';
+  const linkedPlan = plan_id
+    ? db.prepare('SELECT id, strategy_id, plan_set_id FROM trading_plans WHERE id = ?').get(plan_id)
+    : null;
 
   if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(prc) || prc <= 0) {
     return res.status(400).json({ success: false, error: '数量和价格必须大于 0' });
@@ -236,8 +239,8 @@ router.post('/', (req, res) => {
       });
 
       const info = db.prepare(`INSERT INTO trade_history (
-          asset_id, type, quantity, price, total, pnl, pnl_pct, executed_at, reason, tags, currency, plan_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          asset_id, type, quantity, price, total, pnl, pnl_pct, executed_at, reason, tags, currency, plan_id, strategy_id, plan_set_id, attribution_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           asset_id,
           type,
@@ -250,7 +253,10 @@ router.post('/', (req, res) => {
           reason || null,
           tags || null,
           tradeCurrency,
-          plan_id || null,
+          linkedPlan?.id || null,
+          linkedPlan?.strategy_id || null,
+          linkedPlan?.plan_set_id || null,
+          linkedPlan ? 'manual_linked' : 'manual_unlinked',
         );
 
       return info.lastInsertRowid;

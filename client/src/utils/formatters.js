@@ -84,6 +84,18 @@ export function formatDate(value, options = {}) {
   })
 }
 
+export function formatDateTimeSeconds(value, options = {}) {
+  return formatDateTime(value, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    ...options,
+  })
+}
+
 export function formatTime(value, options = {}) {
   return formatDateTime(value, {
     hour: '2-digit',

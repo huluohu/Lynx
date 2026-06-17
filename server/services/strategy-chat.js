@@ -193,13 +193,17 @@ function loadStrategyContext(db, strategyId) {
     WHERE s.id = ?`).get(strategyId);
   if (!strategy) throw new Error('策略不存在');
 
+  const planSet = db.prepare("SELECT * FROM plan_sets WHERE strategy_id = ? AND status = 'active' ORDER BY version_no DESC, id DESC LIMIT 1")
+    .get(strategyId);
+
   const plans = db.prepare(`SELECT tp.*, a.name AS asset_name, a.symbol
     FROM trading_plans tp
+    JOIN plan_sets ps ON ps.id = tp.plan_set_id AND ps.status = 'active'
     LEFT JOIN assets a ON tp.asset_id = a.id
-    WHERE tp.strategy_id = ?
+    WHERE tp.strategy_id = ? AND tp.status != 'cancelled'
     ORDER BY tp.seq ASC, tp.id ASC`).all(strategyId);
 
-  return { strategy, plans };
+  return { strategy, plans, planSet };
 }
 
 function buildChatPrompt(strategy, plans, userMessage) {
@@ -280,13 +284,14 @@ function updateStrategyRow(db, strategyId, updates) {
   db.prepare(`UPDATE strategies SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
-function persistPlans(db, strategyId, currentPlans, finalPlans) {
+function persistPlans(db, strategyId, planSetId, currentPlans, finalPlans) {
   const currentIds = new Set(currentPlans.map(plan => Number(plan.id)));
   const finalIds = new Set(finalPlans.filter(plan => plan.id != null).map(plan => Number(plan.id)));
   const idsToDelete = [...currentIds].filter(id => !finalIds.has(id));
   if (idsToDelete.length) {
     const placeholders = idsToDelete.map(() => '?').join(',');
-    db.prepare(`DELETE FROM trading_plans WHERE strategy_id = ? AND id IN (${placeholders})`).run(strategyId, ...idsToDelete);
+    db.prepare(`UPDATE trading_plans SET status = 'cancelled', updated_at = datetime('now') WHERE strategy_id = ? AND plan_set_id = ? AND id IN (${placeholders})`)
+      .run(strategyId, planSetId, ...idsToDelete);
   }
 
   const updateStmt = db.prepare(`UPDATE trading_plans SET
@@ -303,8 +308,8 @@ function persistPlans(db, strategyId, currentPlans, finalPlans) {
     updated_at = datetime('now')
     WHERE id = ? AND strategy_id = ?`);
   const insertStmt = db.prepare(`INSERT INTO trading_plans
-    (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    (strategy_id, plan_set_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, status, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
   for (const plan of finalPlans) {
     if (plan.id != null) {
@@ -325,6 +330,7 @@ function persistPlans(db, strategyId, currentPlans, finalPlans) {
     } else {
       insertStmt.run(
         strategyId,
+        planSetId,
         plan.asset_id,
         plan.seq,
         plan.trigger_type,
@@ -380,7 +386,8 @@ export async function processStrategyChat(strategyId, userMessage) {
 
 export function applyStrategyChanges(strategyId, changes) {
   const db = getDb();
-  const { strategy, plans } = loadStrategyContext(db, strategyId);
+  const { strategy, plans, planSet } = loadStrategyContext(db, strategyId);
+  if (!planSet?.id) throw new Error('策略暂无 active plan set');
   const normalizedChanges = {
     strategy_updates: normalizeStrategyUpdates(changes?.strategy_updates),
     plans_add: Array.isArray(changes?.plans_add) ? changes.plans_add.map(item => normalizePlanPatch(item, { allowSeq: true })).filter(Boolean) : [],
@@ -392,7 +399,7 @@ export function applyStrategyChanges(strategyId, changes) {
 
   const tx = db.transaction(() => {
     updateStrategyRow(db, strategyId, normalizedChanges.strategy_updates);
-    persistPlans(db, Number(strategyId), plans, finalPlans);
+    persistPlans(db, Number(strategyId), Number(planSet.id), plans, finalPlans);
   });
   tx();
 

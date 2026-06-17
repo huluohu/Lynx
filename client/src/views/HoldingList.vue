@@ -84,7 +84,7 @@
       </div>
     </div>
     <div v-else-if="!loading" class="card empty">
-      <div class="empty-icon">📦</div><p>{{ t('holdings.empty') }}</p>
+      <div class="empty-icon"><AppIcon name="holdings" size="34" /></div><p>{{ t('holdings.empty') }}</p>
     </div>
     <div v-else class="card">
       <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
@@ -183,6 +183,7 @@ import AppDrawer from '../components/AppDrawer.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()

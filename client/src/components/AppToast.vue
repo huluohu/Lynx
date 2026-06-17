@@ -8,7 +8,7 @@
           class="toast-item"
           :class="`toast-${t.type}`"
         >
-          <span class="toast-icon">{{ icons[t.type] }}</span>
+          <span class="toast-icon"><AppIcon :name="icons[t.type] || 'about'" size="16" /></span>
           <span class="toast-msg">{{ t.message }}</span>
         </div>
       </TransitionGroup>
@@ -18,14 +18,15 @@
 
 <script setup>
 import { useToast } from '../utils/toast.js'
+import AppIcon from './AppIcon.vue'
 
 const { toasts } = useToast()
 
 const icons = {
-  success: '✅',
-  error: '❌',
-  info: 'ℹ️',
-  loading: '⏳',
+  success: 'check',
+  error: 'x',
+  info: 'about',
+  loading: 'more',
 }
 </script>
 
@@ -55,7 +56,9 @@ const icons = {
 }
 .toast-success { border-color: var(--green); }
 .toast-error { border-color: var(--red); }
-.toast-icon { font-size: 16px; }
+.toast-icon { display: inline-flex; align-items: center; }
+.toast-success .toast-icon { color: var(--green); }
+.toast-error .toast-icon { color: var(--red); }
 .toast-msg { color: var(--text); }
 
 .toast-enter-active,

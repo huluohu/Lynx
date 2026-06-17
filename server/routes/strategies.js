@@ -38,6 +38,20 @@ function normalizeBacktestRow(row) {
   return normalized;
 }
 
+function createPlanSet(db, strategyId, { generationLogId = null, source = 'manual' } = {}) {
+  db.prepare("UPDATE plan_sets SET status = 'superseded', superseded_at = datetime('now') WHERE strategy_id = ? AND status = 'active'")
+    .run(strategyId);
+  const nextVersion = (db.prepare('SELECT COALESCE(MAX(version_no), 0) + 1 AS version FROM plan_sets WHERE strategy_id = ?').get(strategyId)?.version) || 1;
+  const info = db.prepare(`INSERT INTO plan_sets (strategy_id, generation_log_id, source, status, version_no)
+    VALUES (?, ?, ?, 'active', ?)`).run(strategyId, generationLogId, source, nextVersion);
+  return Number(info.lastInsertRowid);
+}
+
+function getActivePlanSetId(db, strategyId) {
+  return db.prepare("SELECT id FROM plan_sets WHERE strategy_id = ? AND status = 'active' ORDER BY version_no DESC, id DESC LIMIT 1")
+    .get(strategyId)?.id || null;
+}
+
 // GET 策略列表
 router.get('/', (req, res) => {
   const db = getDb();
@@ -259,6 +273,7 @@ router.post('/', (req, res) => {
 
   const info = db.prepare(`INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters)
     VALUES (?, ?, ?, ?, ?, ?)`).run(name, description || null, type, primaryAssetId, assetIdsJson, params);
+  createPlanSet(db, Number(info.lastInsertRowid), { source: 'manual' });
 
   const row = db.prepare('SELECT * FROM strategies WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ success: true, data: normalizeStrategyRow(row) });
@@ -318,19 +333,21 @@ router.post('/:id/generate-plan', (req, res) => {
   try {
     const plans = generatePlan(holding, strategy.type, params);
 
-    // Delete old plans and insert new ones in a single transaction
+    // Supersede the old active plan set and insert generated plans into a new active plan set.
     const regenerate = db.transaction((items) => {
-      db.prepare('DELETE FROM trading_plans WHERE strategy_id = ?').run(strategy.id);
-      const insert = db.prepare(`INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const planSetId = createPlanSet(db, strategy.id, { source: 'regenerate' });
+      const insert = db.prepare(`INSERT INTO trading_plans (strategy_id, plan_set_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const p of items)
-        insert.run(strategy.id, p.asset_id || strategy.asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
+        insert.run(strategy.id, planSetId, p.asset_id || strategy.asset_id, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || null);
     });
 
     regenerate(plans);
 
-    const result = db.prepare('SELECT * FROM trading_plans WHERE strategy_id = ? ORDER BY seq').all(strategy.id);
+    const result = db.prepare(`SELECT * FROM trading_plans
+      WHERE strategy_id = ? AND plan_set_id = ?
+      ORDER BY seq`).all(strategy.id, getActivePlanSetId(db, strategy.id));
     res.json({ success: true, data: result, count: result.length });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
@@ -413,7 +430,7 @@ router.post('/ai-generate', async (req, res) => {
 
 // POST AI Agent 智能生成策略 (SSE 流式)
 router.post('/ai-agent-generate', async (req, res) => {
-  const { asset_id, asset_ids, budget, goal, risk_level, parent_id, user_feedback, existing_strategy_id } = req.body;
+  const { asset_id, asset_ids, budget, goal, risk_level, parent_id, user_feedback, existing_strategy_id, resume_trace_id } = req.body;
   const ids = asset_ids && asset_ids.length > 0 ? asset_ids : (asset_id ? [asset_id] : []);
   if (ids.length === 0) return res.status(400).json({ success: false, error: '请选择资产' });
 
@@ -429,7 +446,7 @@ router.post('/ai-agent-generate', async (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  log.info('Agent generate request (SSE)', { asset_ids: ids, budget, goal, risk_level, parent_id });
+  log.info('Agent generate request (SSE)', { asset_ids: ids, budget, goal, risk_level, parent_id, resume_trace_id });
 
   try {
     const { runStrategyAgent } = await import('../services/strategy-agent.js');
@@ -441,6 +458,7 @@ router.post('/ai-agent-generate', async (req, res) => {
       budget: Number(budget) || 20000,
       goal: goal || 'recovery',
       riskLevel: risk_level || 'medium',
+      resumeTraceId: resume_trace_id ? Number(resume_trace_id) : null,
     };
 
     if (parent_id && user_feedback) {
@@ -462,8 +480,8 @@ router.post('/ai-agent-generate', async (req, res) => {
 
     // Auto-save to ai_generation_logs
     const logResult = db.prepare(`
-      INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id, strategy_id)
-      VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id, @strategy_id)
+      INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id, strategy_id, agent_version, prompt_versions)
+      VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id, @strategy_id, @agent_version, @prompt_versions)
     `).run({
       asset_ids: JSON.stringify(ids),
       budget: Number(budget) || 20000,
@@ -480,6 +498,8 @@ router.post('/ai-agent-generate', async (req, res) => {
       user_feedback: user_feedback || null,
       parent_id: parent_id || null,
       strategy_id: existing_strategy_id ? Number(existing_strategy_id) : null,
+      agent_version: result._meta?.agent_version || null,
+      prompt_versions: result._meta?.prompt_versions ? JSON.stringify(result._meta.prompt_versions) : null,
     });
 
     const generationId = Number(logResult.lastInsertRowid);
@@ -528,13 +548,14 @@ router.post('/drafts/:id/adopt', (req, res) => {
         'INSERT INTO strategies (name, description, type, asset_id, asset_ids, parameters, status) VALUES (?, ?, ?, ?, ?, ?, ?)'
       ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, 'active');
       const strategyId = sResult.lastInsertRowid;
+      const planSetId = createPlanSet(db, strategyId, { generationLogId: logRow.id, source: 'ai' });
 
       const insert = db.prepare(
-        'INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO trading_plans (strategy_id, plan_set_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const p of plans) {
         const planAssetId = p.asset_id || primaryAssetId;
-        insert.run(strategyId, planAssetId, p.seq, p.trigger_type, p.trigger_value, p.action,
+        insert.run(strategyId, planSetId, planAssetId, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || p.rationale || null);
       }
 
@@ -585,9 +606,6 @@ router.post('/ai-confirm', (req, res) => {
           'UPDATE strategies SET name = ?, description = ?, type = ?, asset_id = ?, asset_ids = ?, parameters = ? WHERE id = ?'
         ).run(strategy.name, strategy.description || '', strategy.type, primaryAssetId, assetIdsJson, params, existing_strategy_id);
         strategyId = existing_strategy_id;
-
-        // Remove old plans and re-insert
-        db.prepare('DELETE FROM trading_plans WHERE strategy_id = ?').run(strategyId);
       } else {
         // Create new strategy
         const sResult = db.prepare(
@@ -596,12 +614,17 @@ router.post('/ai-confirm', (req, res) => {
         strategyId = sResult.lastInsertRowid;
       }
 
+      const planSetId = createPlanSet(db, strategyId, {
+        generationLogId: generation_id || null,
+        source: generation_id ? 'ai' : 'manual',
+      });
+
       const insert = db.prepare(
-        'INSERT INTO trading_plans (strategy_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO trading_plans (strategy_id, plan_set_id, asset_id, seq, trigger_type, trigger_value, action, quantity, amount, new_avg_cost, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       );
       for (const p of plans) {
         const planAssetId = p.asset_id || primaryAssetId;
-        insert.run(strategyId, planAssetId, p.seq, p.trigger_type, p.trigger_value, p.action,
+        insert.run(strategyId, planSetId, planAssetId, p.seq, p.trigger_type, p.trigger_value, p.action,
           p.quantity || null, p.amount || null, p.new_avg_cost || null, p.notes || p.rationale || null);
       }
 

@@ -54,6 +54,7 @@ export function checkStrategyAlerts() {
   const latestPriceStmt = db.prepare(`SELECT price, fetched_at FROM price_cache WHERE asset_id = ? ORDER BY datetime(fetched_at) DESC, id DESC LIMIT 1`);
   const planStmt = db.prepare(`SELECT p.*, a.name AS asset_name, a.symbol
     FROM trading_plans p
+    JOIN plan_sets ps ON ps.id = p.plan_set_id AND ps.status = 'active'
     LEFT JOIN assets a ON p.asset_id = a.id
     WHERE p.strategy_id = ? AND p.status = 'pending'
     ORDER BY p.seq ASC, p.id ASC`);

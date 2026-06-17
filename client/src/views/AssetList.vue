@@ -86,7 +86,7 @@
       </div>
     </div>
     <div v-else-if="!loading" class="card empty">
-      <div class="empty-icon">📭</div>
+      <div class="empty-icon"><AppIcon name="assets" size="34" /></div>
       <p>{{ t('assetList.empty') }}，<router-link to="/assets/add">{{ t('assetList.addOne') }}</router-link></p>
     </div>
     <div v-else class="card">
@@ -166,6 +166,7 @@ import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
 const { t } = useI18n()

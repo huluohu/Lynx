@@ -300,7 +300,11 @@ export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, 
   try {
     const placeholders = ids.map(() => '?').join(',');
     triggeredPlans = db.prepare(
-      `SELECT tp.action, tp.trigger_value, tp.quantity, tp.notes, tp.status FROM trading_plans tp WHERE tp.asset_id IN (${placeholders}) AND tp.status IN ('triggered', 'executed') ORDER BY tp.updated_at DESC LIMIT 10`
+      `SELECT tp.action, tp.trigger_value, tp.quantity, tp.notes, tp.status
+       FROM trading_plans tp
+       JOIN plan_sets ps ON ps.id = tp.plan_set_id AND ps.status = 'active'
+       WHERE tp.asset_id IN (${placeholders}) AND tp.status IN ('triggered', 'executed')
+       ORDER BY tp.updated_at DESC LIMIT 10`
     ).all(...ids);
   } catch {}
 

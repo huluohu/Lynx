@@ -83,7 +83,7 @@
       </div>
     </div>
     <div v-else class="card empty">
-      <div class="empty-icon">🎯</div><p>{{ t('strategyList.emptyPrefix') }}<router-link to="/strategies/create">{{ t('strategyList.createOne') }}</router-link> {{ t('strategyList.emptyMiddle') }} <a href="#" @click.prevent="showAI = true">{{ t('strategyList.aiGenerateLink') }}</a></p>
+      <div class="empty-icon"><AppIcon name="strategies" size="34" /></div><p>{{ t('strategyList.emptyPrefix') }}<router-link to="/strategies/create">{{ t('strategyList.createOne') }}</router-link> {{ t('strategyList.emptyMiddle') }} <a href="#" @click.prevent="showAI = true">{{ t('strategyList.aiGenerateLink') }}</a></p>
     </div>
 
     <!-- AI Drawer -->
@@ -211,6 +211,7 @@ import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()

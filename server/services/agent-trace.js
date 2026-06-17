@@ -112,6 +112,41 @@ export class AgentTracer {
     } catch {}
   }
 
+  // Persist a resumable checkpoint payload for a completed pipeline stage.
+  saveCheckpoint(stepName, payload) {
+    if (!this.traceId || !stepName || payload === undefined) return;
+    try {
+      this.db.prepare(`
+        INSERT INTO agent_resume_checkpoints (trace_id, step_name, payload)
+        VALUES (?, ?, ?)
+        ON CONFLICT(trace_id, step_name) DO UPDATE SET
+          payload = excluded.payload,
+          updated_at = datetime('now')
+      `).run(this.traceId, stepName, JSON.stringify(payload));
+    } catch (e) {
+      log.warn('Failed to save checkpoint', { stepName, error: e.message });
+    }
+  }
+
+  // Persist an auditable artifact such as a prompt, raw model response, parsed output, or validation report.
+  saveArtifact(stepName, artifactType, content, metadata = null) {
+    if (!this.traceId || !stepName || !artifactType || content === undefined) return;
+    try {
+      this.db.prepare(`
+        INSERT INTO agent_artifacts (trace_id, step_name, artifact_type, content, metadata)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+        this.traceId,
+        stepName,
+        artifactType,
+        typeof content === 'string' ? content : JSON.stringify(content),
+        metadata ? JSON.stringify(metadata) : null,
+      );
+    } catch (e) {
+      log.warn('Failed to save artifact', { stepName, artifactType, error: e.message });
+    }
+  }
+
   // Mark trace as done with evaluation results
   complete({ evalScore = null, evalDetail = null, model = null, elapsedMs = null } = {}) {
     if (!this.traceId) return;
@@ -216,10 +251,43 @@ export function getTraceDetails(db, traceId) {
     const steps = db.prepare(
       'SELECT * FROM agent_trace_steps WHERE trace_id = ? ORDER BY id ASC'
     ).all(traceId);
-    return { ...normalizeTrace(trace), steps: steps.map(normalizeStep) };
+    const artifacts = db.prepare(
+      'SELECT * FROM agent_artifacts WHERE trace_id = ? ORDER BY id ASC'
+    ).all(traceId);
+    return { ...normalizeTrace(trace), steps: steps.map(normalizeStep), artifacts: artifacts.map(normalizeArtifact) };
   } catch (e) {
     log.warn('Failed to get trace details', { error: e.message });
     return null;
+  }
+}
+
+export function getTraceForResume(db, traceId) {
+  try {
+    const trace = db.prepare('SELECT * FROM agent_traces WHERE id = ?').get(traceId);
+    return normalizeTrace(trace);
+  } catch (e) {
+    log.warn('Failed to get resume trace', { traceId, error: e.message });
+    return null;
+  }
+}
+
+export function getResumeCheckpoints(db, traceId) {
+  try {
+    const rows = db.prepare(
+      'SELECT step_name, payload FROM agent_resume_checkpoints WHERE trace_id = ? ORDER BY id ASC'
+    ).all(traceId);
+    const checkpoints = {};
+    for (const row of rows) {
+      try {
+        checkpoints[row.step_name] = JSON.parse(row.payload);
+      } catch {
+        checkpoints[row.step_name] = null;
+      }
+    }
+    return checkpoints;
+  } catch (e) {
+    log.warn('Failed to load resume checkpoints', { traceId, error: e.message });
+    return {};
   }
 }
 
@@ -237,3 +305,11 @@ function normalizeStep(row) {
   try { if (row.output_summary) row.output_summary = JSON.parse(row.output_summary); } catch {}
   return row;
 }
+
+function normalizeArtifact(row) {
+  if (!row) return null;
+  try { if (row.content) row.content = JSON.parse(row.content); } catch {}
+  try { if (row.metadata) row.metadata = JSON.parse(row.metadata); } catch {}
+  return row;
+}
+

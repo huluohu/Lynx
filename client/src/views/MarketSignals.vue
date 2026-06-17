@@ -75,7 +75,7 @@
     </div>
 
     <div v-else class="card empty">
-      <div class="empty-icon">📡</div>
+      <div class="empty-icon"><AppIcon name="signals" size="34" /></div>
       <p>{{ t('signals.empty') }}</p>
     </div>
   </div>
@@ -90,6 +90,7 @@ import { useToast } from '../utils/toast.js'
 import { formatDateTime, parseDateTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
 const { t } = useI18n()

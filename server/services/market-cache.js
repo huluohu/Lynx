@@ -11,9 +11,18 @@ function getLatestCacheRow(db, assetId) {
 
 function getCacheStatus(row) {
   if (!row) return 'missing';
-  const fetchedAt = new Date(row.fetched_at).getTime();
+  const normalizedFetchedAt = normalizeCacheFetchedAt(row);
+  if (!normalizedFetchedAt) return 'stale';
+  const fetchedAt = new Date(normalizedFetchedAt).getTime();
   if (Number.isNaN(fetchedAt)) return 'stale';
   return Date.now() - fetchedAt > FRESH_MARKET_CACHE_WINDOW_MS ? 'stale' : 'fresh';
+}
+
+function normalizeCacheFetchedAt(row) {
+  return normalizeApiTimestamp(row?.fetched_at || null, {
+    assumeUtcWhenNoTimezone: true,
+    fallbackToLocalWhenFuture: true,
+  });
 }
 
 function buildSnapshot(asset, row, { cached, details = null } = {}) {
@@ -30,7 +39,7 @@ function buildSnapshot(asset, row, { cached, details = null } = {}) {
     currency: row?.currency ?? null,
     source: row?.source || asset.data_source || null,
     details,
-    fetched_at: normalizeApiTimestamp(row?.fetched_at || null, { assumeUtcWhenNoTimezone: true }),
+    fetched_at: normalizeCacheFetchedAt(row),
     cached,
     stale,
     empty_cache: emptyCache,

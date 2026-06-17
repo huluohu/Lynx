@@ -88,7 +88,7 @@
             <td>
               <div class="content-cell">
                 <div class="content-head">
-                  <span class="icon-text content-type"><span class="icon">{{ typeIcon(item.type) }}</span>{{ typeLabel(item.type) }}</span>
+                  <span class="icon-text content-type"><AppIcon :name="typeIcon(item.type)" size="15" />{{ typeLabel(item.type) }}</span>
                   <span class="content-title">{{ item.title }}</span>
                 </div>
                 <div v-if="item.strategy_name" class="content-sub">{{ item.strategy_name }}</div>
@@ -115,7 +115,7 @@
       <div class="show-mobile alert-cards">
         <div v-for="item in alerts" :key="item.id" class="alert-card">
           <div class="alert-card-top">
-            <span class="icon-text content-type"><span class="icon">{{ typeIcon(item.type) }}</span>{{ typeLabel(item.type) }}</span>
+            <span class="icon-text content-type"><AppIcon :name="typeIcon(item.type)" size="15" />{{ typeLabel(item.type) }}</span>
             <span class="badge" :class="severityBadge(item.severity)">{{ severityLabel(item.severity) }}</span>
           </div>
           <div class="alert-card-title">{{ item.title }}</div>
@@ -141,7 +141,7 @@
     </div>
 
     <div v-else class="card empty">
-      <div class="empty-icon">🔔</div>
+      <div class="empty-icon"><AppIcon name="alerts" size="34" /></div>
       <p>{{ t('alertHistory.empty') }}</p>
     </div>
   </div>
@@ -198,6 +198,7 @@ import { formatDateTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -382,7 +383,7 @@ async function clearRead() {
 }
 
 function typeIcon(type) {
-  return { plan_triggered: '📌', plan_approaching: '⏳', stop_loss: '🛑', price_swing: '📊', trade_executed: '💱' }[type] || '🔔'
+  return { plan_triggered: 'pin', plan_approaching: 'alerts', stop_loss: 'warning', price_swing: 'signals', trade_executed: 'history' }[type] || 'alerts'
 }
 function typeLabel(type) {
   return {

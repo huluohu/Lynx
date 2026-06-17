@@ -154,7 +154,7 @@
         </div>
       </div>
     </div>
-    <div v-else class="card empty"><div class="empty-icon">📋</div><p>{{ t('plans.noPlans') }}</p></div>
+    <div v-else class="card empty"><div class="empty-icon"><AppIcon name="plans" size="34" /></div><p>{{ t('plans.noPlans') }}</p></div>
 
     <AppDrawer v-model="filterDrawerOpen" :title="t('common.filter')">
       <div class="form-group">
@@ -203,6 +203,7 @@ import { formatNumber } from '../utils/formatters.js'
 import MobileActionBar from '../components/MobileActionBar.vue'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
@@ -324,7 +325,7 @@ function triggerLabel(type) {
 }
 
 function statusLabel(status) {
-  return { pending: t('plans.pending'), triggered: `⚡${t('plans.triggered')}`, partial: t('plans.partial'), executed: t('plans.executed'), cancelled: t('plans.cancelled') }[status] || status
+  return { pending: t('plans.pending'), triggered: t('plans.triggered'), partial: t('plans.partial'), executed: t('plans.executed'), cancelled: t('plans.cancelled') }[status] || status
 }
 
 function statusBadge(status) {

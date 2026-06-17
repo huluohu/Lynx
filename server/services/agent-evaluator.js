@@ -216,6 +216,119 @@ export function validatePlans(plans, assets, budget) {
 }
 
 // ============================================================
+// 2b. Structured Output Validation
+// ============================================================
+
+export function validateAnalysisReport(report, collectedData) {
+  const issues = [];
+  if (!report || typeof report !== 'object') {
+    return { valid: false, issues: [{ type: 'analysis_not_object', severity: 'error', message: '分析报告不是有效对象' }] };
+  }
+  if (!report.market_assessment) issues.push({ type: 'missing_market_assessment', severity: 'error', message: '缺少 market_assessment' });
+  if (!Array.isArray(report.asset_analyses)) issues.push({ type: 'missing_asset_analyses', severity: 'error', message: '缺少 asset_analyses 数组' });
+  const expectedAssetCount = collectedData?.assets?.length || 0;
+  if (Array.isArray(report.asset_analyses) && expectedAssetCount && report.asset_analyses.length < expectedAssetCount) {
+    issues.push({ type: 'incomplete_asset_analyses', severity: 'warning', message: `资产分析不足：${report.asset_analyses.length}/${expectedAssetCount}` });
+  }
+  const confidence = Number(report.confidence_level);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    issues.push({ type: 'invalid_confidence', severity: 'warning', message: 'confidence_level 应在 0-1 之间' });
+  }
+  return { valid: !issues.some(item => item.severity === 'error'), issues };
+}
+
+export function validateStrategyResultShape(result, collectedData) {
+  const issues = [];
+  if (!result || typeof result !== 'object') {
+    return { valid: false, issues: [{ type: 'strategy_not_object', severity: 'error', message: '策略结果不是有效对象' }] };
+  }
+  if (!result.strategy || typeof result.strategy !== 'object') issues.push({ type: 'missing_strategy', severity: 'error', message: '缺少 strategy 对象' });
+  if (!Array.isArray(result.plans)) issues.push({ type: 'missing_plans', severity: 'error', message: '缺少 plans 数组' });
+  if (!result.reasoning || String(result.reasoning).length < 20) issues.push({ type: 'weak_reasoning', severity: 'warning', message: '决策逻辑较弱或缺失' });
+
+  const assetIds = new Set((collectedData?.assets || []).map(item => Number(item.asset.id)));
+  for (const plan of Array.isArray(result.plans) ? result.plans : []) {
+    if (!assetIds.has(Number(plan.asset_id))) issues.push({ type: 'unknown_plan_asset', severity: 'error', message: `计划引用未知资产 ${plan.asset_id}` });
+    if (!['buy', 'sell'].includes(plan.action)) issues.push({ type: 'invalid_action', severity: 'error', message: `第${plan.seq || '?'}步 action 无效` });
+    if (!['price_below', 'price_above', 'time'].includes(plan.trigger_type)) issues.push({ type: 'invalid_trigger_type', severity: 'error', message: `第${plan.seq || '?'}步 trigger_type 无效` });
+  }
+  return { valid: !issues.some(item => item.severity === 'error'), issues };
+}
+
+// ============================================================
+// 2c. Execution Simulation
+// ============================================================
+
+export function simulatePlanExecution(plans, assets, budget) {
+  const assetMap = {};
+  for (const item of assets || []) assetMap[Number(item.asset.id)] = item;
+  const simulated = {};
+  const issues = [];
+  let committedBuy = 0;
+
+  for (const item of assets || []) {
+    simulated[Number(item.asset.id)] = {
+      quantity: Number(item.holding?.quantity || 0),
+      avgCost: Number(item.holding?.avg_cost || 0),
+      currentPrice: Number(item.latestPrice || 0),
+      buyAmount: 0,
+      sellQuantity: 0,
+    };
+  }
+
+  for (const plan of plans || []) {
+    const seq = plan.seq || '?';
+    const assetId = Number(plan.asset_id);
+    const state = simulated[assetId];
+    const asset = assetMap[assetId];
+    if (!state || !asset) continue;
+
+    const trigger = Number(plan.trigger_value);
+    const amount = Number(plan.amount || 0);
+    const quantity = Number(plan.quantity || 0);
+    const currentPrice = state.currentPrice;
+
+    if (plan.action === 'buy') {
+      const buyAmount = amount > 0 ? amount : quantity > 0 && trigger > 0 ? quantity * trigger : 0;
+      committedBuy += buyAmount;
+      state.buyAmount += buyAmount;
+      if (currentPrice > 0 && plan.trigger_type === 'price_below' && trigger >= currentPrice) {
+        issues.push({ type: 'immediate_buy_trigger', severity: 'warning', message: `第${seq}步买入触发价不低于当前价，可能立即触发` });
+      }
+      if (currentPrice > 0 && trigger > currentPrice * 1.05) {
+        issues.push({ type: 'buy_far_above_market', severity: 'warning', message: `第${seq}步买入价明显高于当前价` });
+      }
+    }
+
+    if (plan.action === 'sell') {
+      const sellQty = quantity > 0 ? quantity : amount > 0 && trigger > 0 ? amount / trigger : 0;
+      state.sellQuantity += sellQty;
+      if (state.sellQuantity - state.quantity > 1e-8) {
+        issues.push({ type: 'sell_exceeds_holding', severity: 'error', message: `第${seq}步累计卖出数量超过当前持仓` });
+      }
+      if (currentPrice > 0 && plan.trigger_type === 'price_above' && trigger <= currentPrice) {
+        issues.push({ type: 'immediate_sell_trigger', severity: 'warning', message: `第${seq}步卖出触发价不高于当前价，可能立即触发` });
+      }
+      if (state.avgCost > 0 && trigger < state.avgCost * 0.98) {
+        issues.push({ type: 'sell_below_avg_cost', severity: 'warning', message: `第${seq}步卖出价低于成本价，需确认是否为止损` });
+      }
+    }
+  }
+
+  if (budget > 0 && committedBuy > budget * 1.02) {
+    issues.push({ type: 'simulated_budget_exceeded', severity: 'error', message: `模拟买入占用 ¥${committedBuy.toFixed(0)} 超出预算 ¥${budget}` });
+  }
+
+  return {
+    valid: !issues.some(item => item.severity === 'error'),
+    issues,
+    committed_buy: Math.round(committedBuy * 100) / 100,
+    budget_usage: budget > 0 ? Math.round((committedBuy / budget) * 100) / 100 : 0,
+    assets: simulated,
+  };
+}
+
+// ============================================================
 // 3. Auto-Fix
 // ============================================================
 
@@ -279,7 +392,7 @@ export function autoFixPlans(plans, assets, budget) {
  * Returns { score: 0-1, checks, issues, budget_usage, summary }
  */
 export function evaluateOutput(result, collectedData, budget) {
-  const { plans = [], analysis, strategy, risk_management } = result;
+  const { plans = [], analysis, risk_management } = result;
   const { assets } = collectedData;
 
   const checks = [];
@@ -320,7 +433,12 @@ export function evaluateOutput(result, collectedData, budget) {
   const constraintsOk = validation.valid;
   checks.push({ name: 'price_constraints', passed: constraintsOk, weight: 0.20, detail: `${validation.issues.length}个问题` });
 
-  const score = checks.reduce((sum, c) => sum + (c.passed ? c.weight : 0), 0);
+  // C9: Execution simulation sanity
+  const simulation = simulatePlanExecution(plans, assets, budget);
+  checks.push({ name: 'execution_simulation', passed: simulation.valid, weight: 0.15, detail: `${simulation.issues.length}个模拟问题` });
+
+  const totalWeight = checks.reduce((sum, c) => sum + c.weight, 0) || 1;
+  const score = checks.reduce((sum, c) => sum + (c.passed ? c.weight : 0), 0) / totalWeight;
 
   // Grade
   let grade;
@@ -335,7 +453,8 @@ export function evaluateOutput(result, collectedData, budget) {
     passed: checks.filter(c => c.passed).length,
     total: checks.length,
     checks,
-    issues: validation.issues,
+    issues: [...validation.issues, ...simulation.issues],
+    simulation,
     budget_usage: Math.round(budgetUsage * 100) / 100,
   };
 }
@@ -353,7 +472,7 @@ export function evaluateOutput(result, collectedData, budget) {
  * Returns { consistent, warnings }
  */
 export function selfCheckConsistency(result, collectedData, goal) {
-  const { plans = [], analysis, strategy } = result;
+  const { plans = [], analysis } = result;
   const { assets } = collectedData;
   const assetIds = new Set(assets.map(a => a.asset.id));
   const warnings = [];

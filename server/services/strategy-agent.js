@@ -22,10 +22,16 @@ import {
   autoFixPlans,
   evaluateOutput,
   selfCheckConsistency,
+  simulatePlanExecution,
+  validateAnalysisReport,
+  validateStrategyResultShape,
 } from './agent-evaluator.js';
-import { AgentTracer } from './agent-trace.js';
+import { AgentTracer, getResumeCheckpoints, getTraceForResume } from './agent-trace.js';
 
 const log = createLogger('strategy-agent');
+const AGENT_VERSION = '2026-06-agent-v2';
+const ANALYST_PROMPT_VERSION = 'analyst-2026-06-v2';
+const STRATEGIST_PROMPT_VERSION = 'strategist-2026-06-v2';
 
 // ============================================================
 // Circuit Breaker
@@ -106,6 +112,37 @@ export function callLLM(apiUrl, apiKey, model, messages, { temperature = 0.7, ma
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function sameNumberArray(a = [], b = []) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const left = a.map(Number).sort((x, y) => x - y);
+  const right = b.map(Number).sort((x, y) => x - y);
+  return left.every((value, index) => value === right[index]);
+}
+
+function loadResumeState(db, resumeTraceId, currentParams) {
+  if (!resumeTraceId) return { trace: null, checkpoints: {} };
+
+  const trace = getTraceForResume(db, Number(resumeTraceId));
+  if (!trace) throw new Error('未找到可继续的 Agent 运行记录');
+  if (!['failed', 'partial', 'running'].includes(trace.status)) {
+    throw new Error('该 Agent 运行记录不需要继续执行');
+  }
+  if (!sameNumberArray(trace.asset_ids || [], currentParams.assetIds || [])) {
+    throw new Error('继续执行失败：资产选择与原运行不一致');
+  }
+
+  const original = trace.params || {};
+  if (Number(original.budget) !== Number(currentParams.budget)
+    || String(original.goal || '') !== String(currentParams.goal || '')
+    || String(original.riskLevel || '') !== String(currentParams.riskLevel || '')) {
+    throw new Error('继续执行失败：预算、目标或风险偏好与原运行不一致');
+  }
+
+  const checkpoints = getResumeCheckpoints(db, trace.id);
+  if (!checkpoints.collect) throw new Error('该运行尚无可继续的检查点，请重新生成');
+  return { trace, checkpoints };
+}
 
 function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout }) {
   return new Promise((resolve) => {
@@ -220,7 +257,12 @@ async function collectData(db, assetIds, config) {
     ).all(id, `%${id}%`);
 
     const triggeredPlans = db.prepare(
-      "SELECT tp.*, s.name as strategy_name FROM trading_plans tp LEFT JOIN strategies s ON tp.strategy_id = s.id WHERE tp.asset_id = ? AND tp.status IN ('triggered', 'executed') ORDER BY tp.updated_at DESC LIMIT 10"
+      `SELECT tp.*, s.name as strategy_name
+       FROM trading_plans tp
+       JOIN plan_sets ps ON ps.id = tp.plan_set_id AND ps.status = 'active'
+       LEFT JOIN strategies s ON tp.strategy_id = s.id
+       WHERE tp.asset_id = ? AND tp.status IN ('triggered', 'executed')
+       ORDER BY tp.updated_at DESC LIMIT 10`
     ).all(id);
     result.triggeredPlans.push(...triggeredPlans);
 
@@ -521,10 +563,12 @@ async function runAnalysis(collectedData, config, tracer) {
     { role: 'system', content: '你是一位专业的投资研究分析师，擅长技术分析和宏观经济研判。只输出 JSON，不输出其他文字。保持客观、审慎，明确标注不确定性。' },
     { role: 'user', content: prompt },
   ];
+  tracer?.saveArtifact('analyze', 'prompt', { messages }, { prompt_version: ANALYST_PROMPT_VERSION, model: config.analysisModel });
 
   const response = await callLLM(config.apiUrl, config.apiKey, config.analysisModel, messages, {
     temperature: 0.4, maxTokens: 3000, timeout: 60000, retries: config.llmRetries,
   });
+  tracer?.saveArtifact('analyze', 'llm_raw_response', response || { error: 'no_response' }, { model: config.analysisModel });
 
   if (!response) {
     log.warn('Step 2: LLM unavailable, using fallback analysis');
@@ -542,9 +586,12 @@ async function runAnalysis(collectedData, config, tracer) {
   }
 
   const report = extractJSON(content);
-  if (!report || !report.market_assessment) {
+  const shape = validateAnalysisReport(report, collectedData);
+  tracer?.saveArtifact('analyze', 'parsed_output', report || null, { valid: shape.valid });
+  tracer?.saveArtifact('analyze', 'validation_report', shape, { prompt_version: ANALYST_PROMPT_VERSION });
+  if (!shape.valid) {
     log.warn('Step 2: JSON parse failed, using fallback', { preview: content.slice(0, 200) });
-    tracer?.failStep('analyze', 'JSON parse failed');
+    tracer?.failStep('analyze', shape.issues.map(item => item.message).join('; ') || 'JSON parse failed');
     return { report: buildFallbackAnalysis(collectedData), usedFallback: true };
   }
 
@@ -789,10 +836,12 @@ async function generateStrategy(analysisReport, collectedData, userConstraints, 
     { role: 'system', content: '你是一位专业量化交易策略师，精通技术分析和仓位管理。只输出 JSON，不输出其他文字。每条交易计划都必须有明确的决策依据。' },
     { role: 'user', content: prompt },
   ];
+  tracer?.saveArtifact('generate', 'prompt', { messages }, { prompt_version: STRATEGIST_PROMPT_VERSION, model: config.model });
 
   const response = await callLLM(config.apiUrl, config.apiKey, config.model, messages, {
     temperature: 0.5, maxTokens: 4000, timeout: 60000, retries: config.llmRetries,
   });
+  tracer?.saveArtifact('generate', 'llm_raw_response', response || { error: 'no_response' }, { model: config.model });
 
   if (!response) {
     log.warn('Step 4: LLM unavailable, using fallback strategy');
@@ -811,10 +860,13 @@ async function generateStrategy(analysisReport, collectedData, userConstraints, 
   }
 
   const result = extractJSON(content);
-  if (!result || !result.strategy || !result.plans) {
+  const shape = validateStrategyResultShape(result, collectedData);
+  tracer?.saveArtifact('generate', 'parsed_output', result || null, { valid: shape.valid });
+  tracer?.saveArtifact('generate', 'validation_report', shape, { prompt_version: STRATEGIST_PROMPT_VERSION });
+  if (!shape.valid) {
     log.warn('Step 4: JSON parse failed, using fallback strategy', { preview: content.slice(0, 300) });
-    const fallback = buildFallbackStrategy(analysisReport, collectedData, userConstraints, 'JSON parse failed');
-    tracer?.completeStep('generate', { fallback: true, error: 'JSON parse failed', planCount: fallback.plans.length });
+    const fallback = buildFallbackStrategy(analysisReport, collectedData, userConstraints, shape.issues.map(item => item.message).join('; ') || 'JSON parse failed');
+    tracer?.completeStep('generate', { fallback: true, error: 'Strategy shape invalid', planCount: fallback.plans.length });
     return fallback;
   }
 
@@ -844,16 +896,24 @@ export async function runStrategyAgent(db, params, onProgress) {
     previousResult,
     userFeedback,
     trigger = 'generate',
+    resumeTraceId,
   } = params;
 
   const config = getAgentConfig(db);
   const notify = onProgress || (() => {});
   const startTime = Date.now();
   const isRegenerate = !!(previousResult && userFeedback);
+  const resumeState = loadResumeState(db, resumeTraceId, { assetIds, budget, goal, riskLevel });
+  const isResume = !!resumeState.trace;
 
-  const tracer = new AgentTracer(db, isRegenerate ? 'regenerate' : trigger, assetIds, { budget, goal, riskLevel });
+  const tracer = new AgentTracer(db, isResume ? 'resume' : isRegenerate ? 'regenerate' : trigger, assetIds, { budget, goal, riskLevel });
 
-  log.info('Strategy Agent started', { assetIds, budget, goal, riskLevel, isRegenerate, traceId: tracer.traceId });
+  log.info('Strategy Agent started', { assetIds, budget, goal, riskLevel, isRegenerate, isResume, resumeTraceId, traceId: tracer.traceId });
+  notify('started', isResume ? `从运行 #${resumeTraceId} 的检查点继续...` : 'Agent 运行已开始', {
+    trace_id: tracer.traceId,
+    run_id: tracer.runId,
+    resume_trace_id: resumeTraceId || null,
+  });
 
   // ── Step 0: Pre-Check ──────────────────────────────────────
   tracer.startStep('precheck', { assetIds, goal, riskLevel });
@@ -869,65 +929,96 @@ export async function runStrategyAgent(db, params, onProgress) {
   notify('precheck_done', '配置检查通过');
 
   // ── Step 1: Data Collection ────────────────────────────────
-  tracer.startStep('collect');
-  notify('collecting', '正在收集持仓、行情和市场数据...');
-
   let collectedData;
-  try {
-    collectedData = await collectData(db, assetIds, config);
-  } catch (e) {
-    tracer.failStep('collect', e.message);
-    tracer.fail(e.message);
-    throw new Error(`数据收集失败: ${e.message}`);
+  let dataQuality;
+  if (resumeState.checkpoints.collect?.collectedData) {
+    collectedData = resumeState.checkpoints.collect.collectedData;
+    dataQuality = resumeState.checkpoints.collect.dataQuality ?? scoreDataQuality(collectedData);
+    tracer.skipStep('collect', `resumed from trace #${resumeTraceId}`);
+  } else {
+    tracer.startStep('collect');
+    notify('collecting', '正在收集持仓、行情和市场数据...');
+
+    try {
+      collectedData = await collectData(db, assetIds, config);
+    } catch (e) {
+      tracer.failStep('collect', e.message);
+      tracer.fail(e.message);
+      throw new Error(`数据收集失败: ${e.message}`);
+    }
+
+    dataQuality = scoreDataQuality(collectedData);
+    tracer.completeStep('collect', {
+      assets: collectedData.assets.length,
+      pricePoints: collectedData.assets.reduce((s, a) => s + a.priceHistory.length, 0),
+      newsCount: collectedData.recentNews.length,
+      dataQuality,
+    });
+    tracer.saveCheckpoint('collect', { collectedData, dataQuality });
   }
 
-  const dataQuality = scoreDataQuality(collectedData);
   tracer.setDataQuality(dataQuality);
-  tracer.completeStep('collect', {
-    assets: collectedData.assets.length,
-    pricePoints: collectedData.assets.reduce((s, a) => s + a.priceHistory.length, 0),
-    newsCount: collectedData.recentNews.length,
-    dataQuality,
-  });
 
-  notify('collecting_done', `数据收集完成：${collectedData.assets.length}个资产, ${collectedData.recentNews.length}条资讯`, {
+  notify('collecting_done', `${resumeState.checkpoints.collect?.collectedData ? '已复用数据检查点' : '数据收集完成'}：${collectedData.assets.length}个资产, ${collectedData.recentNews.length}条资讯`, {
     data_quality_score: dataQuality,
     price_points: collectedData.assets.reduce((s, a) => s + a.priceHistory.length, 0),
     news_count: collectedData.recentNews.length,
     has_macro: Object.keys(collectedData.macroIndicators).length > 0,
+    resumed: !!resumeState.checkpoints.collect?.collectedData,
   });
 
   // ── Step 2: LLM Analysis ───────────────────────────────────
-  notify('analyzing', '正在进行市场研判和趋势分析...');
+  let analysisReport;
+  let usedFallback;
+  let selfCheck;
+  if (resumeState.checkpoints.analysis?.analysisReport) {
+    analysisReport = resumeState.checkpoints.analysis.analysisReport;
+    usedFallback = !!resumeState.checkpoints.analysis.usedFallback;
+    selfCheck = resumeState.checkpoints.analysis.selfCheck || selfCheckConsistency({ plans: [], analysis: analysisReport, strategy: null }, collectedData, goal);
+    tracer.skipStep('analyze', `resumed from trace #${resumeTraceId}`);
+    tracer.skipStep('selfcheck', `resumed from trace #${resumeTraceId}`);
+  } else {
+    notify('analyzing', '正在进行市场研判和趋势分析...');
 
-  const { report: rawReport, usedFallback } = await runAnalysis(collectedData, config, tracer);
+    const { report: rawReport, usedFallback: fallbackUsed } = await runAnalysis(collectedData, config, tracer);
+    usedFallback = fallbackUsed;
 
-  // ── Step 3: Self-check / Enrich Analysis ──────────────────
-  tracer.startStep('selfcheck');
-  notify('validating', '正在验证分析结果的一致性...');
+    // ── Step 3: Self-check / Enrich Analysis ──────────────────
+    tracer.startStep('selfcheck');
+    notify('validating', '正在验证分析结果的一致性...');
 
-  const analysisReport = validateAndEnrichAnalysis(rawReport, collectedData);
+    analysisReport = validateAndEnrichAnalysis(rawReport, collectedData);
 
-  const selfCheck = selfCheckConsistency({ plans: [], analysis: analysisReport, strategy: null }, collectedData, goal);
-  tracer.completeStep('selfcheck', { warnings: selfCheck.warnings.length, usedFallback });
+    selfCheck = selfCheckConsistency({ plans: [], analysis: analysisReport, strategy: null }, collectedData, goal);
+    tracer.completeStep('selfcheck', { warnings: selfCheck.warnings.length, usedFallback });
+    tracer.saveCheckpoint('analysis', { analysisReport, usedFallback, selfCheck });
+  }
 
-  notify('analyzing_done', `分析完成：置信度 ${Math.round((analysisReport.confidence_level || 0.5) * 100)}%${usedFallback ? '（规则推断）' : ''}`, {
+  notify('analyzing_done', `${resumeState.checkpoints.analysis?.analysisReport ? '已复用市场研判' : '分析完成'}：置信度 ${Math.round((analysisReport.confidence_level || 0.5) * 100)}%${usedFallback ? '（规则推断）' : ''}`, {
     confidence: analysisReport.confidence_level,
     used_fallback: usedFallback,
     self_check_warnings: selfCheck.warnings,
+    resumed: !!resumeState.checkpoints.analysis?.analysisReport,
   });
 
   // ── Step 4: LLM Strategy Generation ───────────────────────
   notify('generating', isRegenerate ? '正在基于您的反馈优化策略...' : '正在基于分析结论生成操盘策略...');
 
   let strategyResult;
-  try {
-    strategyResult = await generateStrategy(analysisReport, collectedData, {
-      budget, goal, riskLevel, previousResult, userFeedback,
-    }, config, tracer);
-  } catch (e) {
-    tracer.fail(e.message);
-    throw e;
+  if (resumeState.checkpoints.strategy?.strategyResult) {
+    strategyResult = resumeState.checkpoints.strategy.strategyResult;
+    tracer.skipStep('generate', `resumed from trace #${resumeTraceId}`);
+  } else {
+    try {
+      strategyResult = await generateStrategy(analysisReport, collectedData, {
+        budget, goal, riskLevel, previousResult, userFeedback,
+      }, config, tracer);
+      tracer.saveCheckpoint('strategy', { strategyResult });
+    } catch (e) {
+      tracer.failStep('generate', e.message);
+      tracer.fail(e.message);
+      throw e;
+    }
   }
 
   // ── Step 5: Post-Validation & Auto-Fix ────────────────────
@@ -936,11 +1027,14 @@ export async function runStrategyAgent(db, params, onProgress) {
 
   const validation = validatePlans(strategyResult.plans, collectedData.assets, budget);
   const { plans: fixedPlans, fixLog } = autoFixPlans(strategyResult.plans, collectedData.assets, budget);
+  const simulation = simulatePlanExecution(fixedPlans, collectedData.assets, budget);
+  tracer.saveArtifact('postvalidate', 'validation_report', { validation, simulation, fixLog }, { agent_version: AGENT_VERSION });
 
   tracer.completeStep('postvalidate', {
-    issueCount: validation.issues.length,
+    issueCount: validation.issues.length + simulation.issues.length,
     fixCount: fixLog.length,
     budgetUsage: Math.round(validation.budgetUsage * 100),
+    simulationValid: simulation.valid,
   });
 
   if (fixLog.length > 0) {
@@ -965,6 +1059,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     collectedData,
     budget,
   );
+  tracer.saveArtifact('evaluate', 'validation_report', evalResult, { agent_version: AGENT_VERSION });
 
   tracer.completeStep('evaluate', { score: evalResult.score, grade: evalResult.grade, passed: evalResult.passed });
   notify('done', `策略生成完成 — 质量评分 ${Math.round(evalResult.score * 100)}分 (${evalResult.grade})`, {
@@ -1000,6 +1095,8 @@ export async function runStrategyAgent(db, params, onProgress) {
     execution_notes: strategyResult.execution_notes || '',
     consistency_warnings: finalConsistency.warnings,
     validation_issues: validation.issues,
+    simulation_issues: simulation.issues,
+    execution_simulation: simulation,
     fix_log: fixLog,
     eval: evalResult,
     data_quality_score: dataQuality,
@@ -1007,6 +1104,8 @@ export async function runStrategyAgent(db, params, onProgress) {
     used_fallback_strategy: !!strategyResult._fallback_strategy,
     _meta: {
       model: config.model,
+      agent_version: AGENT_VERSION,
+      prompt_versions: { analyst: ANALYST_PROMPT_VERSION, strategist: STRATEGIST_PROMPT_VERSION },
       elapsed_ms: elapsed,
       trace_id: tracer.traceId,
       run_id: tracer.runId,

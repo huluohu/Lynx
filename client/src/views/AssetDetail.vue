@@ -24,7 +24,7 @@
       </div>
 
       <div class="card" v-if="holding">
-        <div class="section-title">📦 {{ t('assetDetail.holdingInfo') }}</div>
+        <div class="section-title section-title-inline"><AppIcon name="holdings" size="16" /> {{ t('assetDetail.holdingInfo') }}</div>
         <div class="info-list">
           <div class="info-row"><span class="info-label">{{ t('holdings.fields.quantity') }}</span><span style="font-weight:600">{{ holding.quantity }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('holdings.fields.avgCost') }}</span><span>{{ money(holding.avg_cost) }}</span></div>
@@ -55,12 +55,12 @@
         <thead><tr><th>{{ t('assetDetail.time') }}</th><th>{{ t('transactionForm.type') }}</th><th>{{ t('transactionForm.quantity') }}</th><th>{{ t('transactionForm.price') }}</th><th>{{ t('transactionForm.total') }}</th><th>{{ t('assetDetail.fee') }}</th></tr></thead>
         <tbody>
           <tr v-for="tx in transactions" :key="tx.id">
-            <td>{{ tx.executed_at?.slice(0,10) }}</td>
+            <td>{{ fmtDateTime(tx.executed_at) }}</td>
             <td><span class="badge" :class="tx.type==='buy'?'badge-buy':'badge-sell'">{{ tx.type==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span></td>
             <td>{{ tx.quantity }}</td>
             <td>{{ money(tx.price) }}</td>
             <td :class="tx.type==='buy'?'pnl negative':'pnl positive'">{{ money(tx.total) }}</td>
-            <td>{{ money(tx.fee) }}</td>
+            <td>{{ money(tx.fee || 0) }}</td>
           </tr>
         </tbody>
       </table>
@@ -69,7 +69,7 @@
           <div v-for="tx in transactions" :key="tx.id" class="tx-card">
             <div class="tx-card-top">
               <span class="badge" :class="tx.type==='buy'?'badge-buy':'badge-sell'">{{ tx.type==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
-              <span style="color:var(--text-muted);font-size:12px">{{ tx.executed_at?.slice(0,10) }}</span>
+              <span style="color:var(--text-muted);font-size:12px">{{ fmtDateTime(tx.executed_at) }}</span>
             </div>
             <div class="tx-card-body">
               <span>{{ tx.quantity }} × {{ money(tx.price) }}</span>
@@ -131,7 +131,7 @@
     <!-- delete confirm is handled programmatically via useConfirm() -->
 
     <!-- AI Drawer -->
-    <AppDrawer v-model="showAIDrawer" :title="`✨ ${t('assetDetail.aiAdviceTitle')}`">
+    <AppDrawer v-model="showAIDrawer" :title="t('assetDetail.aiAdviceTitle')">
       <AIStrategyGenerator :preset-asset-id="route.params.id" @done="showAIDrawer = false" />
     </AppDrawer>
   </div>
@@ -149,9 +149,11 @@ import TransactionForm from '../components/TransactionForm.vue'
 import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import TrendChart from '../components/TrendChart.vue'
+import AppIcon from '../components/AppIcon.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { formatCurrencyAmount } from '../utils/currency.js'
+import { formatDateTimeSeconds } from '../utils/formatters.js'
 
 useSwipeBack()
 
@@ -195,7 +197,7 @@ async function loadData() {
       stop_loss: json.data.stop_loss || '',
     })
   }
-  const tres = await api(`/api/transactions?asset_id=${route.params.id}`)
+  const tres = await api(`/api/history?asset_id=${route.params.id}&limit=50&offset=0`)
   const tjson = await tres.json()
   transactions.value = tjson.data || []
   fetchProfitTrend().catch(() => {})
@@ -293,6 +295,9 @@ function assetTypeLabel(type) {
 }
 function money(value) {
   return formatCurrencyAmount(value, asset.value?.currency, { maximumFractionDigits: 3 })
+}
+function fmtDateTime(value) {
+  return formatDateTimeSeconds(value)
 }
 function formatTrendPercent(value) {
   return `${Number(value || 0).toFixed(1)}%`

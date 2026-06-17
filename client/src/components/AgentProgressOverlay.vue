@@ -7,7 +7,9 @@
           <!-- Header -->
           <div class="agent-panel-header">
             <div class="agent-icon-title">
-              <span class="header-icon">{{ isDone ? '✅' : error ? '❌' : '🧠' }}</span>
+              <span class="header-icon" :class="{ success: isDone, danger: !!error }">
+                <AppIcon :name="isDone ? 'check' : error ? 'x' : 'sparkles'" size="18" />
+              </span>
               <span class="header-title">{{ t('aiStrategyGenerator.agentWorking') }}</span>
             </div>
             <div class="header-right">
@@ -21,7 +23,10 @@
           <!-- Error state -->
           <div v-if="error" class="error-body">
             <div class="error-msg">{{ error }}</div>
-            <button class="btn-close-error" @click="$emit('close')">{{ t('common.close') }}</button>
+            <div class="error-actions">
+              <button v-if="canResume" class="btn-resume-error" @click="$emit('resume')">{{ t('aiStrategyGenerator.resumeFromFailure') }}</button>
+              <button class="btn-close-error" @click="$emit('close')">{{ t('common.close') }}</button>
+            </div>
           </div>
 
           <!-- Progress steps -->
@@ -84,9 +89,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppIcon from './AppIcon.vue'
 
 const { t } = useI18n()
-defineEmits(['close', 'cancel'])
+defineEmits(['close', 'cancel', 'resume'])
 
 const props = defineProps({
   visible: Boolean,
@@ -95,6 +101,7 @@ const props = defineProps({
   dataQualityScore: { type: Number, default: null },
   evalScore: { type: Number, default: null },
   grade: { type: String, default: null },
+  canResume: { type: Boolean, default: false },
 })
 
 const isDone = computed(() => !props.error && props.steps.length > 0 && props.steps.every(s => s.status === 'done'))
@@ -187,7 +194,15 @@ function stepLabel(id) {
   flex: 1;
   min-width: 0;
 }
-.header-icon { font-size: 20px; flex-shrink: 0; }
+.header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.header-icon.success { color: var(--green); }
+.header-icon.danger { color: var(--red); }
 .header-title {
   font-size: 16px;
   font-weight: 700;
@@ -247,7 +262,12 @@ function stepLabel(id) {
   border-radius: 8px;
   padding: 12px 14px;
 }
-.btn-close-error {
+.error-actions {
+  display: flex;
+  gap: 10px;
+}
+.btn-close-error,
+.btn-resume-error {
   width: 100%;
   padding: 12px;
   border-radius: 10px;
@@ -256,6 +276,12 @@ function stepLabel(id) {
   color: var(--text);
   font-size: 15px;
   cursor: pointer;
+}
+.btn-resume-error {
+  border-color: var(--primary, #3b82f6);
+  background: var(--primary, #3b82f6);
+  color: #fff;
+  font-weight: 600;
 }
 
 /* Steps body */

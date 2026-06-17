@@ -10,7 +10,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">{{ t('transactionForm.date') }}</label>
-        <input class="form-input" type="date" v-model="form.executed_at" />
+        <input class="form-input" type="datetime-local" step="1" v-model="form.executed_at" />
       </div>
     </div>
     <div class="form-row">
@@ -61,13 +61,25 @@ const { t } = useI18n()
 const toast = useToast()
 
 const submitting = ref(false)
+function nowDateTimeLocal() {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 19)
+}
+
+function normalizeLocalDateTime(value) {
+  if (!value) return nowDateTimeLocal().replace('T', ' ')
+  const normalized = String(value).replace('T', ' ')
+  return normalized.length === 16 ? `${normalized}:00` : normalized.slice(0, 19)
+}
+
 const form = reactive({
   type: 'buy',
   quantity: '',
   price: '',
   total: '',
   fee: '',
-  executed_at: new Date().toISOString().slice(0, 10),
+  executed_at: nowDateTimeLocal(),
   reason: '',
 })
 
@@ -86,10 +98,10 @@ async function submit() {
       price: Number(form.price),
       total: Number(computedTotal.value) || Number(form.quantity) * Number(form.price),
       fee: form.fee ? Number(form.fee) : 0,
-      executed_at: form.executed_at,
+      executed_at: normalizeLocalDateTime(form.executed_at),
       reason: form.reason,
     }
-    const res = await api('/api/transactions', {
+    const res = await api('/api/history', {
       method: 'POST',
       body: JSON.stringify(body),
     })
@@ -101,8 +113,9 @@ async function submit() {
     emit('success')
   } catch (e) {
     toast.error(e.message)
+  } finally {
+    submitting.value = false
   }
-  submitting.value = false
 }
 </script>
 

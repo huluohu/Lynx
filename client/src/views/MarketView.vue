@@ -55,6 +55,7 @@
               <div v-if="p.empty_cache" class="market-status warn">{{ t('marketView.noCache') }}</div>
               <div v-else-if="p.stale" class="market-status warn">{{ t('marketView.staleCache') }}</div>
               <div v-else-if="p.cached && !p.stale" class="market-status">{{ t('marketView.cached') }}</div>
+              <div v-if="p.fetched_at" class="market-updated-at">{{ t('marketView.quoteUpdatedAt', { time: fmtDateTime(p.fetched_at) }) }}</div>
             </div>
             <div class="market-card-side">
               <div style="font-size:12px;color:var(--text-muted)">{{ p.symbol }}</div>
@@ -73,7 +74,7 @@
         </template>
       </SwipeActionItem>
       <div v-if="!prices.length" class="card empty" style="grid-column:1/-1">
-        <div class="empty-icon">📈</div><p>{{ t('marketView.empty') }}</p>
+        <div class="empty-icon"><AppIcon name="market" size="34" /></div><p>{{ t('marketView.empty') }}</p>
       </div>
     </div>
 
@@ -129,11 +130,12 @@ import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatCurrencyAmount } from '../utils/currency.js'
-import { formatTime, parseDateTime } from '../utils/formatters.js'
+import { formatDateTimeSeconds, formatTime, parseDateTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
 const { t } = useI18n()
@@ -188,11 +190,20 @@ function typeBadge(t) {
 function fmtTime(d) {
   return formatTime(d, { second: '2-digit' })
 }
+function fmtDateTime(value) {
+  return formatDateTimeSeconds(value)
+}
 
 function nowDatetimeLocal() {
   const date = new Date()
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
   return date.toISOString().slice(0, 16)
+}
+
+function datetimeLocalToIso(value) {
+  if (!value) return undefined
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
 }
 
 function openManualPriceDrawer(asset = null) {
@@ -219,7 +230,7 @@ async function saveManualPrice() {
       body: JSON.stringify({
         price: Number(manualForm.price),
         currency: manualForm.currency,
-        fetched_at: manualForm.fetched_at || undefined,
+        fetched_at: datetimeLocalToIso(manualForm.fetched_at),
       }),
     })
     const json = await res.json()
@@ -303,6 +314,7 @@ onUnmounted(() => {
 .market-price { font-size: 32px; font-weight: 800; margin: 4px 0; }
 .market-status { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 .market-status.warn { color: var(--red); opacity: 0.8; }
+.market-updated-at { margin-top: 4px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }
 .manual-price-form { display: flex; flex-direction: column; gap: 14px; }
 .manual-asset-summary {
   display: flex;

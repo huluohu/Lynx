@@ -1,5 +1,6 @@
 const SQLITE_UTC_DATETIME_RE = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/
 const EXPLICIT_TIMEZONE_RE = /(?:Z|[+-]\d{2}:\d{2})$/i
+const FUTURE_SKEW_TOLERANCE_MS = 60 * 1000
 
 function buildUtcIsoString(parts) {
   const [, date, hour, minute, second = '00', millisecond] = parts
@@ -8,7 +9,17 @@ function buildUtcIsoString(parts) {
   return `${date}T${time}${fraction}Z`
 }
 
-export function normalizeApiTimestamp(value, { assumeUtcWhenNoTimezone = false } = {}) {
+function parseNoTimezoneAsLocal(value) {
+  const normalized = String(value).trim().replace(' ', 'T')
+  const date = new Date(normalized)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatSqliteUtc(date) {
+  return date.toISOString().slice(0, 19).replace('T', ' ')
+}
+
+export function normalizeApiTimestamp(value, { assumeUtcWhenNoTimezone = false, fallbackToLocalWhenFuture = false } = {}) {
   if (value === null || value === undefined || value === '') return value ?? null
 
   if (value instanceof Date) {
@@ -26,12 +37,41 @@ export function normalizeApiTimestamp(value, { assumeUtcWhenNoTimezone = false }
 
     if (assumeUtcWhenNoTimezone) {
       const parts = trimmed.match(SQLITE_UTC_DATETIME_RE)
-      if (parts) return buildUtcIsoString(parts)
+      if (parts) {
+        const utcIso = buildUtcIsoString(parts)
+        if (fallbackToLocalWhenFuture) {
+          const utcDate = new Date(utcIso)
+          if (!Number.isNaN(utcDate.getTime()) && utcDate.getTime() - Date.now() > FUTURE_SKEW_TOLERANCE_MS) {
+            const localDate = parseNoTimezoneAsLocal(trimmed)
+            if (localDate) return localDate.toISOString()
+          }
+        }
+        return utcIso
+      }
     }
   }
 
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toISOString()
+}
+
+export function normalizeSqliteUtcTimestamp(value, { assumeLocalWhenNoTimezone = false } = {}) {
+  if (value === null || value === undefined || value === '') return null
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : formatSqliteUtc(value)
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+
+    if (!EXPLICIT_TIMEZONE_RE.test(trimmed) && assumeLocalWhenNoTimezone) {
+      const localDate = parseNoTimezoneAsLocal(trimmed)
+      return localDate ? formatSqliteUtc(localDate) : null
+    }
+  }
+
+  const iso = normalizeApiTimestamp(value, { assumeUtcWhenNoTimezone: true })
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? null : formatSqliteUtc(date)
 }
 
 export function normalizeApiTimestampFields(row, fields, options) {

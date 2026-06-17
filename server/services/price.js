@@ -7,7 +7,7 @@ const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
 const DEFAULT_GOLD_SOURCES = ['neodata', 'swissquote'];
-const DEFAULT_BTC_SOURCES = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx'];
+const DEFAULT_BTC_SOURCES = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'];
 
 function getEnabledMarketSources(key, defaults) {
   try {
@@ -224,6 +224,32 @@ async function fetchBTCOKX() {
   return null;
 }
 
+async function fetchBTCBitstamp() {
+  const data = await httpGet('https://www.bitstamp.net/api/v2/ticker/btcusd/', { timeout: 4500 });
+  const price = Number(data?.last);
+  const open24 = Number(data?.open);
+  if (Number.isFinite(price) && price > 0) {
+    const ch24 = Number.isFinite(open24) && open24 > 0 ? ((price - open24) / open24) * 100 : 0;
+    log.info('BTC price (Bitstamp)', { usd: price });
+    const rate = await getUsdCny();
+    return { usd: price, cny: Math.round(price * rate), ch24, ch7d: 0 };
+  }
+  return null;
+}
+
+async function fetchBTCGemini() {
+  const data = await httpGet('https://api.gemini.com/v2/ticker/BTCUSD', { timeout: 4500 });
+  const price = Number(data?.close);
+  const open24 = Number(data?.open);
+  if (Number.isFinite(price) && price > 0) {
+    const ch24 = Number.isFinite(open24) && open24 > 0 ? ((price - open24) / open24) * 100 : 0;
+    log.info('BTC price (Gemini)', { usd: price });
+    const rate = await getUsdCny();
+    return { usd: price, cny: Math.round(price * rate), ch24, ch7d: 0 };
+  }
+  return null;
+}
+
 // ===== BTC 查询 =====
 export async function fetchBTC() {
   log.debug('Fetching BTC price');
@@ -235,6 +261,8 @@ export async function fetchBTC() {
     coinbase: fetchBTCCoinbase,
     kraken: fetchBTCKraken,
     okx: fetchBTCOKX,
+    bitstamp: fetchBTCBitstamp,
+    gemini: fetchBTCGemini,
   };
 
   for (const source of enabledSources) {

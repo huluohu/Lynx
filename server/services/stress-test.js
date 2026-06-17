@@ -1,5 +1,5 @@
 import { getDb } from '../db/database.js';
-import { simulateBacktest } from './backtest.js';
+import { loadActivePlanSetPlans, simulateBacktest } from './backtest.js';
 
 const SCENARIOS = [
   { key: 'crash_30', label: '暴跌 30%', days: 30 },
@@ -44,9 +44,7 @@ export function runStressTest(strategyId) {
 
   if (!strategy) throw new Error('策略不存在');
 
-  const plans = db.prepare(`SELECT * FROM trading_plans
-    WHERE strategy_id = ?
-    ORDER BY seq ASC, id ASC`).all(strategyId);
+  const { plans } = loadActivePlanSetPlans(db, strategyId);
   if (!plans.length) throw new Error('策略暂无操盘计划');
 
   const assetId = strategy.asset_id || plans[0]?.asset_id;

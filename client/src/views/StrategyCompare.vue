@@ -57,11 +57,11 @@
           <div class="form-group">
             <label class="form-label">{{ t('strategyCompare.goal') }}</label>
             <select class="form-select" v-model="form.goal">
-              <option value="recovery">💉 {{ t('strategyCompare.goals.recovery') }}</option>
-              <option value="growth">📈 {{ t('strategyCompare.goals.growth') }}</option>
-              <option value="balanced">⚖️ {{ t('strategyCompare.goals.balanced') }}</option>
-              <option value="trend">📊 {{ t('strategyCompare.goals.trend') }}</option>
-              <option value="rebalance">⚖️ {{ t('strategyCompare.goals.rebalance') }}</option>
+              <option value="recovery">{{ t('strategyCompare.goals.recovery') }}</option>
+              <option value="growth">{{ t('strategyCompare.goals.growth') }}</option>
+              <option value="balanced">{{ t('strategyCompare.goals.balanced') }}</option>
+              <option value="trend">{{ t('strategyCompare.goals.trend') }}</option>
+              <option value="rebalance">{{ t('strategyCompare.goals.rebalance') }}</option>
             </select>
           </div>
         </div>

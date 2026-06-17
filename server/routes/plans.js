@@ -4,8 +4,9 @@ import { getDb } from '../db/database.js';
 const router = Router();
 const VALID_PLAN_STATUSES = new Set(['pending', 'triggered', 'partial', 'executed', 'cancelled']);
 const EXECUTABLE_PLAN_STATUSES = new Set(['pending', 'triggered', 'partial']);
-const PLAN_SELECT = `SELECT p.*, a.name as asset_name, a.symbol, a.type as asset_type, a.currency as asset_currency
+const PLAN_SELECT = `SELECT p.*, ps.status as plan_set_status, ps.version_no as plan_set_version, a.name as asset_name, a.symbol, a.type as asset_type, a.currency as asset_currency
   FROM trading_plans p
+  LEFT JOIN plan_sets ps ON ps.id = p.plan_set_id
   JOIN assets a ON p.asset_id = a.id`;
 const TRADE_SELECT = `SELECT h.*, a.name as asset_name, a.symbol, a.type as asset_type,
     COALESCE(h.currency, a.currency, 'CNY') as currency
@@ -18,6 +19,17 @@ function loadPlan(db, id) {
 
 function loadTrade(db, id) {
   return db.prepare(`${TRADE_SELECT} WHERE h.id = ?`).get(id);
+}
+
+function getActivePlanSetId(db, strategyId) {
+  return db.prepare("SELECT id FROM plan_sets WHERE strategy_id = ? AND status = 'active' ORDER BY version_no DESC, id DESC LIMIT 1")
+    .get(strategyId)?.id || null;
+}
+
+function assertPlanSetExecutable(plan) {
+  if (plan?.plan_set_id && plan.plan_set_status !== 'active') {
+    throw Object.assign(new Error('该计划属于已归档的计划批次，不能继续执行'), { statusCode: 400 });
+  }
 }
 
 function toPositiveNumber(value) {
@@ -72,10 +84,24 @@ function applyTradeToHoldings(db, { assetId, type, quantity, amount, price }) {
 // GET 所有/某策略下的计划
 router.get('/', (req, res) => {
   const db = getDb();
-  const { strategy_id, asset_id } = req.query;
+  const { strategy_id, asset_id, plan_set_id, include_superseded, include_cancelled } = req.query;
   let sql = `${PLAN_SELECT} WHERE 1=1`;
   const params = [];
-  if (strategy_id) { sql += ' AND p.strategy_id = ?'; params.push(strategy_id); }
+  if (include_cancelled !== '1') {
+    sql += " AND p.status != 'cancelled'";
+  }
+  if (strategy_id) {
+    sql += ' AND p.strategy_id = ?';
+    params.push(strategy_id);
+    if (!plan_set_id && include_superseded !== '1') {
+      const activePlanSetId = getActivePlanSetId(db, strategy_id);
+      if (activePlanSetId) {
+        sql += ' AND p.plan_set_id = ?';
+        params.push(activePlanSetId);
+      }
+    }
+  }
+  if (plan_set_id) { sql += ' AND p.plan_set_id = ?'; params.push(plan_set_id); }
   if (asset_id) { sql += ' AND p.asset_id = ?'; params.push(asset_id); }
   sql += ' ORDER BY p.seq, p.id';
 
@@ -119,6 +145,7 @@ router.post('/:id/trigger', (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT id FROM trading_plans WHERE id = ?').get(req.params.id);
   if (!plan) return res.status(404).json({ success: false, error: '计划不存在' });
+  try { assertPlanSetExecutable(loadPlan(db, req.params.id)); } catch (error) { return res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
   db.prepare("UPDATE trading_plans SET status='triggered', updated_at=datetime('now') WHERE id = ?").run(req.params.id);
   res.json({ success: true, data: loadPlan(db, req.params.id) });
 });
@@ -137,6 +164,7 @@ router.post('/:id/execute', (req, res) => {
       if (!plan) {
         throw Object.assign(new Error('计划不存在'), { statusCode: 404 });
       }
+      assertPlanSetExecutable(plan);
       if (!EXECUTABLE_PLAN_STATUSES.has(plan.status)) {
         throw Object.assign(new Error('当前计划状态不允许执行'), { statusCode: 400 });
       }
@@ -176,8 +204,8 @@ router.post('/:id/execute', (req, res) => {
 
       const executedAt = new Date().toISOString();
       const tradeInfo = db.prepare(`INSERT INTO trade_history (
-          asset_id, type, quantity, price, total, executed_at, currency, plan_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+          asset_id, type, quantity, price, total, executed_at, currency, plan_id, strategy_id, plan_set_id, attribution_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           plan.asset_id,
           plan.action,
@@ -187,6 +215,9 @@ router.post('/:id/execute', (req, res) => {
           executedAt,
           req.body.currency || plan.asset_currency || 'CNY',
           plan.id,
+          plan.strategy_id,
+          plan.plan_set_id || null,
+          'plan_execute',
         );
 
       const nextExecutedQuantity = executedQuantity + actualQuantity;

@@ -68,7 +68,7 @@
     <div v-if="alerts.length" class="alert-section">
       <div class="alert-digest-card">
         <div class="alert-digest-main">
-          <div class="alert-digest-title">🔔 {{ t('dashboard.alertsSummary') }}</div>
+          <div class="alert-digest-title"><AppIcon name="alerts" size="16" /> {{ t('dashboard.alertsSummary') }}</div>
           <div class="alert-digest-subtitle">{{ t('dashboard.alertsTitle', { count: alerts.length }) }}</div>
         </div>
         <div class="alert-digest-stats">
@@ -86,7 +86,7 @@
             <span class="alert-type-badge">{{ alertTypeLabel(primaryAlert.type) }}</span>
             <span v-if="primaryAlert.symbol" class="alert-asset-tag">{{ primaryAlert.symbol }}</span>
           </div>
-          <span class="alert-primary-icon">{{ alertIcon(primaryAlert.type) }}</span>
+          <span class="alert-primary-icon"><AppIcon :name="alertIcon(primaryAlert.type)" size="18" /></span>
         </div>
         <div class="alert-primary-message">{{ primaryAlert.message }}</div>
         <div class="alert-primary-footer">
@@ -119,7 +119,7 @@
             </div>
           </div>
         </div>
-        <div v-else class="empty"><div class="empty-icon">📭</div><p>{{ t('dashboard.emptyAssets') }}</p></div>
+        <div v-else class="empty"><div class="empty-icon"><AppIcon name="assets" size="34" /></div><p>{{ t('dashboard.emptyAssets') }}</p></div>
       </div>
 
       <div class="card">
@@ -212,10 +212,11 @@ import { useNotificationsStore } from '../stores/notifications.js'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { currencySymbol, formatCurrencyAmount, formatSignedCurrencyAmount } from '../utils/currency.js'
-import { formatDate, formatNumber, formatTime } from '../utils/formatters.js'
+import { formatDateTimeSeconds, formatNumber, formatTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import TrendChart from '../components/TrendChart.vue'
+import AppIcon from '../components/AppIcon.vue'
 
 const { t } = useI18n()
 const notificationsStore = useNotificationsStore()
@@ -362,7 +363,7 @@ function signalBadgeClass(type) {
   return { bullish: 'badge-market-up', bearish: 'badge-market-down', neutral: 'badge-pending' }[type] || 'badge-pending'
 }
 function alertIcon(type) {
-  return { plan_triggered: '📌', plan_approaching: '⏳', stop_loss: '🛑', price_swing: '📊', trade_executed: '💱' }[type] || '🔔'
+  return { plan_triggered: 'pin', plan_approaching: 'alerts', stop_loss: 'warning', price_swing: 'signals', trade_executed: 'history' }[type] || 'alerts'
 }
 function alertTypeLabel(type) {
   return {
@@ -381,7 +382,7 @@ function priorityLabel(level) {
   }[level] || t('dashboard.priority.info')
 }
 function fmtDate(value) {
-  return formatDate(value)
+  return formatDateTimeSeconds(value)
 }
 function fmtUpdateTime(d) {
   return formatTime(d)

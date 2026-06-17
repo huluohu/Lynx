@@ -41,7 +41,7 @@ function strategyAssetIds(strategy) {
 function normalizeRecommendations(value, fallback = []) {
   if (Array.isArray(value)) return value.map(v => String(v)).filter(Boolean);
   if (typeof value === 'string' && value.trim()) {
-    return value.split(/\n|；|;/).map(v => v.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean);
+    return value.split(/[\n；;]/).map(v => v.replace(/^[-*\d.\s]+/, '').trim()).filter(Boolean);
   }
   return fallback;
 }
@@ -61,7 +61,7 @@ function formatPlans(plans) {
 
 function formatTrades(trades) {
   if (!trades.length) return '暂无实际交易记录';
-  return trades.slice(0, 20).map(t => `- [${t.executed_at || '-'}] ${t.asset_name || ''} ${t.type === 'buy' ? '买入' : '卖出'} ${t.quantity ?? '-'} @ ${t.price ?? '-'}，金额 ${t.total ?? '-'}，P&L ${t.pnl ?? '-'}，原因：${t.reason || '无'}`).join('\n');
+  return trades.slice(0, 20).map(t => `- [${t.executed_at || '-'}] ${t.asset_name || ''}${t.plan_seq ? ` 第${t.plan_seq}步` : ''} ${t.type === 'buy' ? '买入' : '卖出'} ${t.quantity ?? '-'} @ ${t.price ?? '-'}，金额 ${t.total ?? '-'}，P&L ${t.pnl ?? '-'}，原因：${t.reason || '无'}`).join('\n');
 }
 
 function formatPrices(prices) {
@@ -81,7 +81,7 @@ function formatHoldings(holdings, latestPriceMap) {
   }).join('；');
 }
 
-function buildFallbackReview(strategy, plans, trades, holdings, latestPrices) {
+function buildFallbackReview(strategy, plans, trades, holdings, latestPrices, contextualTrades = []) {
   const executed = plans.filter(p => p.status === 'executed').length;
   const triggered = plans.filter(p => p.status === 'triggered').length;
   const pending = plans.filter(p => p.status === 'pending').length;
@@ -94,6 +94,7 @@ function buildFallbackReview(strategy, plans, trades, holdings, latestPrices) {
   if (!plans.length) recommendations.push('先生成并维护清晰的操盘计划，再进行复盘对照。');
   if (pending > executed) recommendations.push('待执行计划较多，建议复核触发条件是否过于保守或与当前行情脱节。');
   if (!trades.length) recommendations.push('当前缺少实际成交记录，建议执行后补充交易复盘以提高分析准确性。');
+  if (contextualTrades.length) recommendations.push('检测到同资产存在未关联到当前计划的近期交易，建议补充计划关联或单独复盘，避免与当前策略执行混淆。');
   if (realizedPnl < 0) recommendations.push('近期已实现盈亏为负，建议收紧仓位与止损纪律。');
   if (!recommendations.length) recommendations.push('继续跟踪计划执行偏差，并在关键价位附近更新阈值。');
 
@@ -109,10 +110,12 @@ function buildFallbackReview(strategy, plans, trades, holdings, latestPrices) {
         triggered_plans: triggered,
         pending_plans: pending,
         actual_trade_count: trades.length,
+        contextual_trade_count: contextualTrades.length,
       },
       key_observations: [
         plans.length ? `计划执行率 ${executionRate.toFixed(1)}%` : '尚未建立计划基线',
-        trades.length ? `累计已实现盈亏 ${realizedPnl.toFixed(2)}` : '暂无可对照的实际交易数据',
+        trades.length ? `当前计划关联交易累计已实现盈亏 ${realizedPnl.toFixed(2)}` : '暂无可对照的当前计划关联交易数据',
+        contextualTrades.length ? `另有 ${contextualTrades.length} 条同资产未关联近期交易，仅作为上下文参考` : '未发现同资产未关联近期交易',
       ],
     },
     recommendations,
@@ -142,19 +145,40 @@ export async function generateStrategyReview(strategyId) {
   const assetIds = strategyAssetIds(strategy);
   const placeholders = assetIds.map(() => '?').join(',');
   const parsedParameters = safeParse(strategy.parameters, {});
+  const activePlanSet = db.prepare("SELECT * FROM plan_sets WHERE strategy_id = ? AND status = 'active' ORDER BY version_no DESC, id DESC LIMIT 1")
+    .get(strategyId);
   const plans = db.prepare(`SELECT tp.*, a.name AS asset_name, a.symbol
     FROM trading_plans tp
     LEFT JOIN assets a ON tp.asset_id = a.id
     WHERE tp.strategy_id = ?
-    ORDER BY tp.seq ASC, tp.id ASC`).all(strategyId);
+      AND (? IS NULL OR tp.plan_set_id = ?)
+      AND tp.status != 'cancelled'
+    ORDER BY tp.seq ASC, tp.id ASC`).all(strategyId, activePlanSet?.id || null, activePlanSet?.id || null);
 
-  const trades = assetIds.length
+  const planIds = plans.map(plan => Number(plan.id)).filter(Boolean);
+  const trades = planIds.length
+    ? db.prepare(`SELECT th.*, a.name AS asset_name, a.symbol, tp.seq AS plan_seq
+      FROM trade_history th
+      JOIN trading_plans tp ON th.plan_id = tp.id
+      LEFT JOIN assets a ON th.asset_id = a.id
+      WHERE tp.strategy_id = ?
+        AND (? IS NULL OR tp.plan_set_id = ?)
+        AND COALESCE(th.reverted, 0) = 0
+      ORDER BY th.executed_at DESC, th.id DESC
+      LIMIT 50`).all(strategyId, activePlanSet?.id || null, activePlanSet?.id || null)
+    : [];
+
+  const reviewWindowStart = activePlanSet?.activated_at || activePlanSet?.created_at || plans[0]?.created_at || strategy.updated_at || strategy.created_at || null;
+  const contextualTrades = assetIds.length && reviewWindowStart
     ? db.prepare(`SELECT th.*, a.name AS asset_name, a.symbol
       FROM trade_history th
       LEFT JOIN assets a ON th.asset_id = a.id
       WHERE th.asset_id IN (${placeholders})
+        AND COALESCE(th.reverted, 0) = 0
+        AND (th.plan_id IS NULL OR th.plan_id NOT IN (${planIds.length ? planIds.map(() => '?').join(',') : 'NULL'}))
+        AND datetime(th.executed_at) >= datetime(?)
       ORDER BY th.executed_at DESC, th.id DESC
-      LIMIT 50`).all(...assetIds)
+      LIMIT 30`).all(...assetIds, ...planIds, reviewWindowStart)
     : [];
 
   const holdings = assetIds.length
@@ -169,9 +193,9 @@ export async function generateStrategyReview(strategyId) {
   const latestPriceMap = new Map(latestPrices.map(item => [item.asset_id, item]));
   const realizedPnl = trades.reduce((sum, trade) => sum + (Number(trade.pnl) || 0), 0);
   const holdingSummary = formatHoldings(holdings, latestPriceMap);
-  const prompt = `你是一个投资策略复盘分析师。请评估以下策略的执行情况。\n\n策略：${strategy.name} (${strategy.type})\n参数：${JSON.stringify(parsedParameters, null, 2)}\n\n操盘计划状态：\n${formatPlans(plans)}\n\n实际交易记录：\n${formatTrades(trades)}\n\n当前价格：${formatPrices(latestPrices)}\n当前持仓：${holdingSummary}\n已实现盈亏：${realizedPnl.toFixed(2)}\n\n请给出：\n1. performance_score (1-10分)\n2. deviation_analysis: 计划与实际的偏差分析\n3. recommendations: 具体调整建议（数组）\n4. market_context: 当前市场环境对策略的影响\n5. summary: 一句话总结\n\n返回严格 JSON 格式，不要包含 markdown 代码块。\nresponse_format: {\"type\":\"json_object\"}`;
+  const prompt = `你是一个投资策略复盘分析师。请评估以下策略的执行情况。\n\n策略：${strategy.name} (${strategy.type})\n策略创建时间：${strategy.created_at || '-'}\n当前计划批次：${activePlanSet ? `#${activePlanSet.id} v${activePlanSet.version_no}` : '-'}\n当前计划基线时间：${reviewWindowStart || '-'}\n参数：${JSON.stringify(parsedParameters, null, 2)}\n\n操盘计划状态（当前 active plan set）：\n${formatPlans(plans)}\n\n当前计划关联交易（用于计划 vs 实际偏差评分）：\n${formatTrades(trades)}\n\n同资产未关联近期交易（仅作为上下文，不能直接当作当前计划执行结果）：\n${formatTrades(contextualTrades)}\n\n当前价格：${formatPrices(latestPrices)}\n当前持仓：${holdingSummary}\n当前计划关联交易已实现盈亏：${realizedPnl.toFixed(2)}\n\n请给出：\n1. performance_score (1-10分)\n2. deviation_analysis: 计划与实际的偏差分析；必须区分“当前计划关联交易”和“未关联上下文交易”\n3. recommendations: 具体调整建议（数组）\n4. market_context: 当前市场环境对策略的影响\n5. summary: 一句话总结\n\n返回严格 JSON 格式，不要包含 markdown 代码块。\nresponse_format: {\"type\":\"json_object\"}`;
 
-  const fallback = buildFallbackReview(strategy, plans, trades, holdings, latestPrices);
+  const fallback = buildFallbackReview(strategy, plans, trades, holdings, latestPrices, contextualTrades);
   const config = getAgentConfig(db);
   let result = fallback;
 
