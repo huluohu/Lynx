@@ -79,7 +79,7 @@
           <!-- Recovery: 按资产分组 -->
           <div v-else-if="form.type === 'recovery'">
             <div class="form-group">
-              <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
+              <label class="form-label">{{ currencyFieldLabel(t('strategyForm.budget'), recoveryBudgetCurrency) }}</label>
               <input class="form-input" type="number" v-model="globalBudget" placeholder="20000" inputmode="numeric" />
             </div>
 
@@ -101,7 +101,7 @@
                       <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
                     </div>
                     <div class="line-field">
-                      <span class="line-prefix">¥</span>
+                      <span class="line-prefix">{{ assetCurrencySymbol(assetId) }}</span>
                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.buyAmount')" inputmode="numeric" />
                     </div>
                     <button type="button" class="btn btn-sm btn-danger" @click="removeAssetBuyLine(assetId, i)">✕</button>
@@ -119,7 +119,7 @@
                       <input class="form-input" type="number" step="any" v-model="line.price" :placeholder="t('strategyForm.triggerPrice')" inputmode="decimal" />
                     </div>
                     <div class="line-field">
-                      <span class="line-prefix">¥</span>
+                      <span class="line-prefix">{{ assetCurrencySymbol(assetId) }}</span>
                       <input class="form-input" type="number" step="any" v-model="line.amount" :placeholder="t('strategyForm.sellAmount')" inputmode="numeric" />
                     </div>
                     <button type="button" class="btn btn-sm btn-danger" @click="removeAssetSellLine(assetId, i)">✕</button>
@@ -131,9 +131,9 @@
 
             <!-- 预算汇总 -->
             <div class="budget-summary" :class="{ over: allocatedBudget > Number(globalBudget) }">
-              <span>{{ t('strategyForm.allocated') }}: ¥{{ formatNumber(allocatedBudget) }}</span>
+              <span>{{ t('strategyForm.allocated') }}: {{ scopedMoney(allocatedBudget, allocatedBudgetCurrency) }}</span>
               <span>/</span>
-              <span>{{ t('strategyForm.totalBudget') }}: ¥{{ formatNumber(Number(globalBudget || 0)) }}</span>
+              <span>{{ t('strategyForm.totalBudget') }}: {{ scopedMoney(Number(globalBudget || 0), recoveryBudgetCurrency) }}</span>
               <span v-if="allocatedBudget > Number(globalBudget)" class="budget-warn">⚠️ {{ t('strategyForm.overBudget') }}</span>
             </div>
           </div>
@@ -161,7 +161,7 @@
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label class="form-label">{{ t('strategyForm.amountPerPeriod') }} (¥)</label>
+                  <label class="form-label">{{ currencyFieldLabel(t('strategyForm.amountPerPeriod'), assetCurrency(assetId)) }}</label>
                   <input class="form-input" type="number" v-model="getAssetDCA(assetId).amount_per" placeholder="1000" inputmode="numeric" />
                 </div>
               </div>
@@ -171,7 +171,7 @@
           <!-- Grid: 按资产分组 -->
           <div v-else-if="form.type === 'grid'">
             <div class="form-group">
-              <label class="form-label">{{ t('strategyForm.budget') }} (¥)</label>
+              <label class="form-label">{{ currencyFieldLabel(t('strategyForm.budget'), gridBudgetCurrency) }}</label>
               <input class="form-input" type="number" v-model="globalBudget" placeholder="20000" inputmode="numeric" />
             </div>
 
@@ -199,7 +199,7 @@
                 <span class="asset-param-name">{{ getAsset(assetId)?.icon }} {{ getAsset(assetId)?.name }}</span>
               </div>
               <div class="form-row">
-                <div class="form-group"><label class="form-label">{{ t('strategyForm.targetValue') }} (¥)</label><input class="form-input" type="number" v-model="getAssetValueAvg(assetId).target_value" placeholder="50000" inputmode="numeric" /></div>
+                <div class="form-group"><label class="form-label">{{ currencyFieldLabel(t('strategyForm.targetValue'), assetCurrency(assetId)) }}</label><input class="form-input" type="number" v-model="getAssetValueAvg(assetId).target_value" placeholder="50000" inputmode="numeric" /></div>
                 <div class="form-group"><label class="form-label">{{ t('strategyForm.growthRate') }} (%)</label><input class="form-input" type="number" step="0.1" v-model="getAssetValueAvg(assetId).growth_rate_val" placeholder="2" /></div>
               </div>
             </div>
@@ -248,6 +248,7 @@ import { useToast } from '../utils/toast.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { formatNumber } from '../utils/formatters.js'
+import { currencyInputLabel, currencySymbol, formatCurrencyAmount } from '../utils/currency.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -292,6 +293,15 @@ const strategyTypeOptions = computed(() => {
 const unsupportedStrategyType = computed(() => !!form.type && !supportedStrategyTypes.includes(form.type))
 const selectedAssets = computed(() => selectedAssetIds.value.map((id) => getAsset(id)).filter(Boolean))
 const currentStrategyType = computed(() => strategyTypeOptions.value.find((option) => option.value === form.type) || null)
+const selectedAssetCurrencies = computed(() => selectedAssets.value.map((asset) => asset.currency || 'CNY'))
+const recoveryBudgetCurrency = computed(() => singleCurrency(selectedAssetCurrencies.value))
+const gridBudgetCurrency = computed(() => singleCurrency(selectedAssetCurrencies.value))
+const allocatedBudgetCurrency = computed(() => {
+  const currencies = selectedAssetIds.value
+    .filter((id) => (perAssetBuyLines[id] || []).some((line) => line.amount))
+    .map((id) => assetCurrency(id))
+  return singleCurrency(currencies)
+})
 const strategySummaryRows = computed(() => {
   const rows = [
     { label: t('strategyForm.type'), value: currentStrategyType.value?.label || '-' },
@@ -299,8 +309,8 @@ const strategySummaryRows = computed(() => {
   ]
   if (form.type === 'recovery') {
     rows.push(
-      { label: t('strategyForm.budget'), value: `¥${formatNumber(Number(globalBudget.value || 0))}` },
-      { label: t('strategyForm.allocated'), value: `¥${formatNumber(allocatedBudget.value)}` },
+      { label: t('strategyForm.budget'), value: scopedMoney(Number(globalBudget.value || 0), recoveryBudgetCurrency.value) },
+      { label: t('strategyForm.allocated'), value: scopedMoney(allocatedBudget.value, allocatedBudgetCurrency.value) },
     )
   } else if (form.type === 'dca') {
     rows.push(
@@ -309,13 +319,13 @@ const strategySummaryRows = computed(() => {
     )
   } else if (form.type === 'grid') {
     rows.push(
-      { label: t('strategyForm.budget'), value: `¥${formatNumber(Number(globalBudget.value || 0))}` },
+      { label: t('strategyForm.budget'), value: scopedMoney(Number(globalBudget.value || 0), gridBudgetCurrency.value) },
       { label: t('strategyForm.gridCount'), value: selectedAssetIds.value.length ? selectedAssetIds.value.map((id) => getAssetGrid(id).grids || 0).join(' / ') : '-' },
     )
   } else if (form.type === 'value_avg') {
     rows.push(
       { label: t('strategyForm.periods'), value: `${globalPeriods.value || 0}` },
-      { label: t('strategyForm.targetValue'), value: selectedAssetIds.value.length ? selectedAssetIds.value.map((id) => `¥${formatNumber(Number(getAssetValueAvg(id).target_value || 0))}`).join(' / ') : '-' },
+      { label: t('strategyForm.targetValue'), value: selectedAssetIds.value.length ? selectedAssetIds.value.map((id) => scopedMoney(Number(getAssetValueAvg(id).target_value || 0), assetCurrency(id))).join(' / ') : '-' },
     )
   } else if (unsupportedStrategyType.value) {
     rows.push({ label: t('strategyForm.unsupportedTypeTitle'), value: form.type })
@@ -325,6 +335,31 @@ const strategySummaryRows = computed(() => {
 
 function getAsset(id) {
   return assets.value.find(a => a.id === id)
+}
+
+function assetCurrency(id) {
+  return getAsset(id)?.currency || 'CNY'
+}
+
+function assetCurrencySymbol(id) {
+  return currencySymbol(assetCurrency(id))
+}
+
+function singleCurrency(currencies) {
+  const unique = [...new Set((currencies || []).filter(Boolean))]
+  if (unique.length <= 1) return unique[0] || 'CNY'
+  return 'MIXED'
+}
+
+function currencyFieldLabel(label, currency) {
+  return currency === 'MIXED' ? `${label} (${t('common.mixedCurrencies')})` : currencyInputLabel(label, currency)
+}
+
+function scopedMoney(value, currency) {
+  if (currency === 'MIXED') {
+    return `${formatNumber(value, { maximumFractionDigits: 2 })} (${t('common.mixedCurrencies')})`
+  }
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
 }
 
 function toggleAsset(id) {

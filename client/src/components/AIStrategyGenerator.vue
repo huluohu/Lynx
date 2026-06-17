@@ -29,8 +29,8 @@
         <div v-for="s in holdingSummaries" :key="s.asset_id" class="holding-summary-item">
           <div class="summary-asset-name">{{ s.name }}</div>
           <div class="summary-row"><span>{{ t('strategyCompare.holdingQuantity') }}</span><b>{{ s.quantity }}</b></div>
-          <div class="summary-row"><span>{{ t('strategyCompare.avgCost') }}</span><b>¥{{ formatRounded(s.avg_cost) }}</b></div>
-          <div class="summary-row"><span>{{ t('strategyCompare.totalInvested') }}</span><b>¥{{ fmt(s.total_invested) }}</b></div>
+          <div class="summary-row"><span>{{ t('strategyCompare.avgCost') }}</span><b>{{ money(s.avg_cost, s.currency) }}</b></div>
+          <div class="summary-row"><span>{{ t('strategyCompare.totalInvested') }}</span><b>{{ money(s.total_invested, s.currency) }}</b></div>
           <div class="summary-row" v-if="s.pnl_pct !== null">
             <span>{{ t('strategyCompare.floatingPnl') }}</span>
             <b :class="s.pnl_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ formatPercent(s.pnl_pct, 1, true) }}</b>
@@ -39,7 +39,7 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label">{{ t('strategyCompare.budget') }} (¥)</label>
+        <label class="form-label">{{ baseCurrencyFieldLabel(t('strategyCompare.budget')) }}</label>
         <input class="form-input" type="number" v-model="form.budget" placeholder="20000" inputmode="numeric" />
       </div>
 
@@ -215,7 +215,7 @@
 
       <div class="preview-section">
         <div class="section-title">{{ t('aiStrategyGenerator.planTitle', { count: editablePlans.length }) }}
-          <span class="budget-usage">{{ t('aiStrategyGenerator.budgetUsage', { value: totalBudgetUsed }) }}</span>
+          <span class="budget-usage">{{ t('aiStrategyGenerator.budgetUsageWithValue', { value: totalBudgetUsed }) }}</span>
         </div>
         <div class="plan-preview-list">
           <div v-for="(p, idx) in editablePlans" :key="p.seq" class="plan-preview-item" :class="{ editing: editingPlanIdx === idx }">
@@ -246,9 +246,9 @@
                 <label>{{ t('aiStrategyGenerator.quantity') }}: <input type="number" v-model.number="p.quantity" class="inline-input" style="width:70px" step="0.0001" /></label>
               </template>
               <template v-else>
-                <span v-if="p.amount">¥{{ formatRounded(p.amount) }}</span>
+                <span v-if="p.amount">{{ planMoney(p.amount, p.asset_id) }}</span>
                 <span v-if="p.quantity">{{ formatFixed(p.quantity, 4) }}</span>
-                <span v-if="p.new_avg_cost">{{ t('aiStrategyGenerator.averageCostArrow', { value: formatRounded(p.new_avg_cost) }) }}</span>
+                <span v-if="p.new_avg_cost">{{ t('aiStrategyGenerator.averageCostArrow', { value: planMoney(p.new_avg_cost, p.asset_id) }) }}</span>
               </template>
             </div>
             <div v-if="p.rationale && editingPlanIdx !== idx" class="plan-rationale">📌 {{ p.rationale }}</div>
@@ -305,6 +305,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useConfirm } from '../utils/confirm.js'
 import { useToast } from '../utils/toast.js'
+import { currencyInputLabel, formatCurrencyAmount } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
 import AgentProgressOverlay from './AgentProgressOverlay.vue'
 
@@ -337,6 +338,7 @@ const form = reactive({
   goal: 'recovery',
   risk_level: 'medium',
 })
+const BASE_BUDGET_CURRENCY = 'CNY'
 
 let _abortController = null
 
@@ -375,7 +377,7 @@ const totalBudgetUsed = computed(() => {
   const total = editablePlans.value
     .filter(p => p.action === 'buy' && p.amount)
     .reduce((sum, p) => sum + (p.amount || 0), 0)
-  return formatRounded(total)
+  return formatCurrencyAmount(total, BASE_BUDGET_CURRENCY, { maximumFractionDigits: 0 })
 })
 const canGenerate = computed(() => (
   !generating.value &&
@@ -384,6 +386,20 @@ const canGenerate = computed(() => (
   !assetContextLoading.value &&
   !assetContextError.value
 ))
+
+function money(value, currency) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 0 })
+}
+function assetCurrencyById(assetId) {
+  return assets.value.find((asset) => String(asset.id) === String(assetId))?.currency || 'CNY'
+}
+function planMoney(value, assetId) {
+  return formatCurrencyAmount(value, assetCurrencyById(assetId), { maximumFractionDigits: 2 })
+}
+
+function baseCurrencyFieldLabel(label) {
+  return currencyInputLabel(label, BASE_BUDGET_CURRENCY)
+}
 
 function toggleAsset(id) {
   const idx = selectedAssetIds.value.indexOf(id)
@@ -439,6 +455,7 @@ async function loadAssetInfo() {
           summaries.push({
             asset_id: assetId,
             name: asset?.name || t('aiStrategyGenerator.assetNameFallback', { id: assetId }),
+            currency: h.currency || asset?.currency || 'CNY',
             quantity: h.quantity,
             avg_cost: h.avg_cost,
             total_invested: h.total_invested,

@@ -27,10 +27,10 @@
         <div class="section-title">📦 {{ t('assetDetail.holdingInfo') }}</div>
         <div class="info-list">
           <div class="info-row"><span class="info-label">{{ t('holdings.fields.quantity') }}</span><span style="font-weight:600">{{ holding.quantity }}</span></div>
-          <div class="info-row"><span class="info-label">{{ t('holdings.fields.avgCost') }}</span><span>¥{{ fmt(holding.avg_cost) }}</span></div>
-          <div class="info-row"><span class="info-label">{{ t('holdings.fields.totalInvested') }}</span><span>¥{{ fmt(holding.total_invested) }}</span></div>
-          <div class="info-row"><span class="info-label">{{ t('assetDetail.targetPrice') }}</span><span>{{ holding.target_price ? '¥' + fmt(holding.target_price) : '-' }}</span></div>
-          <div class="info-row"><span class="info-label">{{ t('assetDetail.stopLoss') }}</span><span style="color:var(--red)">{{ holding.stop_loss ? '¥' + fmt(holding.stop_loss) : '-' }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('holdings.fields.avgCost') }}</span><span>{{ money(holding.avg_cost) }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('holdings.fields.totalInvested') }}</span><span>{{ money(holding.total_invested) }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assetDetail.targetPrice') }}</span><span>{{ holding.target_price ? money(holding.target_price) : '-' }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assetDetail.stopLoss') }}</span><span style="color:var(--red)">{{ holding.stop_loss ? money(holding.stop_loss) : '-' }}</span></div>
         </div>
       </div>
     </div>
@@ -46,9 +46,9 @@
             <td>{{ tx.executed_at?.slice(0,10) }}</td>
             <td><span class="badge" :class="tx.type==='buy'?'badge-buy':'badge-sell'">{{ tx.type==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span></td>
             <td>{{ tx.quantity }}</td>
-            <td>¥{{ fmt(tx.price) }}</td>
-            <td :class="tx.type==='buy'?'pnl negative':'pnl positive'">¥{{ fmt(tx.total) }}</td>
-            <td>¥{{ fmt(tx.fee) }}</td>
+            <td>{{ money(tx.price) }}</td>
+            <td :class="tx.type==='buy'?'pnl negative':'pnl positive'">{{ money(tx.total) }}</td>
+            <td>{{ money(tx.fee) }}</td>
           </tr>
         </tbody>
       </table>
@@ -60,8 +60,8 @@
               <span style="color:var(--text-muted);font-size:12px">{{ tx.executed_at?.slice(0,10) }}</span>
             </div>
             <div class="tx-card-body">
-              <span>{{ tx.quantity }} × ¥{{ fmt(tx.price) }}</span>
-              <span :class="tx.type==='buy'?'pnl negative':'pnl positive'" style="font-weight:600">¥{{ fmt(tx.total) }}</span>
+              <span>{{ tx.quantity }} × {{ money(tx.price) }}</span>
+              <span :class="tx.type==='buy'?'pnl negative':'pnl positive'" style="font-weight:600">{{ money(tx.total) }}</span>
             </div>
           </div>
         </div>
@@ -139,6 +139,7 @@ import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { formatNumber } from '../utils/formatters.js'
+import { formatCurrencyAmount } from '../utils/currency.js'
 
 useSwipeBack()
 
@@ -267,6 +268,9 @@ function assetTypeLabel(type) {
 function fmt(n) {
   if (!n && n !== 0) return '0'
   return formatNumber(Number(n))
+}
+function money(value) {
+  return formatCurrencyAmount(value, asset.value?.currency, { maximumFractionDigits: 3 })
 }
 
 watchEffect(() => {

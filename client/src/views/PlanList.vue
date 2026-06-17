@@ -42,13 +42,6 @@
     <div class="page-mobile-toolbar">
       <div class="page-mobile-toolbar-row">
         <div class="page-mobile-summary">{{ t('history.totalRecords', { count: filteredPlans.length }) }}</div>
-        <div class="page-mobile-toolbar-actions">
-          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-            <span>{{ t('common.filter') }}</span>
-            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
-          </button>
-          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
-        </div>
       </div>
       <div v-if="activeFilterChips.length" class="page-filter-chips">
         <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
@@ -201,7 +194,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
@@ -210,6 +203,7 @@ import { formatNumber } from '../utils/formatters.js'
 import MobileActionBar from '../components/MobileActionBar.vue'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
 const { t } = useI18n()
@@ -223,6 +217,7 @@ const draftFilters = reactive({ assetId: '', strategyId: '', status: '' })
 const selectedPlanId = ref(null)
 const executeSubmitting = ref(false)
 const executeForm = reactive({ price: '', quantity: '', partial: false, currency: 'CNY' })
+const mobilePageActions = useMobilePageActions()
 
 const filteredPlans = computed(() => {
   let result = plans.value
@@ -303,6 +298,21 @@ async function removeFilter(key) {
   syncDraftFilters()
   await loadData()
 }
+
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'filter-plans',
+      label: activeFilterCount.value ? `${t('common.filter')} (${activeFilterCount.value})` : t('common.filter'),
+      onSelect: () => { filterDrawerOpen.value = true },
+    },
+    activeFilterCount.value ? {
+      key: 'reset-plan-filters',
+      label: t('common.reset'),
+      onSelect: resetFilters,
+    } : null,
+  ])
+})
 
 function strategyName(id) {
   const s = strategies.value.find(strategy => strategy.id === id)
@@ -424,6 +434,9 @@ async function submitExecution() {
 onMounted(async () => {
   syncDraftFilters()
   await refreshPage()
+})
+onUnmounted(() => {
+  mobilePageActions.clearActions()
 })
 watch(filterDrawerOpen, (open) => {
   if (open) syncDraftFilters()

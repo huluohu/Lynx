@@ -111,7 +111,7 @@
             <div v-for="p in detailPlans" :key="p.id" class="plan-mini">
               <span class="badge" :class="p.action==='buy'?'badge-buy':'badge-sell'" style="font-size:11px">{{ p.action==='buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
               <span>{{ triggerLabel(p.trigger_type) }} {{ p.trigger_value }}</span>
-              <span v-if="p.amount" style="color:var(--text-dim)">¥{{ Math.round(p.amount) }}</span>
+              <span v-if="p.amount" style="color:var(--text-dim)">{{ money(p.amount, p.asset_currency) }}</span>
               <span class="badge" :class="planStatusBadge(p.status)" style="font-size:10px;margin-left:auto">{{ planStatusLabel(p.status) }}</span>
             </div>
           </div>
@@ -157,7 +157,7 @@
             <span style="font-size:11px;color:var(--text-dim)">{{ fmtDateTime(d.created_at) }}</span>
           </div>
           <div class="draft-item-meta">
-            <span>{{ goalLabel(d.goal) }} · ¥{{ d.budget }} · {{ riskLabel(d.risk_level) }}</span>
+            <span>{{ goalLabel(d.goal) }} · {{ money(d.budget, BASE_BUDGET_CURRENCY) }} · {{ riskLabel(d.risk_level) }}</span>
             <span v-if="d.elapsed_ms">{{ (d.elapsed_ms / 1000).toFixed(1) }}s</span>
           </div>
           <div class="draft-item-actions">
@@ -178,7 +178,7 @@
         <div class="detail-section">
           <div class="detail-row"><span>{{ t('strategyList.goal') }}</span><span>{{ goalLabel(historyDetail.goal) }}</span></div>
           <div class="detail-row"><span>{{ t('strategyList.risk') }}</span><span>{{ riskLabel(historyDetail.risk_level) }}</span></div>
-          <div class="detail-row"><span>{{ t('strategyList.budget') }}</span><span>¥{{ historyDetail.budget }}</span></div>
+          <div class="detail-row"><span>{{ t('strategyList.budget') }}</span><span>{{ money(historyDetail.budget, BASE_BUDGET_CURRENCY) }}</span></div>
           <div class="detail-row"><span>{{ t('strategyList.model') }}</span><span style="color:var(--text-dim)">{{ historyDetail.model }}</span></div>
           <div class="detail-row"><span>{{ t('strategyList.elapsed') }}</span><span style="color:var(--text-dim)">{{ (historyDetail.elapsed_ms / 1000).toFixed(1) }}s</span></div>
         </div>
@@ -202,6 +202,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { useConfirm } from '../utils/confirm.js'
+import { formatCurrencyAmount } from '../utils/currency.js'
 import { formatDate, formatDateTime } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
@@ -225,6 +226,7 @@ const detailTab = ref('info')
 const generationHistory = ref([])
 const historyDetail = ref(null)
 const mobilePageActions = useMobilePageActions()
+const BASE_BUDGET_CURRENCY = 'CNY'
 
 async function loadData() {
   try {
@@ -350,6 +352,7 @@ function statusBadge(s) { return { draft:'badge-pending', active:'badge-buy', pa
 function triggerLabel(type) { return { price_above:'≥', price_below:'≤', time:t('strategyCompare.triggerTime') }[type] || type }
 function planStatusLabel(status) { return status ? t(`strategyList.planStatuses.${status}`) : status }
 function planStatusBadge(s) { return { pending:'badge-pending', triggered:'badge-triggered', executed:'badge-executed', cancelled:'badge-sell' }[s] || '' }
+function money(value, currency) { return formatCurrencyAmount(value, currency, { maximumFractionDigits: 0 }) }
 function assetDisplay(s) {
   if (s.assets && s.assets.length > 1) {
     return s.assets.map(a => a.name).join('、')

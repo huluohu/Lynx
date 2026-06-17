@@ -39,13 +39,6 @@
     <div class="page-mobile-toolbar">
       <div class="page-mobile-toolbar-row">
         <div class="page-mobile-summary">{{ t('history.totalRecords', { count: filteredAssets.length }) }}</div>
-        <div class="page-mobile-toolbar-actions">
-          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-            <span>{{ t('common.filter') }}</span>
-            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
-          </button>
-          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
-        </div>
       </div>
       <div v-if="activeFilterChips.length" class="page-filter-chips">
         <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
@@ -63,10 +56,10 @@
           <tr v-for="a in filteredAssets" :key="a.id" style="cursor:pointer" @click="openDetail(a)">
             <td><span class="icon-text" style="font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span></td>
             <td style="color:var(--text-dim)">{{ a.symbol }}</td>
-            <td><span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span></td>
+            <td><span class="badge" :class="typeBadge(a.type)">{{ assetTypeLabel(a.type) }}</span></td>
             <td>{{ a.quantity ? a.quantity.toFixed(4) : '-' }}</td>
-            <td>{{ cs(a) }}{{ fmt(a.avg_cost) }}</td>
-            <td>{{ cs(a) }}{{ fmt(a.total_invested) }}</td>
+            <td>{{ money(a.avg_cost, a.currency) }}</td>
+            <td>{{ money(a.total_invested, a.currency) }}</td>
           </tr>
         </tbody>
       </table>
@@ -76,12 +69,12 @@
         <div v-for="a in filteredAssets" :key="a.id" class="asset-card" @click="openDetail(a)">
           <div class="asset-card-top">
             <span class="icon-text" style="font-size:16px;font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span>
-            <span class="badge" :class="typeBadge(a.type)">{{ a.type }}</span>
+            <span class="badge" :class="typeBadge(a.type)">{{ assetTypeLabel(a.type) }}</span>
           </div>
           <div style="font-size:12px;color:var(--text-dim);margin-top:4px">{{ a.symbol }}</div>
           <div class="asset-card-meta">
             <span v-if="a.quantity">{{ a.quantity.toFixed(4) }}</span>
-            <span v-if="a.total_invested">{{ cs(a) }}{{ fmt(a.total_invested) }}</span>
+            <span v-if="a.total_invested">{{ money(a.total_invested, a.currency) }}</span>
           </div>
         </div>
       </div>
@@ -112,8 +105,8 @@
         <div v-if="detailAsset.quantity" class="detail-section">
           <div class="detail-section-title">{{ t('assetList.holdingInfo') }}</div>
           <div class="detail-row"><span>{{ t('assetList.quantity') }}</span><b>{{ detailAsset.quantity?.toFixed(4) }}</b></div>
-          <div class="detail-row"><span>{{ t('assetList.avgCost') }}</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.avg_cost) }}</span></div>
-          <div class="detail-row"><span>{{ t('assetList.totalInvested') }}</span><span>{{ cs(detailAsset) }}{{ fmt(detailAsset.total_invested) }}</span></div>
+          <div class="detail-row"><span>{{ t('assetList.avgCost') }}</span><span>{{ money(detailAsset.avg_cost, detailAsset.currency) }}</span></div>
+          <div class="detail-row"><span>{{ t('assetList.totalInvested') }}</span><span>{{ money(detailAsset.total_invested, detailAsset.currency) }}</span></div>
         </div>
 
         <div class="detail-actions">
@@ -160,7 +153,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, watchEffect } f
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
-import { currencySymbol } from '../utils/currency.js'
+import { formatCurrencyAmount } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import AppDrawer from '../components/AppDrawer.vue'
@@ -251,11 +244,10 @@ function typeBadge(type) {
   return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
 function assetTypeLabel(type) {
-  return t(`assetList.types.${type}`)
+  return t(`assets.types.${type}`)
 }
-function cs(a) { return currencySymbol(a?.currency) }
-function fmt(n) {
-  return formatNumber(Math.round(Number(n || 0)), { maximumFractionDigits: 0 })
+function money(value, currency) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 0 })
 }
 
 watchEffect(() => {
@@ -265,6 +257,16 @@ watchEffect(() => {
       label: t('assetList.addAsset'),
       to: '/assets/add',
     },
+    {
+      key: 'filter-assets',
+      label: activeFilterCount.value ? `${t('common.filter')} (${activeFilterCount.value})` : t('common.filter'),
+      onSelect: () => { filterDrawerOpen.value = true },
+    },
+    activeFilterCount.value ? {
+      key: 'reset-asset-filters',
+      label: t('common.reset'),
+      onSelect: resetFilters,
+    } : null,
   ])
 })
 

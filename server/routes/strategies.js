@@ -41,7 +41,7 @@ function normalizeBacktestRow(row) {
 // GET 策略列表
 router.get('/', (req, res) => {
   const db = getDb();
-  const rows = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol
+  const rows = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol, a.currency as asset_currency
     FROM strategies s LEFT JOIN assets a ON s.asset_id = a.id ORDER BY s.created_at DESC`).all();
   // Enrich multi-asset strategies with asset names
   for (const row of rows) {
@@ -50,7 +50,7 @@ router.get('/', (req, res) => {
         const ids = JSON.parse(row.asset_ids);
         if (ids.length > 0) {
           const placeholders = ids.map(() => '?').join(',');
-          row.assets = db.prepare(`SELECT id, name, symbol, icon FROM assets WHERE id IN (${placeholders})`).all(...ids);
+          row.assets = db.prepare(`SELECT id, name, symbol, icon, currency FROM assets WHERE id IN (${placeholders})`).all(...ids);
         }
       } catch {}
     }
@@ -230,7 +230,7 @@ router.post('/:id/chat/apply', (req, res) => {
 // GET 单个策略
 router.get('/:id', (req, res) => {
   const db = getDb();
-  const row = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol
+  const row = db.prepare(`SELECT s.*, a.name as asset_name, a.symbol, a.currency as asset_currency
     FROM strategies s LEFT JOIN assets a ON s.asset_id = a.id WHERE s.id = ?`).get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'Not found' });
   // Enrich multi-asset
@@ -239,7 +239,7 @@ router.get('/:id', (req, res) => {
       const ids = JSON.parse(row.asset_ids);
       if (ids.length > 0) {
         const placeholders = ids.map(() => '?').join(',');
-        row.assets = db.prepare(`SELECT id, name, symbol, icon FROM assets WHERE id IN (${placeholders})`).all(...ids);
+        row.assets = db.prepare(`SELECT id, name, symbol, icon, currency FROM assets WHERE id IN (${placeholders})`).all(...ids);
       }
     } catch {}
   }

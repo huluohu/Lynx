@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div class="page-header">
+    <div class="page-header page-header-mobile-empty">
       <h1 class="page-title">{{ t('strategyCompare.title') }}</h1>
       <div class="page-header-right">
         <div class="page-header-actions">
@@ -40,8 +40,8 @@
           <div v-for="s in holdingSummaries" :key="s.asset_id" class="holding-summary-item">
             <div class="summary-asset-name">{{ s.name }}</div>
             <div class="summary-row"><span>{{ t('strategyCompare.holdingQuantity') }}</span><b>{{ s.quantity }}</b></div>
-            <div class="summary-row"><span>{{ t('strategyCompare.avgCost') }}</span><b>¥{{ fmt(s.avg_cost) }}</b></div>
-            <div class="summary-row"><span>{{ t('strategyCompare.totalInvested') }}</span><b>¥{{ fmt(s.total_invested) }}</b></div>
+            <div class="summary-row"><span>{{ t('strategyCompare.avgCost') }}</span><b>{{ money(s.avg_cost, s.currency) }}</b></div>
+            <div class="summary-row"><span>{{ t('strategyCompare.totalInvested') }}</span><b>{{ money(s.total_invested, s.currency) }}</b></div>
             <div class="summary-row" v-if="s.pnl_pct !== null">
               <span>{{ t('strategyCompare.floatingPnl') }}</span>
               <b :class="s.pnl_pct >= 0 ? 'pnl positive' : 'pnl negative'">{{ s.pnl_pct >= 0 ? '+' : '' }}{{ s.pnl_pct }}%</b>
@@ -51,7 +51,7 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">{{ t('strategyCompare.budget') }} (¥)</label>
+            <label class="form-label">{{ baseCurrencyFieldLabel(t('strategyCompare.budget')) }}</label>
             <input class="form-input" type="number" v-model="form.budget" placeholder="20000" inputmode="numeric" />
           </div>
           <div class="form-group">
@@ -109,7 +109,7 @@
                 </div>
                 <div class="metric-box">
                   <div class="metric-label">{{ t('strategyCompare.budgetUsage') }}</div>
-                  <div class="metric-value">¥{{ fmt(item.meta?.budget_usage) }}</div>
+                  <div class="metric-value">{{ baseMoney(item.meta?.budget_usage) }}</div>
                 </div>
                 <div class="metric-box">
                   <div class="metric-label">{{ t('strategyCompare.planCount') }}</div>
@@ -135,7 +135,7 @@
                   <div v-for="plan in item.plans.slice(0, 5)" :key="`${item.risk_level}-${plan.seq}`" class="plan-preview-item">
                     <span class="badge" :class="plan.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ plan.action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span>
                     <span>{{ triggerLabel(plan.trigger_type) }} {{ plan.trigger_value }}</span>
-                    <span style="margin-left:auto;color:var(--text-dim)">{{ plan.amount ? `¥${fmt(plan.amount)}` : (plan.quantity || '-') }}</span>
+                     <span style="margin-left:auto;color:var(--text-dim)">{{ plan.amount ? planMoney(plan.amount, plan.asset_id) : (plan.quantity || '-') }}</span>
                   </div>
                 </div>
                 <div v-else class="empty-inline">{{ t('strategyCompare.noPlans') }}</div>
@@ -157,16 +157,19 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { currencyInputLabel, formatCurrencyAmount } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const router = useRouter()
 const toast = useToast()
 const { t } = useI18n()
+const mobilePageActions = useMobilePageActions()
 
 const assetsLoading = ref(true)
 const comparing = ref(false)
@@ -184,6 +187,7 @@ const form = reactive({
   budget: 20000,
   goal: 'recovery',
 })
+const BASE_BUDGET_CURRENCY = 'CNY'
 const canGenerateCompare = computed(() => (
   !comparing.value &&
   selectedAssetIds.value.length > 0 &&
@@ -195,6 +199,21 @@ const canGenerateCompare = computed(() => (
 function fmt(n) {
   const value = Number(n)
   return Number.isFinite(value) ? formatNumber(Math.round(value)) : '0'
+}
+function money(value, currency) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 0 })
+}
+function baseMoney(value) {
+  return formatCurrencyAmount(value, BASE_BUDGET_CURRENCY, { maximumFractionDigits: 0 })
+}
+function baseCurrencyFieldLabel(label) {
+  return currencyInputLabel(label, BASE_BUDGET_CURRENCY)
+}
+function assetCurrencyById(assetId) {
+  return assets.value.find((asset) => String(asset.id) === String(assetId))?.currency || 'CNY'
+}
+function planMoney(value, assetId) {
+  return formatCurrencyAmount(value, assetCurrencyById(assetId), { maximumFractionDigits: 0 })
 }
 function riskLabel(level) { return t(`strategyCompare.risks.${level}`) }
 function goalLabel(goal) { return t(`strategyCompare.goals.${goal}`) }
@@ -255,12 +274,13 @@ async function loadAssetInfo() {
         const price = priceJson.data?.price
         const pnlPct = price && h.avg_cost ? ((price - h.avg_cost) / h.avg_cost * 100).toFixed(1) : null
         if (h.quantity) {
-          summaries.push({
-            asset_id: assetId,
-            name: asset?.name || `Asset #${assetId}`,
-            quantity: h.quantity,
-            avg_cost: h.avg_cost,
-            total_invested: h.total_invested,
+            summaries.push({
+              asset_id: assetId,
+              name: asset?.name || `Asset #${assetId}`,
+              currency: h.currency || asset?.currency || 'CNY',
+              quantity: h.quantity,
+              avg_cost: h.avg_cost,
+              total_invested: h.total_invested,
             pnl_pct: pnlPct ? Number(pnlPct) : null,
           })
         }
@@ -332,7 +352,21 @@ async function adoptStrategy(item) {
   }
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'back-to-strategies',
+      label: t('strategyCompare.back'),
+      to: '/strategies',
+    },
+  ])
+})
+
 onMounted(loadAssets)
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
 </script>
 
 <style scoped>

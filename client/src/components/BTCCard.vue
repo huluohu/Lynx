@@ -4,10 +4,10 @@
       <span class="badge badge-btc">₿ {{ t('marketCards.btc') }}</span>
     </div>
     <div class="price-big">
-      {{ price?.usd ? '$' + formatNumber(price.usd) : '-' }}
+      {{ money(price?.usd, 'USD', { maximumFractionDigits: 0 }) }}
     </div>
     <div class="price-sub">
-      {{ t('marketCards.aboutPerCoin', { price: price?.cny ? '¥' + formatNumber(price.cny) : '-' }) }}
+      {{ t('marketCards.aboutPerCoin', { price: money(price?.cny, 'CNY', { maximumFractionDigits: 0 }) }) }}
       <span :style="{ marginLeft: '8px', color: price?.ch24 >= 0 ? 'var(--market-positive)' : 'var(--market-negative)' }">
         {{ price?.ch24 ? '24h ' + (price.ch24 >= 0 ? '+' : '') + price.ch24.toFixed(2) + '%' : '' }}
       </span>
@@ -24,9 +24,9 @@
     </div>
     <div style="margin-top:16px;display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim)">
       <div>{{ t('marketCards.holdings', { amount: holding?.amount ?? '-' }) }}</div>
-      <div>{{ t('marketCards.cost', { price: holding?.cost_per_usd ? '$' + formatNumber(holding.cost_per_usd) : '$-' }) }}</div>
-      <div style="color:var(--green)">{{ t('marketCards.addPosition', { price: '$55k' }) }}</div>
-      <div style="color:var(--gold)">{{ t('marketCards.reducePosition', { price: '$75k' }) }}</div>
+      <div>{{ t('marketCards.cost', { price: money(holding?.cost_per_usd, 'USD', { maximumFractionDigits: 0 }) }) }}</div>
+      <div style="color:var(--green)">{{ t('marketCards.addPosition', { price: money(55000, 'USD', { maximumFractionDigits: 0 }) }) }}</div>
+      <div style="color:var(--gold)">{{ t('marketCards.reducePosition', { price: money(75000, 'USD', { maximumFractionDigits: 0 }) }) }}</div>
     </div>
   </div>
 </template>
@@ -34,6 +34,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { formatCurrencyAmount } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
 
 const props = defineProps({
@@ -49,5 +50,9 @@ const pl_pct = computed(() => props.profit?.pl_pct || 0)
 function formatNum(n) {
   if (!n && n !== 0) return '-'
   return formatNumber(Math.round(n))
+}
+
+function money(value, currency, options = {}) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2, ...options })
 }
 </script>

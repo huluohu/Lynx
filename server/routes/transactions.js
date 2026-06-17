@@ -115,7 +115,11 @@ router.post('/', (req, res) => {
       }
 
       // 交易本身也记一条通知
-      const currSymbol = asset.currency === 'USD' ? '$' : '¥';
+      const currSymbol = asset.currency === 'USD'
+        ? '$'
+        : asset.currency === 'USDT'
+          ? 'USDT '
+          : '¥';
       createNotification(db, {
         type: 'trade_executed',
         title: `${type === 'buy' ? '买入' : '卖出'} ${asset.name}`,

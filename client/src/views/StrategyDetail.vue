@@ -48,7 +48,7 @@
         <div class="section-title">{{ t('strategyDetail.params') }}</div>
         <div class="info-list" v-if="parsedParams">
           <template v-if="strategy.type === 'recovery'">
-            <div class="info-row"><span class="info-label">{{ t('strategyDetail.budget') }}</span><span>¥{{ fmtMoney(parsedParams.budget) }}</span></div>
+            <div class="info-row"><span class="info-label">{{ t('strategyDetail.budget') }}</span><span>{{ assetMoney(parsedParams.budget, primaryAssetCurrency) }}</span></div>
             <div v-if="parsedParams.buy_lines?.length" style="margin-top:8px">
               <span class="info-label" style="display:block;margin-bottom:4px">{{ t('strategyForm.buyLines') }}</span>
               <div v-for="(l,i) in parsedParams.buy_lines" :key="'b'+i" class="line-tag buy">{{ lineText('buy', l) }}</div>
@@ -64,16 +64,16 @@
             <div v-if="dcaAssetRows.length" class="param-card-list">
               <div v-for="item in dcaAssetRows" :key="item.assetKey" class="param-card">
                 <div class="param-card-title">{{ item.assetLabel }}</div>
-                <div class="param-card-meta">{{ t('strategyForm.amountPerPeriod') }} · ¥{{ fmtMoney(item.amount_per) }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.amountPerPeriod') }} · {{ assetMoney(item.amount_per, assetCurrencyById(item.assetKey)) }}</div>
               </div>
             </div>
           </template>
           <template v-else-if="strategy.type === 'grid'">
-            <div class="info-row"><span class="info-label">{{ t('strategyDetail.budget') }}</span><span>¥{{ fmtMoney(parsedParams.budget) }}</span></div>
+            <div class="info-row"><span class="info-label">{{ t('strategyDetail.budget') }}</span><span>{{ assetMoney(parsedParams.budget, primaryAssetCurrency) }}</span></div>
             <div v-if="gridAssetRows.length" class="param-card-list">
               <div v-for="item in gridAssetRows" :key="item.assetKey" class="param-card">
                 <div class="param-card-title">{{ item.assetLabel }}</div>
-                <div class="param-card-meta">{{ t('strategyForm.lowerBound') }} ¥{{ fmtNumber(item.low) }} · {{ t('strategyForm.upperBound') }} ¥{{ fmtNumber(item.high) }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.lowerBound') }} {{ priceMoney(item.low, assetCurrencyById(item.assetKey)) }} · {{ t('strategyForm.upperBound') }} {{ priceMoney(item.high, assetCurrencyById(item.assetKey)) }}</div>
                 <div class="param-card-meta">{{ t('strategyForm.gridCount') }} {{ item.grids }}</div>
               </div>
             </div>
@@ -83,7 +83,7 @@
             <div v-if="valueAvgAssetRows.length" class="param-card-list">
               <div v-for="item in valueAvgAssetRows" :key="item.assetKey" class="param-card">
                 <div class="param-card-title">{{ item.assetLabel }}</div>
-                <div class="param-card-meta">{{ t('strategyForm.targetValue') }} · ¥{{ fmtMoney(item.target_value) }}</div>
+                <div class="param-card-meta">{{ t('strategyForm.targetValue') }} · {{ assetMoney(item.target_value, assetCurrencyById(item.assetKey)) }}</div>
                 <div class="param-card-meta">{{ t('strategyForm.growthRate') }} · {{ fmtPct(item.growth_rate * 100) }}</div>
               </div>
             </div>
@@ -106,11 +106,11 @@
             <tr v-for="p in plans" :key="p.id">
               <td>{{ p.seq }}</td>
               <td style="font-size:12px;color:var(--text-dim)">{{ triggerLabel(p.trigger_type) }}</td>
-              <td style="font-weight:600">{{ formatTriggerValue(p.trigger_value) }}</td>
+              <td style="font-weight:600">{{ formatTriggerValue(p.trigger_value, p.asset_currency) }}</td>
               <td><span class="badge" :class="p.action === 'buy' ? 'badge-buy' : 'badge-sell'">{{ p.action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }}</span></td>
               <td>{{ p.quantity ? fmtNumber(p.quantity, 4) : '-' }}</td>
-              <td>{{ p.amount ? `¥${fmtMoney(p.amount)}` : '-' }}</td>
-              <td>{{ p.new_avg_cost ? `¥${fmtMoney(p.new_avg_cost)}` : '-' }}</td>
+              <td>{{ p.amount ? assetMoney(p.amount, p.asset_currency) : '-' }}</td>
+              <td>{{ p.new_avg_cost ? assetMoney(p.new_avg_cost, p.asset_currency) : '-' }}</td>
               <td><span class="badge" :class="planStatusBadge(p.status)">{{ planStatusLabel(p.status) }}</span></td>
             </tr>
           </tbody>
@@ -123,11 +123,11 @@
               <span class="badge" :class="planStatusBadge(p.status)">{{ planStatusLabel(p.status) }}</span>
             </div>
             <div class="plan-card-body">
-              <div class="plan-card-price">{{ triggerLabel(p.trigger_type) }} <b>{{ formatTriggerValue(p.trigger_value) }}</b></div>
+              <div class="plan-card-price">{{ triggerLabel(p.trigger_type) }} <b>{{ formatTriggerValue(p.trigger_value, p.asset_currency) }}</b></div>
               <div class="plan-card-meta">
                 <span v-if="p.quantity">{{ t('strategyDetail.quantityLabel', { value: fmtNumber(p.quantity, 4) }) }}</span>
-                <span v-if="p.amount">{{ t('strategyDetail.amountLabel', { value: fmtMoney(p.amount) }) }}</span>
-                <span v-if="p.new_avg_cost">{{ t('strategyDetail.averageCostLabel', { value: fmtMoney(p.new_avg_cost) }) }}</span>
+                <span v-if="p.amount">{{ t('strategyDetail.amountLabel', { value: assetMoney(p.amount, p.asset_currency) }) }}</span>
+                <span v-if="p.new_avg_cost">{{ t('strategyDetail.averageCostLabel', { value: assetMoney(p.new_avg_cost, p.asset_currency) }) }}</span>
               </div>
             </div>
           </div>
@@ -173,8 +173,8 @@
           </div>
 
           <div class="info-list" style="margin-top:16px">
-            <div class="info-row"><span class="info-label">{{ t('strategyDetail.initialInvestment') }}</span><span>¥{{ fmtMoney(latestBacktest.initial_investment) }}</span></div>
-            <div class="info-row"><span class="info-label">{{ t('strategyDetail.finalValue') }}</span><span>¥{{ fmtMoney(latestBacktest.final_value) }}</span></div>
+            <div class="info-row"><span class="info-label">{{ t('strategyDetail.initialInvestment') }}</span><span>{{ assetMoney(latestBacktest.initial_investment, BASE_BUDGET_CURRENCY) }}</span></div>
+            <div class="info-row"><span class="info-label">{{ t('strategyDetail.finalValue') }}</span><span>{{ assetMoney(latestBacktest.final_value, BASE_BUDGET_CURRENCY) }}</span></div>
             <div class="info-row"><span class="info-label">{{ t('strategyDetail.latestExecution') }}</span><span>{{ fmtDateTime(latestBacktest.created_at) }}</span></div>
           </div>
 
@@ -187,11 +187,11 @@
                   <span class="trade-log-time">{{ fmtDateTime(item.executed_at) }}</span>
                 </div>
                 <div class="trade-log-body">
-                  <span>{{ t('strategyDetail.triggerPrice', { value: fmtNumber(item.trigger_value) }) }}</span>
-                  <span>{{ t('strategyDetail.executedPrice', { value: fmtNumber(item.price) }) }}</span>
+                  <span>{{ t('strategyDetail.triggerPrice', { value: priceMoney(item.trigger_value) }) }}</span>
+                  <span>{{ t('strategyDetail.executedPrice', { value: priceMoney(item.price) }) }}</span>
                   <span>{{ t('strategyDetail.quantityValue', { value: fmtNumber(item.quantity, 4) }) }}</span>
-                  <span>{{ t('strategyDetail.amountValue', { value: fmtMoney(item.amount) }) }}</span>
-                  <span v-if="item.pnl !== undefined" :class="item.pnl >= 0 ? 'pnl positive' : 'pnl negative'">{{ t('strategyDetail.profitLoss', { value: `${item.pnl >= 0 ? '+' : '-'}¥${fmtMoney(Math.abs(item.pnl))}` }) }}</span>
+                  <span>{{ t('strategyDetail.amountValue', { value: assetMoney(item.amount) }) }}</span>
+                  <span v-if="item.pnl !== undefined" :class="item.pnl >= 0 ? 'pnl positive' : 'pnl negative'">{{ t('strategyDetail.profitLoss', { value: signedAssetMoney(item.pnl) }) }}</span>
                 </div>
               </div>
             </div>
@@ -360,6 +360,7 @@ import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
+import { formatCurrencyAmount, formatSignedCurrencyAmount } from '../utils/currency.js'
 import { formatDate, formatDateTime, formatNumber } from '../utils/formatters.js'
 
 useSwipeBack()
@@ -392,6 +393,7 @@ const chatLoading = ref(false)
 const chatApplying = ref(false)
 const chatScrollRef = ref(null)
 const mobilePageActions = useMobilePageActions()
+const BASE_BUDGET_CURRENCY = 'CNY'
 
 const pageTitle = computed(() => loading.value ? t('strategyDetail.title') : (strategy.value.name || t('strategyDetail.title')))
 const linkedAssetText = computed(() => {
@@ -409,14 +411,16 @@ const strategyAssets = computed(() => {
       name: strategy.value.asset_name || '-',
       symbol: strategy.value.symbol || '',
       icon: strategy.value.icon || '',
+      currency: strategy.value.asset_currency || 'CNY',
     }]
   }
   return []
 })
+const primaryAssetCurrency = computed(() => strategyAssets.value[0]?.currency || strategy.value.asset_currency || 'CNY')
 const parsedParams = computed(() => {
   try { return JSON.parse(strategy.value.parameters || '{}') } catch { return null }
 })
-const dcaAssetRows = computed(() => buildPerAssetRows((params, assetId) => ({ amount_per: params?.amount_per })))
+const dcaAssetRows = computed(() => buildPerAssetRows((params) => ({ amount_per: params?.amount_per })))
 const gridAssetRows = computed(() => buildPerAssetRows((params) => ({ low: params?.low, high: params?.high, grids: params?.grids })))
 const valueAvgAssetRows = computed(() => buildPerAssetRows((params) => ({ target_value: params?.target_value, growth_rate: params?.growth_rate })))
 const latestBacktest = computed(() => backtestResults.value[0] || null)
@@ -472,6 +476,10 @@ function assetLabelById(assetId) {
   const target = strategyAssets.value.find((item) => String(item.id) === String(assetId))
   if (!target) return `#${assetId}`
   return [target.icon, target.name, target.symbol].filter(Boolean).join(' ')
+}
+function assetCurrencyById(assetId) {
+  const target = strategyAssets.value.find((item) => String(item.id) === String(assetId))
+  return target?.currency || primaryAssetCurrency.value
 }
 function buildPerAssetRows(mapEntry) {
   const params = parsedParams.value || {}
@@ -558,7 +566,7 @@ function planStatusLabel(status) {
   return status ? t(`strategyDetail.planStatuses.${status}`) : '-'
 }
 function planStatusBadge(status) {
-  return { pending: 'badge-pending', triggered: 'badge-triggered', executed: 'badge-executed', cancelled: 'badge-sell' }[status] || ''
+  return { pending: 'badge-pending', triggered: 'badge-triggered', partial: 'badge-partial', executed: 'badge-executed', cancelled: 'badge-sell' }[status] || ''
 }
 function reviewScoreClass(score) {
   const num = Number(score)
@@ -576,10 +584,14 @@ function fmtNumber(value, digits = 2) {
   if (!Number.isFinite(number)) return '-'
   return formatNumber(number, { minimumFractionDigits: digits, maximumFractionDigits: digits })
 }
-function fmtMoney(value) {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return '-'
-  return formatNumber(Math.round(number))
+function assetMoney(value, currency = primaryAssetCurrency.value) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
+}
+function signedAssetMoney(value, currency = primaryAssetCurrency.value) {
+  return formatSignedCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
+}
+function priceMoney(value, currency = primaryAssetCurrency.value) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
 }
 function fmtPct(value) {
   const number = Number(value)
@@ -603,13 +615,14 @@ function formatParamValue(value) {
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
-function formatTriggerValue(value) {
+function formatTriggerValue(value, currency = primaryAssetCurrency.value) {
   const number = Number(value)
-  return Number.isFinite(number) ? fmtNumber(number) : (value ?? '-')
+  return Number.isFinite(number) ? priceMoney(number, currency) : (value ?? '-')
 }
 function lineText(action, line) {
   const assetPart = line.asset_id ? `${assetLabelById(line.asset_id)} · ` : ''
-  return `${assetPart}${action === 'buy' ? t('aiStrategyGenerator.triggers.priceBelow') : t('aiStrategyGenerator.triggers.priceAbove')} ¥${fmtNumber(line.price)} → ${action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell')} ¥${fmtMoney(line.amount)}`
+  const currency = assetCurrencyById(line.asset_id)
+  return `${assetPart}${action === 'buy' ? t('aiStrategyGenerator.triggers.priceBelow') : t('aiStrategyGenerator.triggers.priceAbove')} ${priceMoney(line.price, currency)} → ${action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell')} ${assetMoney(line.amount, currency)}`
 }
 function scenarioLabel(item) {
   return item?.scenario_label || (item?.scenario_name ? t(`strategyDetail.scenarios.${item.scenario_name}`) : '-')
@@ -627,11 +640,11 @@ function formatChangeValue(value) {
 }
 function describePlan(plan) {
   const parts = []
-  if (plan.trigger_type && plan.trigger_value != null) parts.push(`${triggerLabel(plan.trigger_type)} ${formatTriggerValue(plan.trigger_value)}`)
+  if (plan.trigger_type && plan.trigger_value != null) parts.push(`${triggerLabel(plan.trigger_type)} ${formatTriggerValue(plan.trigger_value, plan.asset_currency || assetCurrencyById(plan.asset_id))}`)
   if (plan.action) parts.push(plan.action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell'))
-  if (plan.amount != null) parts.push(t('strategyDetail.amountValue', { value: fmtMoney(plan.amount) }))
+  if (plan.amount != null) parts.push(t('strategyDetail.amountValue', { value: assetMoney(plan.amount, plan.asset_currency || assetCurrencyById(plan.asset_id)) }))
   if (plan.quantity != null) parts.push(t('strategyDetail.quantityValue', { value: fmtNumber(plan.quantity, 4) }))
-  if (plan.new_avg_cost != null) parts.push(t('aiStrategyGenerator.averageCostArrow', { value: fmtNumber(plan.new_avg_cost) }))
+  if (plan.new_avg_cost != null) parts.push(t('aiStrategyGenerator.averageCostArrow', { value: assetMoney(plan.new_avg_cost, plan.asset_currency || assetCurrencyById(plan.asset_id)) }))
   if (plan.notes) parts.push(t('strategyDetail.changeText.notes', { value: plan.notes }))
   return parts.join('，')
 }
@@ -641,12 +654,12 @@ function planTarget(plan) {
 function describePlanPatch(plan) {
   const parts = []
   if (Object.prototype.hasOwnProperty.call(plan, 'trigger_type') || Object.prototype.hasOwnProperty.call(plan, 'trigger_value')) {
-    parts.push(t('strategyDetail.changeText.triggerTo', { value: `${triggerLabel(plan.trigger_type || 'time')} ${plan.trigger_value ?? '-'}` }))
+    parts.push(t('strategyDetail.changeText.triggerTo', { value: `${triggerLabel(plan.trigger_type || 'time')} ${plan.trigger_value == null ? '-' : formatTriggerValue(plan.trigger_value, plan.asset_currency || assetCurrencyById(plan.asset_id))}` }))
   }
   if (Object.prototype.hasOwnProperty.call(plan, 'action')) parts.push(t('strategyDetail.changeText.actionTo', { value: plan.action === 'buy' ? t('history.transactionTypes.buy') : t('history.transactionTypes.sell') }))
-  if (Object.prototype.hasOwnProperty.call(plan, 'amount')) parts.push(t('strategyDetail.changeText.amountTo', { value: plan.amount == null ? t('strategyDetail.cleared') : `¥${fmtMoney(plan.amount)}` }))
+  if (Object.prototype.hasOwnProperty.call(plan, 'amount')) parts.push(t('strategyDetail.changeText.amountTo', { value: plan.amount == null ? t('strategyDetail.cleared') : assetMoney(plan.amount, plan.asset_currency || assetCurrencyById(plan.asset_id)) }))
   if (Object.prototype.hasOwnProperty.call(plan, 'quantity')) parts.push(t('strategyDetail.changeText.quantityTo', { value: plan.quantity == null ? t('strategyDetail.cleared') : fmtNumber(plan.quantity, 4) }))
-  if (Object.prototype.hasOwnProperty.call(plan, 'new_avg_cost')) parts.push(t('strategyDetail.changeText.averageCostTo', { value: plan.new_avg_cost == null ? t('strategyDetail.cleared') : `¥${fmtNumber(plan.new_avg_cost)}` }))
+  if (Object.prototype.hasOwnProperty.call(plan, 'new_avg_cost')) parts.push(t('strategyDetail.changeText.averageCostTo', { value: plan.new_avg_cost == null ? t('strategyDetail.cleared') : assetMoney(plan.new_avg_cost, plan.asset_currency || assetCurrencyById(plan.asset_id)) }))
   if (Object.prototype.hasOwnProperty.call(plan, 'status')) parts.push(t('strategyDetail.changeText.statusTo', { value: planStatusLabel(plan.status) }))
   if (Object.prototype.hasOwnProperty.call(plan, 'notes')) parts.push(t('strategyDetail.changeText.notesTo', { value: plan.notes || t('strategyDetail.emptyNote') }))
   return parts.length ? parts.join('；') : t('strategyDetail.updatePlanDetail')
@@ -1070,7 +1083,7 @@ onMounted(loadData)
   word-break: break-word;
   font-size: 12px;
   color: var(--text-dim);
-  background: var(--bg-soft, rgba(148, 163, 184, 0.08));
+  background: var(--bg-dim, rgba(148, 163, 184, 0.08));
   border-radius: 10px;
   padding: 12px;
 }
@@ -1179,7 +1192,7 @@ onMounted(loadData)
 }
 .changes-card {
   width: min(100%, 420px);
-  background: var(--bg-soft, rgba(59, 130, 246, 0.08));
+  background: var(--bg-dim, rgba(59, 130, 246, 0.08));
   border: 1px solid rgba(59, 130, 246, 0.2);
   border-radius: 12px;
   padding: 12px 14px;

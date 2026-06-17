@@ -7,7 +7,14 @@ import { normalizeApiTimestamp } from '../utils/datetime.js';
 
 const router = Router();
 
-function buildSummary(db) {
+function convertToCny(value, currency, usdCny) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return 0;
+  if (currency === 'USD' || currency === 'USDT') return amount * usdCny;
+  return amount;
+}
+
+function buildSummary(db, usdCny) {
   const holdings = db.prepare(`SELECT h.*, a.name, a.symbol, a.type, a.icon, a.currency
     FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'`).all();
 
@@ -24,9 +31,12 @@ function buildSummary(db) {
     const price = prices[h.asset_id] || h.avg_cost;
     const marketValue = h.quantity * price;
     const pl = marketValue - h.total_invested;
-    totalInvested += h.total_invested;
-    totalMarketValue += marketValue;
-    if (hasRealPrice) totalPL += pl;
+    const totalInvestedBase = convertToCny(h.total_invested, h.currency, usdCny);
+    const marketValueBase = convertToCny(marketValue, h.currency, usdCny);
+    const plBase = hasRealPrice ? convertToCny(pl, h.currency, usdCny) : null;
+    totalInvested += totalInvestedBase;
+    totalMarketValue += marketValueBase;
+    if (plBase !== null) totalPL += plBase;
     allocation.push({
       asset_id: h.asset_id,
       name: h.name,
@@ -39,8 +49,11 @@ function buildSummary(db) {
       price,
       has_real_price: hasRealPrice,
       total_invested: h.total_invested,
+      total_invested_base: totalInvestedBase,
       market_value: marketValue,
+      market_value_base: marketValueBase,
       pl: hasRealPrice ? pl : null,
+      pl_base: plBase,
       pl_pct: hasRealPrice && h.total_invested ? (pl / h.total_invested * 100) : null,
       weight: 0,
     });
@@ -48,7 +61,7 @@ function buildSummary(db) {
 
   // 权重
   for (const a of allocation) {
-    a.weight = totalMarketValue ? (a.market_value / totalMarketValue * 100) : 0;
+    a.weight = totalMarketValue ? (a.market_value_base / totalMarketValue * 100) : 0;
   }
 
   // 活跃计划
@@ -63,7 +76,7 @@ function buildSummary(db) {
   `).get().count;
 
   // 最近交易
-  const recentTrades = db.prepare(`SELECT t.*, a.name, a.symbol
+  const recentTrades = db.prepare(`SELECT t.*, a.name, a.symbol, a.currency
     FROM transactions t JOIN assets a ON t.asset_id = a.id
     ORDER BY t.executed_at DESC LIMIT 5`).all();
 
@@ -74,6 +87,7 @@ function buildSummary(db) {
       total_pl: totalPL,
       total_pl_pct: totalInvested ? (totalPL / totalInvested * 100) : 0,
       active_strategy_count: activeStrategyCount,
+      base_currency: 'CNY',
     },
     allocation,
     active_plans: activePlans,
@@ -109,11 +123,15 @@ function buildAlerts(db) {
 }
 
 // GET 仪表盘总览
-router.get('/summary', (req, res) => {
-  const db = getDb();
-  const data = buildSummary(db);
-
-  res.json({ success: true, data });
+router.get('/summary', async (req, res) => {
+  try {
+    const db = getDb();
+    const usdCny = await getUsdCny();
+    const data = buildSummary(db, usdCny);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 router.get('/overview', async (req, res) => {
@@ -127,7 +145,7 @@ router.get('/overview', async (req, res) => {
     res.json({
       success: true,
       data: {
-        ...buildSummary(db),
+        ...buildSummary(db, usd_cny),
         alerts: buildAlerts(db),
         latest_signals: latestSignals,
         usd_cny,

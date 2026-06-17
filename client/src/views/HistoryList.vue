@@ -1,9 +1,13 @@
 <template>
   <PullRefreshView :onRefresh="loadData">
   <div>
-    <div class="page-header">
+    <div class="page-header page-header-mobile-empty">
       <h1 class="page-title">{{ t('history.title') }}</h1>
-      <button class="btn btn-primary" @click="showForm = true">+ {{ t('history.addRecord') }}</button>
+      <div class="page-header-right">
+        <div class="page-header-actions">
+          <button class="btn btn-primary" @click="showForm = true">+ {{ t('history.addRecord') }}</button>
+        </div>
+      </div>
     </div>
 
     <div class="card page-filter-card desktop-only">
@@ -57,17 +61,9 @@
       </div>
     </div>
 
-    <div class="mobile-only page-mobile-toolbar">
+    <div class="page-mobile-toolbar">
       <div class="page-mobile-toolbar-row">
         <div class="page-mobile-summary">{{ t('history.totalRecords', { count: totalCount }) }}</div>
-        <div class="page-mobile-toolbar-actions">
-          <button class="btn btn-inline-icon" @click="sortDrawerOpen = true">{{ currentSortLabel }}</button>
-          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-            <span>{{ t('common.filter') }}</span>
-            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
-          </button>
-          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
-        </div>
       </div>
       <div v-if="activeFilterChips.length" class="page-filter-chips">
         <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
@@ -317,7 +313,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, watchEffect, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
@@ -327,6 +323,7 @@ import { formatDateTime, formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
 const confirm = useConfirm()
@@ -342,6 +339,7 @@ const undoSubmitting = ref(false)
 const filterDrawerOpen = ref(false)
 const sortDrawerOpen = ref(false)
 const totalCount = ref(0)
+const mobilePageActions = useMobilePageActions()
 const currencyOptions = ['CNY', 'USD', 'USDT', 'BTC', 'ETH']
 const sortOptions = computed(() => [
   { value: 'executed_desc', label: t('history.latestFirst') },
@@ -464,6 +462,31 @@ function removeFilter(key) {
   loadData()
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'add-history-record',
+      label: t('history.addRecord'),
+      onSelect: () => { showForm.value = true },
+    },
+    {
+      key: 'sort-history',
+      label: currentSortLabel.value,
+      onSelect: () => { sortDrawerOpen.value = true },
+    },
+    {
+      key: 'filter-history',
+      label: activeFilterCount.value ? `${t('common.filter')} (${activeFilterCount.value})` : t('common.filter'),
+      onSelect: () => { filterDrawerOpen.value = true },
+    },
+    activeFilterCount.value ? {
+      key: 'reset-history-filters',
+      label: t('common.reset'),
+      onSelect: resetFilters,
+    } : null,
+  ])
+})
+
 function openDetail(record) {
   detailRecord.value = record
   showDetailDrawer.value = true
@@ -580,6 +603,10 @@ function formatDate(value) {
 }
 
 onMounted(loadData)
+
+onUnmounted(() => {
+  mobilePageActions.clearActions()
+})
 watch(filterDrawerOpen, (open) => {
   if (open) syncDraftFilters()
 })

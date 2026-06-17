@@ -31,16 +31,16 @@
     <div v-else class="grid-4" style="margin-bottom:20px">
       <div class="stat-card">
         <div class="stat-label">{{ t('dashboard.totalInvested') }}</div>
-        <div class="stat-value stat-value-wrap">¥{{ fmt(summary.total_invested) }}</div>
+        <div class="stat-value stat-value-wrap">{{ money(summary.total_invested, 'CNY') }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ t('dashboard.marketValue') }}</div>
-        <div class="stat-value stat-value-wrap">¥{{ fmt(summary.total_market_value) }}</div>
+        <div class="stat-value stat-value-wrap">{{ money(summary.total_market_value, 'CNY') }}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ t('dashboard.totalPnl') }}</div>
         <div class="stat-value stat-value-wrap" :class="summary.total_pl >= 0 ? 'pnl positive' : 'pnl negative'">
-          {{ summary.total_pl >= 0 ? '+' : '' }}¥{{ fmt(Math.abs(summary.total_pl)) }}
+          {{ signedMoney(summary.total_pl, 'CNY') }}
         </div>
         <div class="stat-sub" :class="summary.total_pl_pct >= 0 ? 'pnl positive' : 'pnl negative'">
           {{ summary.total_pl_pct >= 0 ? '+' : '' }}{{ fmtPct(summary.total_pl_pct) }}%
@@ -101,7 +101,7 @@
             <div class="alloc-footer">
               <span style="color:var(--text-muted)">{{ t('dashboard.invested', { symbol: cs(a), value: fmt(a.total_invested) }) }}</span>
               <span v-if="a.has_real_price" :class="a.pl >= 0 ? 'pnl positive' : 'pnl negative'">
-                {{ a.pl >= 0 ? '+' : '' }}{{ fmtPl(a.pl) }} ({{ a.pl_pct >= 0 ? '+' : '' }}{{ fmtPct(a.pl_pct) }}%)
+                {{ signedMoney(a.pl, a.currency) }} ({{ a.pl_pct >= 0 ? '+' : '' }}{{ fmtPct(a.pl_pct) }}%)
               </span>
               <span v-else class="no-price-hint">{{ t('dashboard.noPrice') }}</span>
             </div>
@@ -170,8 +170,8 @@
             <td>{{ trade.name }}</td>
             <td><span class="badge" :class="trade.type === 'buy' ? 'badge-buy' : 'badge-sell'">{{ trade.type === 'buy' ? t('history.buy') : t('history.sell') }}</span></td>
             <td>{{ trade.quantity }}</td>
-            <td>¥{{ fmt(trade.price) }}</td>
-            <td :class="trade.type === 'buy' ? 'pnl negative' : 'pnl positive'">{{ trade.type === 'buy' ? '-' : '+' }}¥{{ fmt(trade.total) }}</td>
+            <td>{{ money(trade.price, trade.currency) }}</td>
+            <td :class="trade.type === 'buy' ? 'pnl negative' : 'pnl positive'">{{ tradeSignedTotal(trade) }}</td>
           </tr>
         </tbody>
       </table>
@@ -183,7 +183,7 @@
           </div>
           <div class="mini-card-row">
             <span class="text-muted">{{ t('dashboard.tradeMeta', { date: fmtDate(trade.executed_at), quantity: trade.quantity }) }}</span>
-            <span :class="trade.type === 'buy' ? 'pnl negative' : 'pnl positive'">{{ trade.type === 'buy' ? '-' : '+' }}¥{{ fmt(trade.total) }}</span>
+            <span :class="trade.type === 'buy' ? 'pnl negative' : 'pnl positive'">{{ tradeSignedTotal(trade) }}</span>
           </div>
         </div>
       </div>
@@ -199,7 +199,7 @@ import { useI18n } from 'vue-i18n'
 import { useNotificationsStore } from '../stores/notifications.js'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
-import { currencySymbol } from '../utils/currency.js'
+import { currencySymbol, formatCurrencyAmount, formatSignedCurrencyAmount } from '../utils/currency.js'
 import { formatDate, formatNumber, formatTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
@@ -311,6 +311,17 @@ function fmtPl(n) {
   return `${sign}${fmt(Math.abs(num))}`
 }
 function cs(a) { return currencySymbol(a?.currency) }
+function money(value, currency) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
+}
+function signedMoney(value, currency) {
+  return formatSignedCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
+}
+function tradeSignedTotal(trade) {
+  if (!trade) return '-'
+  const prefix = trade.type === 'buy' ? '-' : '+'
+  return `${prefix}${money(trade.total, trade.currency)}`
+}
 function fmtPct(n) {
   if (!n && n !== 0) return '0.0'
   return Number(n).toFixed(1)

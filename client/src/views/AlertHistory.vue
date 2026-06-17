@@ -49,16 +49,9 @@
       </div>
     </div>
 
-    <div class="mobile-only page-mobile-toolbar">
+    <div class="page-mobile-toolbar">
       <div class="page-mobile-toolbar-row">
         <div class="page-mobile-summary">{{ t('alertHistory.totalRecords', { count: pagination.total || alerts.length }) }}</div>
-        <div class="page-mobile-toolbar-actions">
-          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-            <span>{{ t('common.filter') }}</span>
-            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
-          </button>
-          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
-        </div>
       </div>
       <div v-if="activeFilterChips.length" class="page-filter-chips">
         <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
@@ -435,6 +428,16 @@ watchEffect(() => {
       danger: true,
       onSelect: clearRead,
     },
+    {
+      key: 'filter-alerts',
+      label: activeFilterCount.value ? `${t('common.filter')} (${activeFilterCount.value})` : t('common.filter'),
+      onSelect: () => { filterDrawerOpen.value = true },
+    },
+    activeFilterCount.value ? {
+      key: 'reset-alert-filters',
+      label: t('common.reset'),
+      onSelect: resetFilters,
+    } : null,
   ])
 })
 

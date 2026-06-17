@@ -34,13 +34,6 @@
     <div class="page-mobile-toolbar">
       <div class="page-mobile-toolbar-row">
         <div class="page-mobile-summary">{{ t('history.totalRecords', { count: filteredHoldings.length }) }}</div>
-        <div class="page-mobile-toolbar-actions">
-          <button class="btn btn-inline-icon" @click="filterDrawerOpen = true">
-            <span>{{ t('common.filter') }}</span>
-            <span v-if="activeFilterCount" class="page-filter-badge">{{ activeFilterCount }}</span>
-          </button>
-          <button v-if="activeFilterCount" class="btn btn-inline-icon" @click="resetFilters">{{ t('common.reset') }}</button>
-        </div>
       </div>
       <div v-if="activeFilterChips.length" class="page-filter-chips">
         <button v-for="chip in activeFilterChips" :key="chip.key" class="page-filter-chip" @click="removeFilter(chip.key)">
@@ -58,10 +51,10 @@
           <tr v-for="h in filteredHoldings" :key="h.id" style="cursor:pointer" @click="openDetail(h)">
             <td><span class="icon-text"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span> <span style="color:var(--text-dim);font-size:12px">{{ h.symbol }}</span></td>
             <td style="font-weight:600">{{ h.quantity }}</td>
-            <td>{{ cs(h) }}{{ fmt(h.avg_cost) }}</td>
-            <td>{{ cs(h) }}{{ fmt(h.total_invested) }}</td>
-            <td>{{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</td>
-            <td>{{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</td>
+            <td>{{ money(h.avg_cost, h.currency) }}</td>
+            <td>{{ money(h.total_invested, h.currency) }}</td>
+            <td>{{ h.current_price ? money(h.current_price, h.currency) : '-' }}</td>
+            <td>{{ h.current_price ? money(h.quantity * h.current_price, h.currency) : '-' }}</td>
             <td :style="{ color: pnlColor(h), fontWeight: 600 }">{{ pnlText(h) }}</td>
              <td><span class="badge" :class="h.status === 'active' ? 'badge-buy' : 'badge-pending'">{{ h.status === 'active' ? t('holdings.statusActive') : t('holdings.statusClosed') }}</span></td>
           </tr>
@@ -78,9 +71,9 @@
             </div>
             <div class="holding-card-body">
                <div><span class="meta-label">{{ t('holdings.quantity') }}</span> {{ h.quantity }}</div>
-               <div><span class="meta-label">{{ t('holdings.avgCost') }}</span> {{ cs(h) }}{{ fmt(h.avg_cost) }}</div>
-               <div><span class="meta-label">{{ t('holdings.currentPrice') }}</span> {{ h.current_price ? cs(h) + fmt(h.current_price) : '-' }}</div>
-               <div><span class="meta-label">{{ t('holdings.marketValue') }}</span> {{ h.current_price ? cs(h) + fmt(h.quantity * h.current_price) : '-' }}</div>
+               <div><span class="meta-label">{{ t('holdings.avgCost') }}</span> {{ money(h.avg_cost, h.currency) }}</div>
+               <div><span class="meta-label">{{ t('holdings.currentPrice') }}</span> {{ h.current_price ? money(h.current_price, h.currency) : '-' }}</div>
+               <div><span class="meta-label">{{ t('holdings.marketValue') }}</span> {{ h.current_price ? money(h.quantity * h.current_price, h.currency) : '-' }}</div>
             </div>
           </div>
           <template #actions>
@@ -108,13 +101,13 @@
       <div v-if="currentHolding" class="info-list">
         <div class="info-row"><span class="info-label">{{ t('holdings.asset') }}</span><span class="icon-text"><span class="icon">{{ currentHolding.icon }}</span> {{ currentHolding.name }}</span></div>
         <div class="info-row"><span class="info-label">{{ t('holdings.quantity') }}</span><span style="font-weight:600">{{ currentHolding.quantity }}</span></div>
-        <div class="info-row"><span class="info-label">{{ t('holdings.avgCost') }}</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.avg_cost) }}</span></div>
-        <div class="info-row"><span class="info-label">{{ t('holdings.totalInvested') }}</span><span>{{ cs(currentHolding) }}{{ fmt(currentHolding.total_invested) }}</span></div>
-        <div class="info-row"><span class="info-label">{{ t('holdings.currentPrice') }}</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.current_price) : t('holdings.unavailable') }}</span></div>
-        <div class="info-row"><span class="info-label">{{ t('holdings.marketValue') }}</span><span>{{ currentHolding.current_price ? cs(currentHolding) + fmt(currentHolding.quantity * currentHolding.current_price) : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.avgCost') }}</span><span>{{ money(currentHolding.avg_cost, currentHolding.currency) }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.totalInvested') }}</span><span>{{ money(currentHolding.total_invested, currentHolding.currency) }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.currentPrice') }}</span><span>{{ currentHolding.current_price ? money(currentHolding.current_price, currentHolding.currency) : t('holdings.unavailable') }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.marketValue') }}</span><span>{{ currentHolding.current_price ? money(currentHolding.quantity * currentHolding.current_price, currentHolding.currency) : '-' }}</span></div>
         <div class="info-row"><span class="info-label">{{ t('holdings.pnl') }}</span><span :style="{ color: pnlColor(currentHolding), fontWeight: 600 }">{{ pnlText(currentHolding) }}</span></div>
-        <div class="info-row"><span class="info-label">{{ t('holdings.targetPrice') }}</span><span>{{ currentHolding.target_price ? cs(currentHolding)+currentHolding.target_price : '-' }}</span></div>
-        <div class="info-row"><span class="info-label">{{ t('holdings.stopLoss') }}</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? cs(currentHolding)+currentHolding.stop_loss : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.targetPrice') }}</span><span>{{ currentHolding.target_price ? money(currentHolding.target_price, currentHolding.currency) : '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('holdings.stopLoss') }}</span><span style="color:var(--red)">{{ currentHolding.stop_loss ? money(currentHolding.stop_loss, currentHolding.currency) : '-' }}</span></div>
       </div>
     </AppDrawer>
 
@@ -179,17 +172,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted, computed } from 'vue'
+import { ref, reactive, watch, watchEffect, onMounted, onUnmounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
-import { currencySymbol } from '../utils/currency.js'
+import { formatCurrencyAmount, formatSignedCurrencyAmount } from '../utils/currency.js'
 import { formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import MobileActionBar from '../components/MobileActionBar.vue'
+import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
 const { t } = useI18n()
@@ -204,6 +198,7 @@ const editHolding = reactive({ quantity: '', avg_cost: '', total_invested: '', c
 const savingHolding = ref(false)
 const filters = reactive({ keyword: '', type: '' })
 const draftFilters = reactive({ keyword: '', type: '' })
+const mobilePageActions = useMobilePageActions()
 
 const filteredHoldings = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase()
@@ -262,6 +257,21 @@ function removeFilter(key) {
   syncDraftFilters()
 }
 
+watchEffect(() => {
+  mobilePageActions.setActions([
+    {
+      key: 'filter-holdings',
+      label: activeFilterCount.value ? `${t('common.filter')} (${activeFilterCount.value})` : t('common.filter'),
+      onSelect: () => { filterDrawerOpen.value = true },
+    },
+    activeFilterCount.value ? {
+      key: 'reset-holding-filters',
+      label: t('common.reset'),
+      onSelect: resetFilters,
+    } : null,
+  ])
+})
+
 function openDetail(h) {
   currentHolding.value = h
   hydrateEditHolding(h)
@@ -317,9 +327,8 @@ async function saveHolding() {
   savingHolding.value = false
 }
 
-function cs(h) { return currencySymbol(h?.currency) }
-function fmt(n) {
-  return formatNumber(n, { maximumFractionDigits: 2 })
+function money(value, currency) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
 }
 function pnl(h) {
   if (!h.current_price || !h.total_invested) return null
@@ -339,11 +348,14 @@ function pnlText(h) {
   if (v === null) return '-'
   const pct = pnlPct(h)
   const sign = v >= 0 ? '+' : ''
-  return `${sign}${fmt(v)} (${sign}${pct.toFixed(1)}%)`
+  return `${formatSignedCurrencyAmount(v, h?.currency, { maximumFractionDigits: 2 })} (${sign}${pct.toFixed(1)}%)`
 }
 onMounted(() => {
   syncDraftFilters()
   loadData()
+})
+onUnmounted(() => {
+  mobilePageActions.clearActions()
 })
 watch(filterDrawerOpen, (open) => {
   if (open) syncDraftFilters()

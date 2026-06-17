@@ -45,7 +45,7 @@
           <div>
             <div class="market-asset-name">{{ p.name }}</div>
             <div class="market-price">
-              <template v-if="p.price">{{ p.currency === 'USD' ? '$' : '¥' }}{{ fmt(p.price) }}</template>
+              <template v-if="p.price">{{ money(p.price, p.currency) }}</template>
               <template v-else><span style="color:var(--text-muted)">--</span></template>
             </div>
             <div v-if="p.details?.ch24" :class="p.details.ch24 >= 0 ? 'pnl positive' : 'pnl negative'" style="font-size:13px">
@@ -76,6 +76,7 @@ import { useI18n } from 'vue-i18n'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
+import { formatCurrencyAmount } from '../utils/currency.js'
 import { formatNumber, formatTime, parseDateTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
@@ -110,6 +111,9 @@ async function refresh(force = false) {
 }
 function fmt(n) {
   return formatNumber(n, { maximumFractionDigits: 2 })
+}
+function money(value, currency) {
+  return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
 }
 function resolveLastUpdated(items) {
   const dates = items
