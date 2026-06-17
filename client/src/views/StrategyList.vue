@@ -49,7 +49,7 @@
 
       <!-- Mobile cards -->
       <div class="show-mobile strategy-cards">
-        <SwipeActionItem v-for="s in strategies" :key="s.id" :actionWidth="72">
+        <SwipeActionItem v-for="s in strategies" :key="s.id" :actionWidth="148">
           <div class="strategy-card" @click="openDetail(s)">
             <div class="strategy-card-header">
               <span style="font-weight:600">{{ s.name }}</span>
@@ -62,6 +62,9 @@
             </div>
           </div>
           <template #actions>
+            <router-link class="swipe-action-btn" :to="`/strategies/${s.id}/edit`">
+              {{ t('strategyList.edit') }}
+            </router-link>
             <button class="swipe-action-btn danger" @click="deleteStrategy(s)">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               {{ t('common.delete') }}
@@ -462,18 +465,23 @@ onMounted(refreshPage)
   align-items: center;
   justify-content: center;
   gap: 4px;
-  width: 100%;
+  flex: 1 0 74px;
+  min-width: 74px;
   height: 100%;
+  padding: 0 8px;
   border: none;
-  background: none;
-  font-size: 11px;
+  border-left: 1px solid var(--swipe-action-divider);
+  background: var(--swipe-action-bg);
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  color: var(--text-dim);
+  color: var(--swipe-action-text);
   font-family: inherit;
+  text-decoration: none;
 }
 .swipe-action-btn.danger {
-  background: var(--red);
-  color: #fff;
+  background: var(--swipe-action-danger-bg);
+  color: var(--swipe-action-danger-text);
 }
 
 @media (max-width: 768px) {

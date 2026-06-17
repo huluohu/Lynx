@@ -138,7 +138,6 @@ import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
-import { formatNumber } from '../utils/formatters.js'
 import { formatCurrencyAmount } from '../utils/currency.js'
 
 useSwipeBack()
@@ -265,10 +264,6 @@ function assetTypeLabel(type) {
     commodity: t('assets.types.commodity'),
   }[type] || type
 }
-function fmt(n) {
-  if (!n && n !== 0) return '0'
-  return formatNumber(Number(n))
-}
 function money(value) {
   return formatCurrencyAmount(value, asset.value?.currency, { maximumFractionDigits: 3 })
 }
@@ -299,11 +294,18 @@ watchEffect(() => {
   ])
 })
 
+watch(() => route.query.edit, (value) => {
+  if (value === '1') showEditDrawer.value = true
+})
+
 onUnmounted(() => {
   mobilePageActions.clearActions()
 })
 
-onMounted(loadData)
+onMounted(async () => {
+  await loadData()
+  if (route.query.edit === '1') showEditDrawer.value = true
+})
 </script>
 
 <style scoped>

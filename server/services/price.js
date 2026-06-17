@@ -172,6 +172,10 @@ export async function fetchBTC() {
 // ===== 统一调度入口 =====
 export async function fetchPrice(asset) {
   try {
+    if (asset.data_source === 'manual') {
+      log.debug('Manual price source, skipping remote fetch', { assetId: asset.id });
+      return null;
+    }
     if (asset.type === 'gold') {
       return await fetchGold(asset);
     }

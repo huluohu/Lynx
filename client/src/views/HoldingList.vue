@@ -63,7 +63,7 @@
 
       <!-- Mobile cards -->
       <div class="show-mobile holding-cards">
-        <SwipeActionItem v-for="h in filteredHoldings" :key="h.id" :actionWidth="84">
+        <SwipeActionItem v-for="h in filteredHoldings" :key="h.id" :actionWidth="148">
           <div class="holding-card" @click="openDetail(h)">
             <div class="holding-card-top">
               <span class="icon-text" style="font-weight:600"><span class="icon">{{ h.icon }}</span> {{ h.name }}</span>
@@ -112,7 +112,7 @@
     </AppDrawer>
 
     <AppDrawer v-model="showEditDrawer" :title="currentHolding?.name || t('holdings.editSectionTitle')" mobileHeight="fixed">
-      <form @submit.prevent="saveHolding">
+      <form id="holding-edit-form" @submit.prevent="saveHolding">
         <div class="form-row">
           <div class="form-group"><label class="form-label">{{ t('holdings.quantity') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.quantity" /></div>
           <div class="form-group"><label class="form-label">{{ t('holdings.avgCost') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.avg_cost" /></div>
@@ -132,11 +132,13 @@
           <div class="form-group"><label class="form-label">{{ t('holdings.targetPrice') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.target_price" /></div>
           <div class="form-group"><label class="form-label">{{ t('holdings.stopLoss') }}</label><input class="form-input" type="number" step="any" v-model="editHolding.stop_loss" /></div>
         </div>
-        <MobileActionBar>
-          <button type="submit" class="btn btn-primary" :disabled="savingHolding">{{ t('holdings.save') }}</button>
-          <button type="button" class="btn" @click="showEditDrawer = false">{{ t('common.cancel') }}</button>
-        </MobileActionBar>
       </form>
+      <template #footer>
+        <div class="holding-edit-footer-actions">
+          <button type="button" class="btn" @click="showEditDrawer = false">{{ t('common.cancel') }}</button>
+          <button type="submit" form="holding-edit-form" class="btn btn-primary" :disabled="savingHolding">{{ t('holdings.save') }}</button>
+        </div>
+      </template>
     </AppDrawer>
 
     <AppDrawer v-model="showTxDrawer" :title="`+ ${t('holdings.quickRecord')}`" mobileHeight="fixed">
@@ -177,12 +179,10 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatCurrencyAmount, formatSignedCurrencyAmount } from '../utils/currency.js'
-import { formatNumber } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
-import MobileActionBar from '../components/MobileActionBar.vue'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 
 const toast = useToast()
@@ -380,22 +380,28 @@ watch(filterDrawerOpen, (open) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  flex: 1 0 74px;
+  min-width: 74px;
   height: 100%;
+  padding: 0 8px;
   border: none;
-  background: none;
-  color: var(--text-dim);
-  font-size: 11px;
+  border-left: 1px solid var(--swipe-action-divider);
+  background: var(--swipe-action-bg);
+  color: var(--swipe-action-text);
+  font-size: 12px;
+  font-weight: 700;
   font-family: inherit;
 }
 .swipe-action-btn.primary {
-  background: var(--primary);
-  color: #fff;
+  background: var(--swipe-action-primary-bg);
+  color: var(--swipe-action-primary-text);
 }
+.holding-edit-footer-actions,
 .holding-filter-actions {
   display: flex;
   gap: 12px;
 }
+.holding-edit-footer-actions .btn,
 .holding-filter-actions .btn {
   flex: 1;
 }

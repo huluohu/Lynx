@@ -94,7 +94,10 @@ async function submit() {
       body: JSON.stringify(body),
     })
     const json = await res.json()
-    if (!json.success) throw new Error(json.error || t('transactionForm.submitFailed'))
+    if (!json.success) {
+      toast.error(json.error || t('transactionForm.submitFailed'))
+      return
+    }
     emit('success')
   } catch (e) {
     toast.error(e.message)
@@ -103,16 +106,4 @@ async function submit() {
 }
 </script>
 
-<style scoped>
-.transaction-form .form-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-@media (max-width: 768px) {
-  .transaction-form {
-    padding-bottom: 120px;
-  }
-}
-</style>
+<style scoped></style>

@@ -729,14 +729,15 @@ watch(filterDrawerOpen, (open) => {
   width: 100%;
   height: 100%;
   border: none;
-  background: none;
+  border-left: 1px solid var(--swipe-action-divider);
+  background: var(--swipe-action-bg);
   font-size: 11px;
   cursor: pointer;
-  color: var(--text-dim);
+  color: var(--swipe-action-text);
   font-family: inherit;
 }
 .swipe-action-btn.danger {
-  background: var(--red);
-  color: #fff;
+  background: var(--swipe-action-danger-bg);
+  color: var(--swipe-action-danger-text);
 }
 </style>

@@ -19,12 +19,10 @@ defineProps({
 
 @media (max-width: 768px) {
   .mobile-action-bar {
-    position: fixed;
-    left: 16px;
-    right: 16px;
-    bottom: calc(76px + var(--safe-bottom));
+    position: sticky;
+    bottom: calc(12px + var(--safe-bottom));
     z-index: 180;
-    margin-top: 0;
+    margin-top: 20px;
     padding: 12px;
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -34,7 +32,7 @@ defineProps({
     box-shadow: 0 14px 40px var(--shadow-color);
   }
 
-  .mobile-action-bar :deep(.btn) {
+  .mobile-action-bar :slotted(.btn) {
     flex: 1;
     min-width: 0;
     justify-content: center;

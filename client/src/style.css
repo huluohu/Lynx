@@ -26,6 +26,13 @@
   --warning-soft: rgba(245, 158, 11, 0.14);
   --bg-dim: rgba(148, 163, 184, 0.12);
   --bg-soft: rgba(148, 163, 184, 0.08);
+  --swipe-action-bg: #1a2332;
+  --swipe-action-text: #cbd5e1;
+  --swipe-action-primary-bg: rgba(59, 130, 246, 0.22);
+  --swipe-action-primary-text: #93c5fd;
+  --swipe-action-danger-bg: rgba(239, 68, 68, 0.18);
+  --swipe-action-danger-text: #fca5a5;
+  --swipe-action-divider: rgba(148, 163, 184, 0.16);
   --app-background: radial-gradient(circle at top, rgba(59, 130, 246, 0.18), transparent 30%), #0a0e17;
   --bg: var(--surface-base);
   --bg-card: var(--surface-card);
@@ -72,6 +79,13 @@
   --warning-soft: rgba(217, 119, 6, 0.12);
   --bg-dim: rgba(148, 163, 184, 0.14);
   --bg-soft: rgba(148, 163, 184, 0.1);
+  --swipe-action-bg: #edf2f7;
+  --swipe-action-text: #334155;
+  --swipe-action-primary-bg: rgba(37, 99, 235, 0.12);
+  --swipe-action-primary-text: #1d4ed8;
+  --swipe-action-danger-bg: rgba(220, 38, 38, 0.1);
+  --swipe-action-danger-text: #b91c1c;
+  --swipe-action-divider: rgba(148, 163, 184, 0.24);
   --app-background: linear-gradient(180deg, #f8fafc, #eef4fb);
 }
 
@@ -102,6 +116,13 @@
   --warning-soft: rgba(251, 191, 36, 0.16);
   --bg-dim: rgba(148, 163, 184, 0.16);
   --bg-soft: rgba(148, 163, 184, 0.1);
+  --swipe-action-bg: rgba(30, 41, 59, 0.82);
+  --swipe-action-text: #dbeafe;
+  --swipe-action-primary-bg: rgba(96, 165, 250, 0.2);
+  --swipe-action-primary-text: #bfdbfe;
+  --swipe-action-danger-bg: rgba(251, 113, 133, 0.18);
+  --swipe-action-danger-text: #fecdd3;
+  --swipe-action-divider: rgba(203, 213, 225, 0.16);
   --app-background:
     radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.25), transparent 32%),
     radial-gradient(circle at 80% 0%, rgba(139, 92, 246, 0.25), transparent 26%),
@@ -135,6 +156,13 @@
   --warning-soft: rgba(245, 158, 11, 0.16);
   --bg-dim: rgba(196, 181, 253, 0.14);
   --bg-soft: rgba(196, 181, 253, 0.1);
+  --swipe-action-bg: #2b2148;
+  --swipe-action-text: #ddd6fe;
+  --swipe-action-primary-bg: rgba(168, 85, 247, 0.2);
+  --swipe-action-primary-text: #e9d5ff;
+  --swipe-action-danger-bg: rgba(251, 113, 133, 0.18);
+  --swipe-action-danger-text: #fecdd3;
+  --swipe-action-divider: rgba(196, 181, 253, 0.18);
   --app-background:
     radial-gradient(circle at top right, rgba(168, 85, 247, 0.32), transparent 28%),
     radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.2), transparent 24%),

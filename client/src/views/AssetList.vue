@@ -66,17 +66,23 @@
 
       <!-- Mobile cards -->
       <div class="show-mobile asset-cards">
-        <div v-for="a in filteredAssets" :key="a.id" class="asset-card" @click="openDetail(a)">
-          <div class="asset-card-top">
-            <span class="icon-text" style="font-size:16px;font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span>
-            <span class="badge" :class="typeBadge(a.type)">{{ assetTypeLabel(a.type) }}</span>
+        <SwipeActionItem v-for="a in filteredAssets" :key="a.id" class="asset-swipe-item" :actionWidth="148">
+          <div class="asset-card" @click="openDetail(a)">
+            <div class="asset-card-top">
+              <span class="icon-text" style="font-size:16px;font-weight:600"><span>{{ a.icon || '💰' }}</span><span>{{ a.name }}</span></span>
+              <span class="badge" :class="typeBadge(a.type)">{{ assetTypeLabel(a.type) }}</span>
+            </div>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">{{ a.symbol }}</div>
+            <div class="asset-card-meta">
+              <span v-if="a.quantity">{{ a.quantity.toFixed(4) }}</span>
+              <span v-if="a.total_invested">{{ money(a.total_invested, a.currency) }}</span>
+            </div>
           </div>
-          <div style="font-size:12px;color:var(--text-dim);margin-top:4px">{{ a.symbol }}</div>
-          <div class="asset-card-meta">
-            <span v-if="a.quantity">{{ a.quantity.toFixed(4) }}</span>
-            <span v-if="a.total_invested">{{ money(a.total_invested, a.currency) }}</span>
-          </div>
-        </div>
+          <template #actions>
+            <router-link class="swipe-action-btn" :to="`/assets/${a.id}?edit=1`">{{ t('assetDetail.edit') }}</router-link>
+            <button class="swipe-action-btn primary" type="button" @click="openTx(a)">{{ t('assetList.recordTradeShort') }}</button>
+          </template>
+        </SwipeActionItem>
       </div>
     </div>
     <div v-else-if="!loading" class="card empty">
@@ -159,6 +165,7 @@ import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import TransactionForm from '../components/TransactionForm.vue'
+import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
 const { t } = useI18n()
@@ -202,6 +209,12 @@ function openDetail(a) {
 
 function detailOpenTx() {
   txAsset.value = detailAsset.value
+  showDetailDrawer.value = false
+  showTxDrawer.value = true
+}
+
+function openTx(asset) {
+  txAsset.value = asset
   showDetailDrawer.value = false
   showTxDrawer.value = true
 }
@@ -289,11 +302,33 @@ watch(filterDrawerOpen, (open) => {
 .show-mobile { display: none !important; }
 
 .asset-cards { flex-direction: column; gap: 8px; }
-.asset-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; color: var(--text); transition: background 0.15s; }
+.asset-swipe-item { border-radius: 8px; }
+.asset-card { display: block; border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 0; cursor: pointer; color: var(--text); transition: background 0.15s; }
 .asset-card:hover { background: var(--bg-hover); }
 .asset-card:active { background: var(--bg-hover); }
 .asset-card-top { display: flex; justify-content: space-between; align-items: center; }
 .asset-card-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.swipe-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 0 74px;
+  min-width: 74px;
+  height: 100%;
+  padding: 0 8px;
+  border: none;
+  border-left: 1px solid var(--swipe-action-divider);
+  background: var(--swipe-action-bg);
+  color: var(--swipe-action-text);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  text-decoration: none;
+}
+.swipe-action-btn.primary {
+  background: var(--swipe-action-primary-bg);
+  color: var(--swipe-action-primary-text);
+}
 
 .detail-drawer-content { display: flex; flex-direction: column; gap: 16px; }
 .detail-section { background: var(--bg); border-radius: 10px; padding: 4px 0; }

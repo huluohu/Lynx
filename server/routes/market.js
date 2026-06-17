@@ -37,6 +37,35 @@ router.get('/prices', async (req, res) => {
   res.json({ success: true, data: freshResults });
 });
 
+// POST 手工更新单个资产行情
+router.post('/prices/:assetId/manual', (req, res) => {
+  const db = getDb();
+  const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.assetId);
+  if (!asset) return res.status(404).json({ success: false, error: 'Asset not found' });
+
+  const price = Number(req.body?.price);
+  if (!Number.isFinite(price) || price <= 0) {
+    return res.status(400).json({ success: false, error: 'price must be greater than 0' });
+  }
+
+  const currency = String(req.body?.currency || asset.currency || 'CNY').trim().toUpperCase();
+  const fetchedAt = req.body?.fetched_at
+    ? String(req.body.fetched_at).replace('T', ' ').slice(0, 19).padEnd(19, ':00')
+    : null;
+
+  if (fetchedAt) {
+    db.prepare('INSERT INTO price_cache (asset_id, price, currency, source, fetched_at) VALUES (?, ?, ?, ?, ?)')
+      .run(asset.id, price, currency, 'manual', fetchedAt);
+  } else {
+    db.prepare('INSERT INTO price_cache (asset_id, price, currency, source) VALUES (?, ?, ?, ?)')
+      .run(asset.id, price, currency, 'manual');
+  }
+
+  const snapshot = getCachedMarketSnapshot(db, asset);
+  log.info('Manual price saved', { assetId: asset.id, price, currency });
+  res.status(201).json({ success: true, data: snapshot });
+});
+
 // GET 当前汇率
 router.get('/rate', async (req, res) => {
   try {
