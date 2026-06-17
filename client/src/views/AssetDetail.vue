@@ -35,6 +35,18 @@
       </div>
     </div>
 
+    <TrendChart
+      v-model="profitTrendRange"
+      :title="t('assetDetail.profitTrendTitle')"
+      :subtitle="t('assetDetail.profitTrendSubtitle')"
+      :points="profitTrend.points"
+      :summary="profitTrend.summary"
+      :loading="profitTrendLoading"
+      :empty-text="t('trend.emptyProfit')"
+      :value-formatter="money"
+      :percent-formatter="formatTrendPercent"
+    />
+
     <!-- 交易记录 -->
     <div class="card">
       <div class="section-title">{{ t('assetDetail.transactions') }}</div>
@@ -136,6 +148,7 @@ import MobileActionBar from '../components/MobileActionBar.vue'
 import TransactionForm from '../components/TransactionForm.vue'
 import { useConfirm } from '../utils/confirm.js'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import TrendChart from '../components/TrendChart.vue'
 import { useSwipeBack } from '../composables/useSwipeBack.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { formatCurrencyAmount } from '../utils/currency.js'
@@ -156,6 +169,9 @@ const showAIDrawer = ref(false)
 const showDeleteConfirm = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
+const profitTrendRange = ref('1m')
+const profitTrend = ref({ points: [], summary: null })
+const profitTrendLoading = ref(false)
 const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '', quantity: '', avg_cost: '', total_invested: '', target_price: '', stop_loss: '' })
 const mobilePageActions = useMobilePageActions()
 
@@ -182,6 +198,17 @@ async function loadData() {
   const tres = await api(`/api/transactions?asset_id=${route.params.id}`)
   const tjson = await tres.json()
   transactions.value = tjson.data || []
+  fetchProfitTrend().catch(() => {})
+}
+
+async function fetchProfitTrend() {
+  profitTrendLoading.value = true
+  try {
+    const res = await api(`/api/assets/${route.params.id}/profit-trend?range=${encodeURIComponent(profitTrendRange.value)}`)
+    const json = await res.json()
+    if (json.success && json.data) profitTrend.value = json.data
+  } catch (e) { console.error(e) }
+  profitTrendLoading.value = false
 }
 
 function onTxSuccess() {
@@ -267,6 +294,9 @@ function assetTypeLabel(type) {
 function money(value) {
   return formatCurrencyAmount(value, asset.value?.currency, { maximumFractionDigits: 3 })
 }
+function formatTrendPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`
+}
 
 watchEffect(() => {
   mobilePageActions.setActions([
@@ -296,6 +326,10 @@ watchEffect(() => {
 
 watch(() => route.query.edit, (value) => {
   if (value === '1') showEditDrawer.value = true
+})
+
+watch(profitTrendRange, () => {
+  fetchProfitTrend().catch(() => {})
 })
 
 onUnmounted(() => {

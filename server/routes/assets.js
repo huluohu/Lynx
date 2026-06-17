@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { buildAssetProfitTrend } from '../services/trend.js';
 
 const router = Router();
 
@@ -10,6 +11,14 @@ router.get('/', (req, res) => {
     FROM assets a LEFT JOIN holdings h ON a.id = h.asset_id AND h.status = 'active'
     ORDER BY a.id`).all();
   res.json({ success: true, data: rows });
+});
+
+// GET 单个资产收益趋势
+router.get('/:id/profit-trend', (req, res) => {
+  const db = getDb();
+  const data = buildAssetProfitTrend(db, Number(req.params.id), req.query.range);
+  if (!data) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, data });
 });
 
 // GET 单个

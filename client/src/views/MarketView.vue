@@ -41,7 +41,7 @@
     <!-- Data loaded -->
     <div v-else class="grid-2 market-grid">
       <SwipeActionItem v-for="p in prices" :key="p.asset_id" class="market-swipe-item" :actionWidth="88">
-        <div class="card market-card">
+        <div class="card market-card" role="button" tabindex="0" @click="openMarketDetail(p)" @keyup.enter="openMarketDetail(p)">
           <div class="market-card-main">
             <div>
               <div class="market-asset-name">{{ p.name }}</div>
@@ -60,7 +60,7 @@
               <div style="font-size:12px;color:var(--text-muted)">{{ p.symbol }}</div>
               <span class="badge" :class="typeBadge(p.type)" style="margin-top:4px">{{ p.type }}</span>
               <div v-if="p.source" style="font-size:10px;color:var(--text-muted);margin-top:4px">{{ p.source }}</div>
-              <button class="btn market-card-action desktop-only" type="button" @click="openManualPriceDrawer(p)">
+              <button class="btn market-card-action desktop-only" type="button" @click.stop="openManualPriceDrawer(p)">
                 {{ t('marketView.manualUpdateShort') }}
               </button>
             </div>
@@ -124,6 +124,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
@@ -136,6 +137,7 @@ import SwipeActionItem from '../components/SwipeActionItem.vue'
 
 const toast = useToast()
 const { t } = useI18n()
+const router = useRouter()
 const runtimeSettingsStore = useRuntimeSettingsStore()
 const prices = ref([])
 const loading = ref(false)
@@ -201,6 +203,11 @@ function openManualPriceDrawer(asset = null) {
   manualForm.currency = target.currency || 'CNY'
   manualForm.fetched_at = nowDatetimeLocal()
   manualDrawerOpen.value = true
+}
+
+function openMarketDetail(asset) {
+  if (!asset?.asset_id) return
+  router.push(`/market/${asset.asset_id}`)
 }
 
 async function saveManualPrice() {
@@ -286,7 +293,8 @@ onUnmounted(() => {
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
 .market-swipe-item { border-radius: 12px; }
-.market-card { height: 100%; margin-bottom: 0; transition: transform 0.15s; }
+.market-card { height: 100%; margin-bottom: 0; transition: transform 0.15s; cursor: pointer; }
+.market-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .market-card:hover { transform: translateY(-1px); }
 .market-card-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .market-card-side { text-align: right; }

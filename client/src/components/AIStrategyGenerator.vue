@@ -73,7 +73,7 @@
 
     <div v-if="step === 'preview'">
       <!-- Quality & Observability Banner -->
-      <div class="agent-quality-banner" v-if="evalResult || dataQualityScore != null || result.used_fallback_analysis">
+      <div class="agent-quality-banner" v-if="evalResult || dataQualityScore != null || result.used_fallback_analysis || result.used_fallback_strategy">
         <div class="quality-row">
           <div v-if="evalResult" class="quality-item">
             <span class="quality-label">{{ t('aiStrategyGenerator.evalScore') }}</span>
@@ -99,6 +99,9 @@
         <!-- Fallback analysis warning -->
         <div v-if="result.used_fallback_analysis" class="agent-warning">
           {{ t('aiStrategyGenerator.fallbackAnalysis') }}
+        </div>
+        <div v-if="result.used_fallback_strategy" class="agent-warning">
+          {{ t('aiStrategyGenerator.fallbackStrategy') }}
         </div>
 
         <!-- Data quality low warning -->
@@ -442,7 +445,7 @@ async function loadAssetInfo() {
     try {
       const [assetRes, priceRes] = await Promise.all([
         api(`/api/assets/${assetId}`),
-        api(`/api/market/prices/${assetId}`),
+        api(`/api/market/prices/${assetId}?cache=1`),
       ])
       const assetJson = await assetRes.json()
       const priceJson = await priceRes.json()

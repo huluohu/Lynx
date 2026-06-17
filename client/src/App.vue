@@ -559,6 +559,17 @@ onUnmounted(() => {
   border: none;
   outline: none;
 }
+@media (min-width: 769px) {
+  .app-shell-header {
+    position: static;
+    margin-bottom: 12px;
+    padding: 0;
+    background: transparent;
+    border-bottom: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
 .menu-toggle-inline {
   align-items: center;
   justify-content: center;

@@ -6,6 +6,19 @@ import { getDb } from '../db/database.js';
 const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
+const DEFAULT_GOLD_SOURCES = ['neodata', 'swissquote'];
+const DEFAULT_BTC_SOURCES = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx'];
+
+function getEnabledMarketSources(key, defaults) {
+  try {
+    const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key);
+    const sources = String(row?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+    return sources.length ? sources : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
 // ===== 获取汇率缓存时长（分钟） =====
 function getRateCacheDuration() {
   try {
@@ -69,83 +82,87 @@ export function httpPost(hostname, port, pathname, body, headers = {}) {
   });
 }
 
-// ===== 金价查询 =====
-// Primary: Auth Gateway → 腾讯金融数据中台 neodata (AU9999 + AUUSDO)
-// Fallback: metals.live 国际金价 (XAUUSD, free, no key)
-export async function fetchGold(asset) {
-  const { symbol, currency } = asset;
-  const isLondonGold = symbol?.includes('AUUSDO') || symbol?.includes('XAUUSD') || currency === 'USD';
-
-  // --- Primary: neodata via Auth Gateway ---
+async function fetchGoldNeodata(asset, isLondonGold) {
+  const { symbol } = asset;
   const port = process.env.AUTH_GATEWAY_PORT || 19000;
-  try {
-    const body = JSON.stringify({
-      sub_channel: 'qclaw',
-      query: `${symbol} 黄金价格`,
-      request_id: String(Date.now()),
-      data_type: 'api'
-    });
 
-    const data = await httpPost('localhost', port, '/proxy/api', body, {
-      'Remote-URL': 'https://jprx.m.qq.com/aizone/skillserver/v1/proxy/teamrouter_neodata/query',
-    });
+  const body = JSON.stringify({
+    sub_channel: 'qclaw',
+    query: `${symbol} 黄金价格`,
+    request_id: String(Date.now()),
+    data_type: 'api'
+  });
 
-    const apiData = data?.data?.apiData?.apiRecall || [];
-    for (const item of apiData) {
-      for (const d of item.data || []) {
-        if (!isLondonGold && d.symbol?.includes('AU9999')) {
-          const price = parseFloat(d.new);
-          log.info('Gold price (neodata AU9999)', { price });
-          return { price, currency: 'CNY', source: 'neodata' };
-        }
-        if (isLondonGold && d.symbol?.includes('AUUSDO')) {
-          const price = parseFloat(d.new);
-          log.info('Gold price (neodata AUUSDO)', { price });
-          return { price, currency: 'USD', source: 'neodata' };
-        }
+  const data = await httpPost('localhost', port, '/proxy/api', body, {
+    'Remote-URL': 'https://jprx.m.qq.com/aizone/skillserver/v1/proxy/teamrouter_neodata/query',
+  });
+
+  const apiData = data?.data?.apiData?.apiRecall || [];
+  for (const item of apiData) {
+    for (const d of item.data || []) {
+      if (!isLondonGold && d.symbol?.includes('AU9999')) {
+        const price = parseFloat(d.new);
+        log.info('Gold price (neodata AU9999)', { price });
+        return { price, currency: 'CNY', source: 'neodata' };
+      }
+      if (isLondonGold && d.symbol?.includes('AUUSDO')) {
+        const price = parseFloat(d.new);
+        log.info('Gold price (neodata AUUSDO)', { price });
+        return { price, currency: 'USD', source: 'neodata' };
       }
     }
-    log.debug('Neodata: no matching gold symbol', { symbol });
-  } catch (e) {
-    log.debug('Neodata gold failed (gateway may be offline)', { error: e?.message });
   }
-
-  // --- Fallback: Swissquote (XAU/USD, free, no key) ---
-  try {
-    const data = await httpGet('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD', { timeout: 5000 });
-    if (Array.isArray(data) && data.length > 0) {
-      const prices = data[0]?.spreadProfilePrices;
-      if (prices && prices.length > 0) {
-        const xauUsd = (prices[0].bid + prices[0].ask) / 2;
-        if (isLondonGold) {
-          log.info('Gold price (Swissquote)', { usd: xauUsd.toFixed(2) });
-          return { price: Math.round(xauUsd * 100) / 100, currency: 'USD', source: 'swissquote' };
-        }
-        // AU9999 ≈ XAUUSD × 汇率 ÷ 31.1035 (盎司→克)
-        const rate = await getUsdCny();
-        const cnPrice = Math.round(xauUsd * rate / 31.1035 * 100) / 100;
-        log.info('Gold price (Swissquote→CNY)', { xauUsd: xauUsd.toFixed(2), rate, cnPrice });
-        return { price: cnPrice, currency: 'CNY', source: 'swissquote' };
-      }
-    }
-  } catch (e) {
-    log.warn('Swissquote gold failed', { error: e?.message });
-  }
-
-  log.warn('All gold sources failed', { symbol });
+  log.debug('Neodata: no matching gold symbol', { symbol });
   return null;
 }
 
-// ===== BTC 查询 =====
-// Primary: CoinGecko (free, no key)
-// Fallback: Binance public ticker
-export async function fetchBTC() {
-  log.debug('Fetching BTC price');
+async function fetchGoldSwissquote(isLondonGold) {
+  const data = await httpGet('https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/XAU/USD', { timeout: 4500 });
+  if (Array.isArray(data) && data.length > 0) {
+    const prices = data[0]?.spreadProfilePrices;
+    if (prices && prices.length > 0) {
+      const xauUsd = (prices[0].bid + prices[0].ask) / 2;
+      if (isLondonGold) {
+        log.info('Gold price (Swissquote)', { usd: xauUsd.toFixed(2) });
+        return { price: Math.round(xauUsd * 100) / 100, currency: 'USD', source: 'swissquote' };
+      }
+      const rate = await getUsdCny();
+      const cnPrice = Math.round(xauUsd * rate / 31.1035 * 100) / 100;
+      log.info('Gold price (Swissquote→CNY)', { xauUsd: xauUsd.toFixed(2), rate, cnPrice });
+      return { price: cnPrice, currency: 'CNY', source: 'swissquote' };
+    }
+  }
+  return null;
+}
 
-  // --- Primary: CoinGecko ---
+// ===== 金价查询 =====
+export async function fetchGold(asset) {
+  const { symbol, currency } = asset;
+  const isLondonGold = symbol?.includes('AUUSDO') || symbol?.includes('XAUUSD') || currency === 'USD';
+  const enabledSources = getEnabledMarketSources('market_gold_sources_enabled', DEFAULT_GOLD_SOURCES);
+
+  for (const source of enabledSources) {
+    try {
+      const result = source === 'neodata'
+        ? await fetchGoldNeodata(asset, isLondonGold)
+        : source === 'swissquote'
+          ? await fetchGoldSwissquote(isLondonGold)
+          : null;
+      if (result) return result;
+      log.debug('Gold source returned no data', { source, symbol });
+    } catch (e) {
+      log.warn('Gold source failed', { source, symbol, error: e?.message });
+    }
+  }
+
+  log.warn('All gold sources failed', { symbol, enabledSources });
+  return null;
+}
+
+async function fetchBTCCoinGecko() {
   const cg = await httpGet(
     'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_7d_change=true',
-    { timeout: 8000 }
+    { timeout: 4500 }
   );
   if (cg?.bitcoin) {
     const b = cg.bitcoin;
@@ -153,10 +170,11 @@ export async function fetchBTC() {
     const rate = await getUsdCny();
     return { usd: b.usd, cny: Math.round(b.usd * rate), ch24: b.usd_24h_change || 0, ch7d: b.usd_7d_change || 0 };
   }
+  return null;
+}
 
-  // --- Fallback: Binance ---
-  log.debug('CoinGecko failed, trying Binance');
-  const ticker = await httpGet('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', { timeout: 5000 });
+async function fetchBTCBinance() {
+  const ticker = await httpGet('https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT', { timeout: 4500 });
   if (ticker?.lastPrice) {
     const price = parseFloat(ticker.lastPrice);
     const change = parseFloat(ticker.priceChangePercent) || 0;
@@ -164,8 +182,74 @@ export async function fetchBTC() {
     const rate = await getUsdCny();
     return { usd: price, cny: Math.round(price * rate), ch24: change, ch7d: 0 };
   }
+  return null;
+}
 
-  log.warn('All BTC sources failed');
+async function fetchBTCCoinbase() {
+  const data = await httpGet('https://api.coinbase.com/v2/prices/BTC-USD/spot', { timeout: 4500 });
+  const price = Number(data?.data?.amount);
+  if (Number.isFinite(price) && price > 0) {
+    log.info('BTC price (Coinbase)', { usd: price });
+    const rate = await getUsdCny();
+    return { usd: price, cny: Math.round(price * rate), ch24: 0, ch7d: 0 };
+  }
+  return null;
+}
+
+async function fetchBTCKraken() {
+  const data = await httpGet('https://api.kraken.com/0/public/Ticker?pair=XBTUSD', { timeout: 4500 });
+  const pair = data?.result ? Object.values(data.result)[0] : null;
+  const price = Number(pair?.c?.[0]);
+  const open24 = Number(pair?.o);
+  if (Number.isFinite(price) && price > 0) {
+    const ch24 = Number.isFinite(open24) && open24 > 0 ? ((price - open24) / open24) * 100 : 0;
+    log.info('BTC price (Kraken)', { usd: price });
+    const rate = await getUsdCny();
+    return { usd: price, cny: Math.round(price * rate), ch24, ch7d: 0 };
+  }
+  return null;
+}
+
+async function fetchBTCOKX() {
+  const data = await httpGet('https://www.okx.com/api/v5/market/ticker?instId=BTC-USDT', { timeout: 4500 });
+  const item = Array.isArray(data?.data) ? data.data[0] : null;
+  const price = Number(item?.last);
+  const open24 = Number(item?.open24h);
+  if (Number.isFinite(price) && price > 0) {
+    const ch24 = Number.isFinite(open24) && open24 > 0 ? ((price - open24) / open24) * 100 : 0;
+    log.info('BTC price (OKX)', { usd: price });
+    const rate = await getUsdCny();
+    return { usd: price, cny: Math.round(price * rate), ch24, ch7d: 0 };
+  }
+  return null;
+}
+
+// ===== BTC 查询 =====
+export async function fetchBTC() {
+  log.debug('Fetching BTC price');
+
+  const enabledSources = getEnabledMarketSources('market_btc_sources_enabled', DEFAULT_BTC_SOURCES);
+  const fetchers = {
+    coingecko: fetchBTCCoinGecko,
+    binance: fetchBTCBinance,
+    coinbase: fetchBTCCoinbase,
+    kraken: fetchBTCKraken,
+    okx: fetchBTCOKX,
+  };
+
+  for (const source of enabledSources) {
+    const fetcher = fetchers[source];
+    if (!fetcher) continue;
+    try {
+      const result = await fetcher();
+      if (result) return result;
+      log.debug('BTC source returned no data', { source });
+    } catch (e) {
+      log.warn('BTC source failed', { source, error: e?.message });
+    }
+  }
+
+  log.warn('All BTC sources failed', { enabledSources });
   return null;
 }
 

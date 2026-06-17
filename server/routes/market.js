@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { createLogger } from '../utils/logger.js';
 import { getCachedMarketSnapshot, getMarketSnapshot } from '../services/market-cache.js';
+import { buildAssetPriceTrend } from '../services/trend.js';
 
 const router = Router();
 const log = createLogger('market');
@@ -77,13 +78,22 @@ router.get('/rate', async (req, res) => {
   }
 });
 
+// GET 单个资产价格趋势
+router.get('/prices/:assetId/trend', (req, res) => {
+  const db = getDb();
+  const data = buildAssetPriceTrend(db, Number(req.params.assetId), req.query.range);
+  if (!data) return res.status(404).json({ success: false, error: 'Not found' });
+  res.json({ success: true, data });
+});
+
 // GET 单个
 router.get('/prices/:assetId', async (req, res) => {
   const db = getDb();
   const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.assetId);
   if (!asset) return res.status(404).json({ success: false, error: 'Not found' });
 
-  const snapshot = await getMarketSnapshot(db, asset, { forceRefresh: true });
+  const forceRefresh = req.query.force === '1' || req.query.cache !== '1';
+  const snapshot = await getMarketSnapshot(db, asset, { forceRefresh });
   res.json({ success: true, data: { ...asset, ...snapshot } });
 });
 

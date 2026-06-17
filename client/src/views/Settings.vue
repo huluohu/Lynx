@@ -133,6 +133,26 @@
               <span class="setting-unit">{{ t('common.minuteUnit') }}</span>
             </div>
           </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">{{ t('settings.market.btcSources') }}</span>
+            <span class="setting-desc">{{ t('settings.market.priceSourcesDesc') }}</span>
+            <div class="source-chips">
+              <label v-for="src in btcMarketSources" :key="src.key" class="source-chip" :class="{ active: enabledBtcSources.includes(src.key) }">
+                <input type="checkbox" :value="src.key" v-model="enabledBtcSources" @change="dirty.market = true" />
+                {{ src.label }}
+              </label>
+            </div>
+          </div>
+          <div class="setting-item setting-item-vertical">
+            <span class="setting-label">{{ t('settings.market.goldSources') }}</span>
+            <span class="setting-desc">{{ t('settings.market.priceSourcesDesc') }}</span>
+            <div class="source-chips">
+              <label v-for="src in goldMarketSources" :key="src.key" class="source-chip" :class="{ active: enabledGoldSources.includes(src.key) }">
+                <input type="checkbox" :value="src.key" v-model="enabledGoldSources" @change="dirty.market = true" />
+                {{ src.label }}
+              </label>
+            </div>
+          </div>
           <div class="setting-item">
             <div class="setting-info">
               <span class="setting-label">{{ t('settings.market.rateCacheDuration') }}</span>
@@ -267,6 +287,13 @@
             </div>
             <input class="setting-input" type="text" v-model="form.agent_analysis_model" :placeholder="t('settings.ai.sameAsAbove')" @input="dirty.ai = true" />
           </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <span class="setting-label">{{ t('settings.ai.retryCount') }}</span>
+              <span class="setting-desc">{{ t('settings.ai.retryCountDesc') }}</span>
+            </div>
+            <input class="setting-input" type="number" inputmode="numeric" min="1" max="5" v-model="form.agent_llm_retries" @input="dirty.ai = true" />
+          </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">{{ t('settings.ai.searchApiUrl') }} <span class="setting-desc">({{ t('settings.ai.searchApiUrlDesc') }})</span></span>
             <input class="setting-input-full" type="url" v-model="form.agent_search_api_url" placeholder="https://api.search.example/v1/search" @input="dirty.ai = true" />
@@ -344,6 +371,8 @@ const form = reactive({
   market_color_scheme: preferencesStore.marketColorScheme,
   refresh_interval: '60',
   market_refresh_interval: '5',
+  market_btc_sources_enabled: 'coingecko,binance,coinbase,kraken,okx',
+  market_gold_sources_enabled: 'neodata,swissquote',
   rate_cache_duration: '60',
   strategy_monitor_interval: '5',
   signal_valid_hours: '24',
@@ -357,6 +386,7 @@ const form = reactive({
   ai_api_key: '',
   ai_model: '',
   agent_analysis_model: '',
+  agent_llm_retries: '3',
   agent_search_api_url: '',
   agent_search_api_key: '',
   push_enabled: 'true',
@@ -372,6 +402,8 @@ const form = reactive({
 const dirty = reactive({ appearance: false, market: false, ai: false, news: false, push: false })
 const saveState = reactive({ appearance: '', market: '', ai: '', news: '', push: '' })
 const enabledSources = ref(['coindesk', 'cointelegraph', 'decrypt', 'panews', 'coingecko'])
+const enabledBtcSources = ref(['coingecko', 'binance', 'coinbase', 'kraken', 'okx'])
+const enabledGoldSources = ref(['neodata', 'swissquote'])
 const customSources = ref([])
 const newSource = reactive({ name: '', url: '' })
 const testingPush = ref(false)
@@ -397,6 +429,19 @@ const builtinNewsSources = computed(() => [
   { key: 'coingecko', label: t('settings.news.builtinSourceLabels.coingecko') },
 ])
 
+const btcMarketSources = computed(() => [
+  { key: 'coingecko', label: t('settings.market.sourceLabels.coingecko') },
+  { key: 'binance', label: t('settings.market.sourceLabels.binance') },
+  { key: 'coinbase', label: t('settings.market.sourceLabels.coinbase') },
+  { key: 'kraken', label: t('settings.market.sourceLabels.kraken') },
+  { key: 'okx', label: t('settings.market.sourceLabels.okx') },
+])
+
+const goldMarketSources = computed(() => [
+  { key: 'neodata', label: t('settings.market.sourceLabels.neodata') },
+  { key: 'swissquote', label: t('settings.market.sourceLabels.swissquote') },
+])
+
 const pushTypeOptions = computed(() => [
   { value: 'wecom', label: t('settings.push.wecom') },
   { value: 'serverchan', label: t('settings.push.serverchan') },
@@ -420,8 +465,8 @@ const notifyEvents = computed(() => [
 
 const groupKeys = {
   appearance: ['market_color_scheme'],
-  market: ['refresh_interval', 'market_refresh_interval', 'rate_cache_duration', 'strategy_monitor_interval', 'signal_valid_hours', 'price_alert_threshold', 'plan_approaching_pct'],
-  ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_search_api_url', 'agent_search_api_key'],
+  market: ['refresh_interval', 'market_refresh_interval', 'market_btc_sources_enabled', 'market_gold_sources_enabled', 'rate_cache_duration', 'strategy_monitor_interval', 'signal_valid_hours', 'price_alert_threshold', 'plan_approaching_pct'],
+  ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_llm_retries', 'agent_search_api_url', 'agent_search_api_key'],
   news: ['news_refresh_interval', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size'],
   push: ['push_enabled', 'push_webhook_type', 'push_webhook_url'],
 }
@@ -453,6 +498,12 @@ async function load() {
       if (form.news_sources_enabled) {
         enabledSources.value = form.news_sources_enabled.split(',').map((source) => source.trim()).filter(Boolean)
       }
+      if (form.market_btc_sources_enabled) {
+        enabledBtcSources.value = form.market_btc_sources_enabled.split(',').map((source) => source.trim()).filter(Boolean)
+      }
+      if (form.market_gold_sources_enabled) {
+        enabledGoldSources.value = form.market_gold_sources_enabled.split(',').map((source) => source.trim()).filter(Boolean)
+      }
     }
   } catch {}
 
@@ -469,6 +520,10 @@ async function saveGroup(group) {
   if (!keys) return
   if (group === 'news') {
     form.news_sources_enabled = enabledSources.value.join(',')
+  }
+  if (group === 'market') {
+    form.market_btc_sources_enabled = enabledBtcSources.value.join(',')
+    form.market_gold_sources_enabled = enabledGoldSources.value.join(',')
   }
   try {
     if (group === 'appearance') {

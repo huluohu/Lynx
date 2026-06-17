@@ -63,6 +63,8 @@ export function getAgentConfig(db) {
     for (const r of rows) settings[r.key] = r.value;
   } catch {}
 
+  const retryCount = parseInt(settings.agent_llm_retries || process.env.AGENT_LLM_RETRIES || '3', 10);
+
   return {
     apiUrl: settings.ai_api_url || process.env.AI_API_URL || '',
     apiKey: settings.ai_api_key || process.env.AI_API_KEY || '',
@@ -70,6 +72,7 @@ export function getAgentConfig(db) {
     analysisModel: settings.agent_analysis_model || settings.ai_model || process.env.AI_MODEL || 'gpt-4o-mini',
     searchApiUrl: settings.agent_search_api_url || process.env.AGENT_SEARCH_API_URL || '',
     searchApiKey: settings.agent_search_api_key || process.env.AGENT_SEARCH_API_KEY || '',
+    llmRetries: Number.isFinite(retryCount) ? Math.max(1, Math.min(5, retryCount)) : 3,
   };
 }
 
@@ -283,10 +286,10 @@ async function collectData(db, assetIds, config) {
     );
   }
 
-  if (config.searchApiUrl && config.searchApiKey) {
+  if (config.searchApiUrl) {
     for (const a of result.assets) {
       externalPromises.push(
-        searchNews(config, a.asset.name, a.asset.type).then(news => {
+        searchNews(config, a.asset.name).then(news => {
           result.recentNews.push(...news);
         })
       );
@@ -333,15 +336,27 @@ async function fetchGoldMacro() {
   return indicators;
 }
 
-async function searchNews(config, assetName, assetType) {
+async function searchNews(config, assetName) {
   try {
     const query = `${assetName} 投资 行情分析`;
-    const url = `${config.searchApiUrl}?q=${encodeURIComponent(query)}&key=${config.searchApiKey}&limit=5`;
-    const data = await httpGet(url, { timeout: 8000 });
-    if (Array.isArray(data?.results)) {
-      return data.results.slice(0, 5).map(r => ({
+    const url = new URL(config.searchApiUrl);
+    url.searchParams.set('q', query);
+    url.searchParams.set('limit', '5');
+    if (!url.searchParams.has('format')) url.searchParams.set('format', 'json');
+    if (config.searchApiKey) url.searchParams.set('key', config.searchApiKey);
+
+    const data = await httpGet(url.toString(), { timeout: 6000 });
+    const items = Array.isArray(data?.results)
+      ? data.results
+      : Array.isArray(data?.items)
+        ? data.items
+        : Array.isArray(data?.news)
+          ? data.news
+          : [];
+    if (items.length) {
+      return items.slice(0, 5).map(r => ({
         title: sanitizeExternalText(r.title),
-        snippet: sanitizeExternalText((r.snippet || r.description || '').slice(0, 200)),
+        snippet: sanitizeExternalText((r.snippet || r.description || r.content || '').slice(0, 200)),
         source: r.source || r.url || '',
         date: r.date || r.published_at || '',
       }));
@@ -358,7 +373,7 @@ function buildAnalystPrompt(collectedData) {
   const { assets, recentNews, macroIndicators, triggeredPlans } = collectedData;
 
   const portfolioSection = assets.map(a => {
-    const { asset, holding, transactions, priceHistory, latestPrice, latestPriceQuality, existingStrategies, indicators, tradePatterns, pnlPct } = a;
+    const { asset, holding, priceHistory, latestPrice, latestPriceQuality, existingStrategies, indicators, tradePatterns, pnlPct } = a;
     const latestPriceHint = latestPriceQuality === 'stale'
       ? '（陈旧缓存）'
       : latestPriceQuality === 'missing'
@@ -508,7 +523,7 @@ async function runAnalysis(collectedData, config, tracer) {
   ];
 
   const response = await callLLM(config.apiUrl, config.apiKey, config.analysisModel, messages, {
-    temperature: 0.4, maxTokens: 3000, timeout: 60000,
+    temperature: 0.4, maxTokens: 3000, timeout: 60000, retries: config.llmRetries,
   });
 
   if (!response) {
@@ -694,6 +709,77 @@ ${isMulti ? '- 组合策略要体现各资产配置逻辑' : ''}
 ${feedbackSection}`;
 }
 
+function buildFallbackStrategy(analysisReport, collectedData, userConstraints, reason = '') {
+  const { budget, goal } = userConstraints;
+  const assets = collectedData.assets || [];
+  const activeAssets = assets.length ? assets : [];
+  const perAssetBudget = activeAssets.length ? Math.max(0, Number(budget) || 0) / activeAssets.length : 0;
+  const plans = [];
+
+  activeAssets.forEach((item) => {
+    const price = Number(item.latestPrice || item.holding?.avg_cost || 0);
+    if (!Number.isFinite(price) || price <= 0) return;
+    const buyPrice = Math.round(price * 0.97 * 100) / 100;
+    const sellPriceBase = item.holding?.avg_cost ? Math.max(price * 1.03, Number(item.holding.avg_cost) * 1.02) : price * 1.04;
+    const sellPrice = Math.round(sellPriceBase * 100) / 100;
+    const amount = Math.round(perAssetBudget * 0.45 * 100) / 100;
+
+    if (amount > 0) {
+      plans.push({
+        seq: plans.length + 1,
+        asset_id: item.asset.id,
+        trigger_type: 'price_below',
+        trigger_value: buyPrice,
+        action: 'buy',
+        quantity: null,
+        amount,
+        new_avg_cost: null,
+        notes: `${item.asset.name} 保守回落买入`,
+        rationale: 'LLM 不可用，基于当前价下方约 3% 设置保守观察买点。',
+      });
+    }
+
+    if (item.holding?.quantity) {
+      plans.push({
+        seq: plans.length + 1,
+        asset_id: item.asset.id,
+        trigger_type: 'price_above',
+        trigger_value: sellPrice,
+        action: 'sell',
+        quantity: Math.round(Number(item.holding.quantity) * 0.2 * 1000000) / 1000000,
+        amount: null,
+        new_avg_cost: null,
+        notes: `${item.asset.name} 分批止盈/降风险`,
+        rationale: 'LLM 不可用，基于当前价/成本上方设置小比例减仓点。',
+      });
+    }
+  });
+
+  plans.forEach((plan, index) => { plan.seq = index + 1; });
+
+  return {
+    strategy: {
+      name: `${goal === 'recovery' ? '保守修复' : '弹性防守'}策略`,
+      type: goal === 'growth' ? 'dca' : goal === 'trend' ? 'trend' : goal === 'rebalance' ? 'rebalance' : 'grid',
+      description: '大模型暂不可用时生成的保守规则方案，请结合人工判断后采用。',
+      parameters: {
+        budget: Number(budget) || 0,
+        fallback: true,
+        fallback_reason: reason || 'LLM unavailable',
+      },
+    },
+    plans,
+    risk_management: {
+      max_loss_tolerance: '规则降级方案，建议降低仓位并等待 AI 服务恢复后复核。',
+      stop_loss_triggers: ['价格跌破近期支撑位后暂停加仓', '行情数据缺失或明显陈旧时暂停执行'],
+      position_sizing_logic: '按资产均分预算，仅使用部分预算设置回落买点。',
+    },
+    execution_notes: '这是 Agent 弹性容错生成的降级方案，保存前请重点检查价格、金额和仓位。',
+    reasoning: `策略师模型调用失败，已基于缓存行情、持仓成本和分析报告生成保守规则方案。${analysisReport?.data_limitations ? ' 数据限制：' + analysisReport.data_limitations : ''}`,
+    _fallback_strategy: true,
+  };
+}
+
 async function generateStrategy(analysisReport, collectedData, userConstraints, config, tracer) {
   log.info('Step 4: Generating strategy');
   tracer?.startStep('generate', { goal: userConstraints.goal, riskLevel: userConstraints.riskLevel });
@@ -705,26 +791,31 @@ async function generateStrategy(analysisReport, collectedData, userConstraints, 
   ];
 
   const response = await callLLM(config.apiUrl, config.apiKey, config.model, messages, {
-    temperature: 0.5, maxTokens: 4000, timeout: 60000,
+    temperature: 0.5, maxTokens: 4000, timeout: 60000, retries: config.llmRetries,
   });
 
   if (!response) {
-    tracer?.failStep('generate', 'LLM unavailable');
-    throw new Error('策略师 AI 服务无响应，请检查配置后重试');
+    log.warn('Step 4: LLM unavailable, using fallback strategy');
+    const fallback = buildFallbackStrategy(analysisReport, collectedData, userConstraints, 'LLM unavailable');
+    tracer?.completeStep('generate', { fallback: true, planCount: fallback.plans.length });
+    return fallback;
   }
 
   const content = response.choices?.[0]?.message?.content;
   if (!content) {
     const err = response.error?.message || '未获取到策略结果';
-    tracer?.failStep('generate', err);
-    throw new Error(`策略师 AI 返回异常: ${err}`);
+    log.warn('Step 4: LLM response invalid, using fallback strategy', { err });
+    const fallback = buildFallbackStrategy(analysisReport, collectedData, userConstraints, err);
+    tracer?.completeStep('generate', { fallback: true, error: err, planCount: fallback.plans.length });
+    return fallback;
   }
 
   const result = extractJSON(content);
   if (!result || !result.strategy || !result.plans) {
-    tracer?.failStep('generate', 'JSON parse failed');
-    log.error('Strategy JSON parse failed', { preview: content.slice(0, 300) });
-    throw new Error('策略生成格式异常，无法解析');
+    log.warn('Step 4: JSON parse failed, using fallback strategy', { preview: content.slice(0, 300) });
+    const fallback = buildFallbackStrategy(analysisReport, collectedData, userConstraints, 'JSON parse failed');
+    tracer?.completeStep('generate', { fallback: true, error: 'JSON parse failed', planCount: fallback.plans.length });
+    return fallback;
   }
 
   tracer?.completeStep('generate', { name: result.strategy.name, planCount: result.plans.length });
@@ -897,6 +988,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     evalScore: evalResult.score,
     grade: evalResult.grade,
     usedFallback,
+    usedFallbackStrategy: !!strategyResult._fallback_strategy,
   });
 
   return {
@@ -912,6 +1004,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     eval: evalResult,
     data_quality_score: dataQuality,
     used_fallback_analysis: usedFallback,
+    used_fallback_strategy: !!strategyResult._fallback_strategy,
     _meta: {
       model: config.model,
       elapsed_ms: elapsed,

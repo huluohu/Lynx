@@ -53,16 +53,12 @@
               <span class="progress-pct">{{ overallPct }}%</span>
             </div>
 
-            <!-- Data quality strip -->
+            <!-- Data quality indicator -->
             <div v-if="dataQualityScore != null" class="quality-strip">
               <span class="qs-label">{{ t('aiStrategyGenerator.dataQuality') }}</span>
-              <div class="qs-track">
-                <div
-                  class="qs-fill"
-                  :style="{ width: (dataQualityScore * 100) + '%', background: dqColor }"
-                ></div>
-              </div>
-              <span class="qs-val" :style="{ color: dqColor }">{{ Math.round(dataQualityScore * 100) }}%</span>
+              <span class="qs-badge" :style="{ color: dqColor, borderColor: dqColor, backgroundColor: dqColor + '1f' }">
+                {{ dataQualityLabel }} · {{ Math.round(dataQualityScore * 100) }}%
+              </span>
             </div>
 
             <!-- Done state CTA -->
@@ -90,7 +86,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
-const emit = defineEmits(['close', 'cancel'])
+defineEmits(['close', 'cancel'])
 
 const props = defineProps({
   visible: Boolean,
@@ -116,6 +112,14 @@ const dqColor = computed(() => {
   if (s >= 0.7) return '#22c55e'
   if (s >= 0.4) return '#f59e0b'
   return '#ef4444'
+})
+
+const dataQualityLabel = computed(() => {
+  const s = props.dataQualityScore
+  if (s == null) return ''
+  if (s >= 0.7) return t('aiStrategyGenerator.dataQualityGood')
+  if (s >= 0.4) return t('aiStrategyGenerator.dataQualityFair')
+  return t('aiStrategyGenerator.dataQualityLowShort')
 })
 
 const gradeColor = computed(() => ({
@@ -151,8 +155,6 @@ function stepLabel(id) {
     border-radius: 16px !important;
     width: 420px !important;
     max-width: calc(100vw - 32px) !important;
-    border-bottom-left-radius: 16px !important;
-    border-bottom-right-radius: 16px !important;
   }
 }
 
@@ -361,7 +363,7 @@ function stepLabel(id) {
   text-align: right;
 }
 
-/* Data quality strip */
+/* Data quality indicator */
 .quality-strip {
   display: flex;
   align-items: center;
@@ -370,19 +372,16 @@ function stepLabel(id) {
   font-size: 12px;
 }
 .qs-label { color: var(--text-dim); white-space: nowrap; }
-.qs-track {
-  flex: 1;
-  height: 5px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
+.qs-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-weight: 700;
+  line-height: 1;
 }
-.qs-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-.qs-val { font-weight: 600; min-width: 32px; text-align: right; }
 
 /* Done CTA */
 .done-cta {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { getUsdCny } from '../services/price.js';
 import { getLatestPriceRows } from '../services/latest-price.js';
+import { buildPortfolioProfitTrend } from '../services/trend.js';
 import { getLatestSignals } from './signals.js';
 import { normalizeApiTimestamp } from '../utils/datetime.js';
 
@@ -151,6 +152,17 @@ router.get('/overview', async (req, res) => {
         usd_cny,
       },
     });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/profit-trend', async (req, res) => {
+  try {
+    const db = getDb();
+    const usdCny = await getUsdCny();
+    const data = buildPortfolioProfitTrend(db, req.query.range, usdCny);
+    res.json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

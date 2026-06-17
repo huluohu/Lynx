@@ -264,7 +264,7 @@ async function loadAssetInfo() {
     try {
       const [assetRes, priceRes] = await Promise.all([
         api(`/api/assets/${assetId}`),
-        api(`/api/market/prices/${assetId}`),
+        api(`/api/market/prices/${assetId}?cache=1`),
       ])
       const assetJson = await assetRes.json()
       const priceJson = await priceRes.json()

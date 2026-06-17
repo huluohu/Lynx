@@ -53,6 +53,18 @@
       </div>
     </div>
 
+    <TrendChart
+      v-model="trendRange"
+      :title="t('dashboard.profitTrendTitle')"
+      :subtitle="t('dashboard.profitTrendSubtitle')"
+      :points="trendData.points"
+      :summary="trendData.summary"
+      :loading="trendLoading"
+      :empty-text="t('trend.emptyProfit')"
+      :value-formatter="baseMoney"
+      :percent-formatter="formatTrendPercent"
+    />
+
     <div v-if="alerts.length" class="alert-section">
       <div class="alert-digest-card">
         <div class="alert-digest-main">
@@ -203,6 +215,7 @@ import { currencySymbol, formatCurrencyAmount, formatSignedCurrencyAmount } from
 import { formatDate, formatNumber, formatTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
+import TrendChart from '../components/TrendChart.vue'
 
 const { t } = useI18n()
 const notificationsStore = useNotificationsStore()
@@ -213,6 +226,9 @@ const activePlans = ref([])
 const recentTrades = ref([])
 const latestSignals = ref([])
 const alerts = ref([])
+const trendRange = ref('1m')
+const trendData = ref({ points: [], summary: null })
+const trendLoading = ref(false)
 const loading = ref(false)
 const initialized = ref(false)
 const usdCny = ref(null)
@@ -259,6 +275,17 @@ async function refresh() {
   } catch (e) { console.error(e) }
   loading.value = false
   initialized.value = true
+  fetchTrend().catch(() => {})
+}
+
+async function fetchTrend() {
+  trendLoading.value = true
+  try {
+    const res = await api(`/api/dashboard/profit-trend?range=${encodeURIComponent(trendRange.value)}`)
+    const json = await res.json()
+    if (json.success && json.data) trendData.value = json.data
+  } catch (e) { console.error(e) }
+  trendLoading.value = false
 }
 
 async function refreshAlerts() {
@@ -302,20 +329,18 @@ function startAutoRefresh() {
 function fmt(n) {
   return formatNumber(n, { maximumFractionDigits: 2 })
 }
-function fmtPl(n) {
-  if (n === null || n === undefined || n === '') return '-'
-  const num = Number(n)
-  if (!Number.isFinite(num)) return '-'
-  if (num === 0) return '0'
-  const sign = num >= 0 ? '+' : '-'
-  return `${sign}${fmt(Math.abs(num))}`
-}
 function cs(a) { return currencySymbol(a?.currency) }
 function money(value, currency) {
   return formatCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
 }
 function signedMoney(value, currency) {
   return formatSignedCurrencyAmount(value, currency, { maximumFractionDigits: 2 })
+}
+function baseMoney(value) {
+  return formatCurrencyAmount(value, 'CNY', { maximumFractionDigits: 2 })
+}
+function formatTrendPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`
 }
 function tradeSignedTotal(trade) {
   if (!trade) return '-'
@@ -370,6 +395,10 @@ watch(() => notificationsStore.changeToken, () => {
 watch(() => runtimeSettingsStore.values.refresh_interval, (nextValue, prevValue) => {
   if (!initialized.value || nextValue === prevValue) return
   startAutoRefresh()
+})
+
+watch(trendRange, () => {
+  fetchTrend().catch(() => {})
 })
 
 watchEffect(() => {
