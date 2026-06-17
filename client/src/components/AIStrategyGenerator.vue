@@ -681,6 +681,21 @@ async function doGenerate(body) {
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let eventType = ''
+
+  const processLine = (line) => {
+    if (line.startsWith('event: ')) {
+      eventType = line.slice(7).trim()
+      return
+    }
+    if (line.startsWith('data: ') && eventType) {
+      try {
+        const data = JSON.parse(line.slice(6))
+        handleSSEEvent(eventType, data)
+      } catch {}
+      eventType = ''
+    }
+  }
 
   try {
     while (true) {
@@ -691,18 +706,18 @@ async function doGenerate(body) {
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
 
-      let eventType = ''
       for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          eventType = line.slice(7).trim()
-        } else if (line.startsWith('data: ') && eventType) {
-          try {
-            const data = JSON.parse(line.slice(6))
-            handleSSEEvent(eventType, data)
-          } catch {}
-          eventType = ''
-        }
+        processLine(line)
       }
+    }
+
+    const tail = buffer + decoder.decode()
+    if (tail.trim()) {
+      for (const line of tail.split('\n')) processLine(line)
+    }
+
+    if (!result.value && !error.value) {
+      throw new Error(t('aiStrategyGenerator.generateFailed'))
     }
   } catch (e) {
     if (e.name === 'AbortError') return // silently cancelled
