@@ -1,6 +1,6 @@
 <template>
-  <div class="strategy-form-page">
-    <div class="page-header">
+  <div class="strategy-form-page" :class="{ embedded }">
+    <div v-if="!embedded" class="page-header">
       <h1 class="page-title">{{ isEdit ? t('strategyForm.editTitle') : t('strategyForm.createTitle') }}</h1>
     </div>
 
@@ -228,7 +228,8 @@
       <div class="form-actions">
         <button type="submit" class="btn btn-primary" :disabled="submitting || (!unsupportedStrategyType && selectedAssetIds.length === 0)">{{ submitting ? t('strategyForm.creating') : (isEdit ? t('strategyForm.save') : t('strategyForm.create')) }}</button>
         <button v-if="isEdit" type="button" class="btn btn-inline-icon" @click="showAIRegenerate = true"><AppIcon name="sparkles" size="16" /> {{ t('strategyForm.aiRegenerate') }}</button>
-        <router-link to="/strategies" class="btn">{{ t('strategyForm.cancel') }}</router-link>
+        <button v-if="embedded" type="button" class="btn" @click="emit('cancel')">{{ t('strategyForm.cancel') }}</button>
+        <router-link v-else to="/strategies" class="btn">{{ t('strategyForm.cancel') }}</router-link>
       </div>
     </form>
 
@@ -257,6 +258,9 @@ import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
 import AppIcon from '../components/AppIcon.vue'
 import { formatNumber } from '../utils/formatters.js'
 import { currencyInputLabel, currencySymbol, formatCurrencyAmount } from '../utils/currency.js'
+
+const props = defineProps({ embedded: { type: Boolean, default: false } })
+const emit = defineEmits(['saved', 'cancel'])
 
 const router = useRouter()
 const route = useRoute()
@@ -633,7 +637,11 @@ async function submit() {
     if (!json.success) return toast.error(json.error || t('common.saveFailed'))
 
     toast.success(isEdit.value ? t('strategyForm.updated') : t('strategyForm.created'))
-    router.push(isEdit.value ? `/strategies/${strategyId.value}` : '/strategies')
+    if (props.embedded && !isEdit.value) {
+      emit('saved', json.data)
+    } else {
+      router.push(isEdit.value ? `/strategies/${strategyId.value}` : '/strategies')
+    }
   } catch (e) { toast.error(e.message) }
   finally { submitting.value = false }
 }
@@ -739,6 +747,9 @@ onMounted(async () => {
 .strategy-form-page {
   max-width: 980px;
 }
+.strategy-form-page.embedded {
+  max-width: none;
+}
 .strategy-form-shell {
   display: flex;
   flex-direction: column;
@@ -752,6 +763,11 @@ onMounted(async () => {
 }
 .form-section {
   margin-bottom: 0;
+}
+.strategy-form-page.embedded .form-section,
+.strategy-form-page.embedded .summary-card {
+  border-radius: 16px;
+  padding: 16px;
 }
 .form-section-header {
   display: flex;
@@ -835,16 +851,6 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-dim);
 }
-.selected-hint {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-.params-section {
-  margin-top: 16px;
-}
-
 .asset-param-group {
   margin-top: 16px;
   border: 1px solid var(--border);
@@ -1009,6 +1015,22 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 12px;
 }
+.strategy-form-page.embedded .form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 0 -2px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-overlay);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 14px 40px var(--shadow-color);
+}
+.strategy-form-page.embedded .form-actions .btn {
+  min-width: 120px;
+}
 
 @media (max-width: 900px) {
   .editor-layout {
@@ -1020,11 +1042,38 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .strategy-form-shell {
+    padding-bottom: calc(104px + var(--safe-bottom));
+  }
   .asset-multi-select {
     grid-template-columns: 1fr 1fr;
   }
   .line-row {
     grid-template-columns: 1fr;
+  }
+  .form-actions {
+    position: fixed;
+    left: calc(12px + var(--safe-left));
+    right: calc(12px + var(--safe-right));
+    bottom: calc(76px + var(--safe-bottom));
+    z-index: 260;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface-overlay);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 14px 40px var(--shadow-color);
+  }
+  .strategy-form-page.embedded .form-actions {
+    bottom: max(8px, var(--safe-bottom));
+    z-index: 1201;
+  }
+  .form-actions .btn,
+  .strategy-form-page.embedded .form-actions .btn {
+    flex: 1;
+    min-width: 0;
   }
 }
 </style>

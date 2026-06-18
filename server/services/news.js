@@ -264,8 +264,11 @@ async function fetchCoinGeckoNews() {
 function getEnabledSources() {
   const db = getDb();
   const row = db.prepare("SELECT value FROM settings WHERE key = 'news_sources_enabled'").get();
-  const enabledKeys = (row?.value || 'coindesk,cointelegraph,decrypt,panews,coingecko').split(',').map(s => s.trim()).filter(Boolean);
-  
+  const availableRow = db.prepare("SELECT value FROM settings WHERE key = 'news_sources_available'").get();
+  const availableKeys = new Set((availableRow?.value || Object.keys(BUILTIN_SOURCES).join(',')).split(',').map(s => s.trim()).filter(Boolean));
+  const configuredValue = row ? String(row.value || '') : 'coindesk,cointelegraph,decrypt,panews,coingecko';
+  const enabledKeys = configuredValue.split(',').map(s => s.trim()).filter(Boolean).filter(key => availableKeys.has(key));
+
   const sources = [];
   for (const key of enabledKeys) {
     if (BUILTIN_SOURCES[key]) {

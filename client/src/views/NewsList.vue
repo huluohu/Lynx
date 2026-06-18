@@ -69,12 +69,23 @@
           <span class="cache-badge cache-cached">{{ cacheLabel(selectedNews.cache_status) }}</span>
         </div>
         <div class="news-detail-actions">
+          <select class="form-select news-translate-select" v-model="translateTarget" :disabled="translating">
+            <option value="auto">{{ t('newsList.translateAuto') }}</option>
+            <option value="简体中文">{{ t('newsList.translateToZh') }}</option>
+            <option value="English">{{ t('newsList.translateToEn') }}</option>
+          </select>
           <button v-if="!translatedNews" class="btn btn-sm" type="button" @click="translateSelectedNews" :disabled="translating">
-            {{ translating ? t('newsList.translating') : t('newsList.translate') }}
+            {{ translating ? t('newsList.translatingProgress', { count: translatedChunkCount }) : t('newsList.translate') }}
           </button>
-          <button v-else class="btn btn-sm" type="button" @click="restoreOriginalNews">{{ t('newsList.restoreOriginal') }}</button>
+          <button v-else class="btn btn-sm" type="button" @click="restoreOriginalNews" :disabled="translating">{{ t('newsList.restoreOriginal') }}</button>
+        </div>
+        <div v-if="translationInfo" class="translation-info">{{ translationInfo }}</div>
+        <div v-if="translating || translatedTotalChunks" class="translation-progress">
+          <div class="translation-progress-bar"><span :style="{ width: translationProgressPct + '%' }"></span></div>
+          <span>{{ translationProgressText }}</span>
         </div>
         <div class="news-detail-content">
+          <p v-if="translating && translatedNews && !displayNewsContent" class="translation-placeholder">{{ t('newsList.translationWaiting') }}</p>
           <template v-for="(block, index) in formattedDetailBlocks" :key="index">
             <h3 v-if="block.type === 'heading'">{{ block.text }}</h3>
             <ul v-else-if="block.type === 'list'">
@@ -117,11 +128,19 @@ const detailLoading = ref(false)
 const selectedNews = ref(null)
 const translatedNews = ref(null)
 const translating = ref(false)
+const translateTarget = ref('auto')
+const translatedChunkCount = ref(0)
+const translatedTotalChunks = ref(0)
+const translationInfo = ref('')
 
 const pendingCacheCount = computed(() => news.value.filter(n => n.cache_status === 'pending' && n.url).length)
 const displayNewsTitle = computed(() => translatedNews.value?.title || selectedNews.value?.title || '')
 const displayNewsContent = computed(() => translatedNews.value?.content || translatedNews.value?.summary || selectedNews.value?.content || selectedNews.value?.summary || '')
 const formattedDetailBlocks = computed(() => formatArticleBlocks(displayNewsContent.value))
+const translationProgressPct = computed(() => translatedTotalChunks.value ? Math.min(100, Math.round(translatedChunkCount.value / translatedTotalChunks.value * 100)) : (translating.value ? 8 : 0))
+const translationProgressText = computed(() => translatedTotalChunks.value
+  ? t('newsList.translationProgress', { done: translatedChunkCount.value, total: translatedTotalChunks.value })
+  : t('newsList.translationPreparing'))
 
 async function loadData() {
   try {
@@ -166,6 +185,9 @@ async function refresh() {
 
 async function openNews(n) {
   translatedNews.value = null
+  translatedChunkCount.value = 0
+  translatedTotalChunks.value = 0
+  translationInfo.value = ''
   if (!n.read) {
     api(`/api/news/${n.id}`, { method: 'PUT' })
     n.read = 1
@@ -197,23 +219,82 @@ async function openNews(n) {
 async function translateSelectedNews() {
   if (!selectedNews.value?.id || translating.value) return
   translating.value = true
+  translatedChunkCount.value = 0
+  translatedTotalChunks.value = 0
+  translationInfo.value = ''
+  translatedNews.value = { title: selectedNews.value.title, summary: selectedNews.value.summary || '', content: '' }
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 120000)
   try {
-    const res = await api(`/api/news/${selectedNews.value.id}/translate`, {
+    const token = localStorage.getItem('token')
+    const res = await fetch(`/api/news/${selectedNews.value.id}/translate/stream`, {
       method: 'POST',
-      body: JSON.stringify({ target_language: '简体中文' }),
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ target_language: translateTarget.value }),
+      signal: controller.signal,
     })
-    const json = await res.json()
-    if (!json.success) throw new Error(json.error || t('newsList.translateFailed'))
-    translatedNews.value = json.data
+    if (!res.ok || !res.body) throw new Error(t('newsList.translateFailed'))
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) handleTranslationEvent(line)
+    }
+    if (buffer.trim()) handleTranslationEvent(buffer)
   } catch (error) {
-    toast.error(error.message || t('newsList.translateFailed'))
+    toast.error(error.name === 'AbortError' ? t('newsList.translateTimeout') : (error.message || t('newsList.translateFailed')))
   } finally {
+    clearTimeout(timeout)
     translating.value = false
   }
 }
 
 function restoreOriginalNews() {
   translatedNews.value = null
+  translatedChunkCount.value = 0
+  translatedTotalChunks.value = 0
+  translationInfo.value = ''
+}
+
+function handleTranslationEvent(line) {
+  if (!line?.trim()) return
+  let event
+  try { event = JSON.parse(line) } catch { return }
+  if (event.event === 'error') throw new Error(event.error || t('newsList.translateFailed'))
+  if (event.event === 'start') {
+    translationInfo.value = t('newsList.translationDirection', { source: event.source_language || '-', target: event.target_language || '-' })
+    return
+  }
+  if (event.event === 'meta') {
+    translatedNews.value = { ...(translatedNews.value || {}), ...event.data, content: '' }
+    translationInfo.value = t('newsList.translationDirection', { source: event.data.source_language || '-', target: event.data.target_language || '-' })
+    return
+  }
+  if (event.event === 'chunk_start') {
+    translatedTotalChunks.value = Number(event.total || translatedTotalChunks.value || 0)
+    translationInfo.value = t('newsList.translationChunkProgress', { current: Number(event.index || 0) + 1, total: event.total || '-' })
+    return
+  }
+  if (event.event === 'chunk') {
+    translatedTotalChunks.value = Number(event.total || translatedTotalChunks.value || 0)
+    translatedChunkCount.value = Math.max(translatedChunkCount.value, Number(event.index || 0) + 1)
+    const prefix = translatedNews.value?.content ? '\n\n' : ''
+    translatedNews.value = { ...(translatedNews.value || {}), content: `${translatedNews.value?.content || ''}${prefix}${event.text || ''}` }
+    if (event.warnings?.length) translationInfo.value = t('newsList.translationPartialWarning')
+    return
+  }
+  if (event.event === 'done') {
+    translatedNews.value = event.data || translatedNews.value
+    translatedChunkCount.value = event.data?.chunks || translatedChunkCount.value
+    translatedTotalChunks.value = event.data?.chunks || translatedTotalChunks.value
+    if (event.data?.warnings?.length) translationInfo.value = t('newsList.translationPartialWarning')
+    else translationInfo.value = t('newsList.translationDone')
+  }
 }
 
 async function cacheAll() {
@@ -328,7 +409,13 @@ onUnmounted(() => {
 .news-detail-loading { padding: 8px 0; }
 .news-detail { display: flex; flex-direction: column; gap: 14px; }
 .news-detail-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
-.news-detail-actions { display: flex; gap: 8px; align-items: center; }
+.news-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 4px; }
+.news-translate-select { width: auto; min-width: 140px; font-size: 12px; padding: 5px 8px; }
+.translation-info { color: var(--text-muted); font-size: 12px; margin-top: -6px; }
+.translation-progress { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
+.translation-progress-bar { flex: 1; height: 4px; border-radius: 999px; background: var(--bg-dim); overflow: hidden; }
+.translation-progress-bar span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width 0.2s ease; }
+.translation-placeholder { color: var(--text-muted); font-style: italic; }
 .news-detail-content { color: var(--text-dim); line-height: 1.75; font-size: 14px; }
 .news-detail-content h3 { margin: 18px 0 8px; color: var(--text); font-size: 16px; line-height: 1.45; }
 .news-detail-content h3:first-child { margin-top: 0; }

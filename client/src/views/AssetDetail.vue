@@ -127,7 +127,7 @@
           <div class="form-group"><label class="form-label">{{ t('assetDetail.stopLoss') }}</label><input class="form-input" type="number" step="any" v-model="editForm.stop_loss" /></div>
         </div>
 
-        <MobileActionBar>
+        <MobileActionBar drawer>
           <button type="submit" class="btn btn-primary" :disabled="saving">{{ saving ? t('assetDetail.saving') : t('assetDetail.save') }}</button>
           <button type="button" class="btn" @click="showEditDrawer = false">{{ t('common.cancel') }}</button>
         </MobileActionBar>

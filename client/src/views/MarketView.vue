@@ -53,9 +53,11 @@
               <div v-if="p.details?.ch24" :class="p.details.ch24 >= 0 ? 'pnl positive' : 'pnl negative'" style="font-size:13px">
                 {{ p.details.ch24 >= 0 ? '+' : '' }}{{ p.details.ch24.toFixed(1) }}% (24h)
               </div>
-              <div v-if="p.empty_cache" class="market-status warn">{{ t('marketView.noCache') }}</div>
-              <div v-else-if="p.stale" class="market-status warn">{{ t('marketView.staleCache') }}</div>
-              <div v-else-if="p.cached && !p.stale" class="market-status">{{ t('marketView.cached') }}</div>
+              <div v-if="p.empty_cache" class="market-status warn inline-status-action">
+                <span>{{ t('marketView.noCache') }}</span>
+                <button class="inline-refresh-link" type="button" :disabled="loading" @click.stop="refresh(true)">{{ t('marketView.refresh') }}</button>
+              </div>
+              <div v-else-if="p.cached" class="market-status">{{ t('marketView.cached') }}</div>
               <div v-if="p.fetched_at" class="market-updated-at">{{ t('marketView.quoteUpdatedAt', { time: fmtDateTime(p.fetched_at) }) }}</div>
             </div>
             <div class="market-card-side">
@@ -164,8 +166,15 @@ async function refresh(force = false) {
     prices.value = json.data || []
     lastUpdated.value = resolveLastUpdated(prices.value)
     if (force) {
-      const fresh = prices.value.filter(p => !p.cached && !p.stale).length
-      toast.success(t('marketView.refreshed', { count: fresh }))
+      const fresh = prices.value.filter(p => !p.cached && !p.empty_cache).length
+      const fallback = prices.value.filter(p => p.cached && !p.empty_cache).length
+      if (fresh > 0) {
+        toast.success(t('marketView.refreshed', { count: fresh }))
+      } else if (fallback > 0) {
+        toast.info(t('marketView.refreshFallback'))
+      } else {
+        toast.error(t('marketView.refreshNoData'))
+      }
     }
   } catch (e) {
     toast.error(t('marketView.refreshFailed'))
@@ -317,6 +326,9 @@ onUnmounted(() => {
 .market-price-unit { margin-left: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600; }
 .market-status { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 .market-status.warn { color: var(--red); opacity: 0.8; }
+.inline-status-action { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inline-refresh-link { border: none; background: transparent; color: var(--blue); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; }
+.inline-refresh-link:disabled { opacity: .55; cursor: not-allowed; }
 .market-updated-at { margin-top: 4px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }
 .manual-price-form { display: flex; flex-direction: column; gap: 14px; }
 .manual-asset-summary {

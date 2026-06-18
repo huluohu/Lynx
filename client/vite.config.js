@@ -4,6 +4,8 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { readFileSync } from 'node:fs'
 
 const clientPackage = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+const backendPort = process.env.BACKEND_PORT || process.env.PORT || '3456'
+const clientPort = Number(process.env.CLIENT_PORT || '5173')
 
 export default defineConfig({
   define: {
@@ -43,9 +45,10 @@ export default defineConfig({
     }),
   ],
   server: {
-    port: 5173,
+    port: clientPort,
+    strictPort: true,
     proxy: {
-      '/api': 'http://localhost:3456'
+      '/api': `http://localhost:${backendPort}`
     }
   },
   build: {

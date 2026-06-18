@@ -28,7 +28,7 @@
               <span>{{ t('strategyList.compare') }}</span>
             </router-link>
             <button class="btn btn-primary" @click="showAI = true">{{ t('strategyList.aiGenerate') }}</button>
-            <router-link to="/strategies/create" class="btn">+ {{ t('strategyList.create') }}</router-link>
+            <button class="btn" @click="showCreateDrawer = true">+ {{ t('strategyList.create') }}</button>
           </div>
         </div>
       </div>
@@ -83,8 +83,13 @@
       </div>
     </div>
     <div v-else class="card empty">
-      <div class="empty-icon"><AppIcon name="strategies" size="34" /></div><p>{{ t('strategyList.emptyPrefix') }}<router-link to="/strategies/create">{{ t('strategyList.createOne') }}</router-link> {{ t('strategyList.emptyMiddle') }} <a href="#" @click.prevent="showAI = true">{{ t('strategyList.aiGenerateLink') }}</a></p>
+      <div class="empty-icon"><AppIcon name="strategies" size="34" /></div><p>{{ t('strategyList.emptyPrefix') }}<a href="#" @click.prevent="showCreateDrawer = true">{{ t('strategyList.createOne') }}</a> {{ t('strategyList.emptyMiddle') }} <a href="#" @click.prevent="showAI = true">{{ t('strategyList.aiGenerateLink') }}</a></p>
     </div>
+
+    <!-- Create Drawer -->
+    <AppDrawer v-model="showCreateDrawer" :title="t('strategyForm.createTitle')" width="860px" mobileHeight="fullscreen">
+      <StrategyForm v-if="showCreateDrawer" embedded @saved="onStrategyCreated" @cancel="showCreateDrawer = false" />
+    </AppDrawer>
 
     <!-- AI Drawer -->
     <AppDrawer v-model="showAI" :title="t('strategyList.aiDrawerTitle')">
@@ -209,6 +214,7 @@ import { formatCurrencyAmount } from '../utils/currency.js'
 import { formatDate, formatDateTime } from '../utils/formatters.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import AIStrategyGenerator from '../components/AIStrategyGenerator.vue'
+import StrategyForm from './StrategyForm.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 import AppIcon from '../components/AppIcon.vue'
@@ -221,6 +227,7 @@ const strategies = ref([])
 const drafts = ref([])
 const loading = ref(true)
 const showAI = ref(false)
+const showCreateDrawer = ref(false)
 const showDrafts = ref(false)
 const showDetailDrawer = ref(false)
 const showHistoryDetail = ref(false)
@@ -326,6 +333,7 @@ async function discardDraft(d) {
 
 function onAIDone() { showAI.value = false; loadData(); loadDrafts() }
 function onAIGenerated() { loadDrafts() }
+function onStrategyCreated() { showCreateDrawer.value = false; loadData() }
 
 async function deleteStrategy(s) {
   const ok = await confirm({
@@ -385,7 +393,7 @@ watchEffect(() => {
     {
       key: 'create',
       label: t('strategyList.create'),
-      to: '/strategies/create',
+      onSelect: () => { showCreateDrawer.value = true },
     },
   ])
 })

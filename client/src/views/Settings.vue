@@ -80,27 +80,14 @@
           </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">{{ t('settings.news.builtinSources') }}</span>
-            <div class="source-chips">
-              <label v-for="src in builtinNewsSources" :key="src.key" class="source-chip" :class="{ active: enabledSources.includes(src.key) }">
-                <input type="checkbox" :value="src.key" v-model="enabledSources" @change="dirty.news = true" />
+            <span class="setting-desc">{{ t('settings.news.enabledSourcesDesc') }}</span>
+            <div v-if="enabledNewsSourceOptions.length" class="source-chips">
+              <label v-for="src in enabledNewsSourceOptions" :key="src.key" class="source-chip" :class="{ active: selectedNewsSources.includes(src.key) }">
+                <input type="checkbox" :value="src.key" v-model="selectedNewsSources" @change="dirty.news = true" />
                 {{ src.label }}
               </label>
             </div>
-          </div>
-          <div class="setting-item setting-item-vertical">
-            <span class="setting-label">{{ t('settings.news.customSources') }}</span>
-            <div v-if="customSources.length" class="custom-sources-list">
-              <div v-for="cs in customSources" :key="cs.id" class="custom-source-item">
-                <span class="custom-source-name">{{ cs.name }}</span>
-                <span class="custom-source-url">{{ cs.url }}</span>
-                <button class="btn-tiny danger" :title="t('settings.news.deleteSource')" @click="deleteCustomSource(cs.id)"><AppIcon name="x" size="13" /></button>
-              </div>
-            </div>
-            <div class="add-source-row">
-              <input class="setting-input-full" v-model="newSource.name" :placeholder="t('settings.news.sourceNamePlaceholder')" style="flex:1" />
-              <input class="setting-input-full" v-model="newSource.url" :placeholder="t('settings.news.sourceUrlPlaceholder')" style="flex:2" />
-              <button class="btn btn-sm" @click="addCustomSource" :disabled="!newSource.name || !newSource.url">{{ t('common.add') }}</button>
-            </div>
+            <span v-else class="setting-empty-hint">{{ t('settings.dataSources.noEnabledNewsSources') }}</span>
           </div>
         </div>
       </div>
@@ -135,52 +122,25 @@
           </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">{{ t('settings.market.btcSources') }}</span>
-            <span class="setting-desc">{{ t('settings.market.priceSourcesDesc') }}</span>
-            <div class="source-chips">
-              <label v-for="src in btcMarketSources" :key="src.key" class="source-chip" :class="{ active: enabledBtcSources.includes(src.key) }">
-                <input type="checkbox" :value="src.key" v-model="enabledBtcSources" @change="dirty.market = true" />
+            <span class="setting-desc">{{ t('settings.market.enabledSourcesDesc') }}</span>
+            <div v-if="enabledBtcSourceOptions.length" class="source-chips">
+              <label v-for="src in enabledBtcSourceOptions" :key="src.key" class="source-chip" :class="{ active: selectedBtcSources.includes(src.key) }">
+                <input type="checkbox" :value="src.key" v-model="selectedBtcSources" @change="dirty.market = true" />
                 {{ src.label }}
               </label>
             </div>
+            <span v-else class="setting-empty-hint">{{ t('settings.dataSources.noEnabledMarketSources') }}</span>
           </div>
           <div class="setting-item setting-item-vertical">
             <span class="setting-label">{{ t('settings.market.goldSources') }}</span>
-            <span class="setting-desc">{{ t('settings.market.priceSourcesDesc') }}</span>
-            <div class="source-chips">
-              <label v-for="src in goldMarketSources" :key="src.key" class="source-chip" :class="{ active: enabledGoldSources.includes(src.key) }">
-                <input type="checkbox" :value="src.key" v-model="enabledGoldSources" @change="dirty.market = true" />
+            <span class="setting-desc">{{ t('settings.market.enabledSourcesDesc') }}</span>
+            <div v-if="enabledGoldSourceOptions.length" class="source-chips">
+              <label v-for="src in enabledGoldSourceOptions" :key="src.key" class="source-chip" :class="{ active: selectedGoldSources.includes(src.key) }">
+                <input type="checkbox" :value="src.key" v-model="selectedGoldSources" @change="dirty.market = true" />
                 {{ src.label }}
               </label>
             </div>
-          </div>
-          <div class="setting-item setting-item-vertical">
-            <span class="setting-label">{{ t('settings.market.sourceHealth') }}</span>
-            <span class="setting-desc">{{ t('settings.market.sourceHealthDesc') }}</span>
-            <div v-if="marketSources.length" class="market-source-list">
-              <div v-for="src in marketSources" :key="src.id" class="market-source-item">
-                <div class="market-source-main">
-                  <span class="market-source-name">{{ src.name }}</span>
-                  <span class="market-source-meta">{{ src.asset_class }} · {{ src.source_type }} · {{ sourceHealthText(src) }}</span>
-                </div>
-                <div class="market-source-actions">
-                  <button v-if="src.source_type === 'custom_http'" class="btn-tiny" type="button" @click="testMarketSource(src)">{{ t('settings.market.testSource') }}</button>
-                  <button v-if="src.source_type === 'custom_http'" class="btn-tiny danger" type="button" @click="deleteMarketSource(src.id)"><AppIcon name="x" size="13" /></button>
-                </div>
-              </div>
-            </div>
-            <div class="add-source-row market-source-form">
-              <input class="setting-input-full" v-model="newMarketSource.name" :placeholder="t('settings.market.sourceNamePlaceholder')" style="flex:1" />
-              <select class="form-select inline-select" v-model="newMarketSource.asset_class">
-                <option value="crypto">{{ t('assets.types.crypto') }}</option>
-                <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
-                <option value="all">{{ t('common.all') }}</option>
-              </select>
-            </div>
-            <div class="add-source-row market-source-form">
-              <input class="setting-input-full" v-model="newMarketSource.url_template" :placeholder="t('settings.market.urlTemplatePlaceholder')" style="flex:2" />
-              <input class="setting-input-full" v-model="newMarketSource.price_path" :placeholder="t('settings.market.pricePathPlaceholder')" style="flex:1" />
-              <button class="btn btn-sm" type="button" @click="addMarketSource" :disabled="!newMarketSource.name || !newMarketSource.url_template || !newMarketSource.price_path">{{ t('common.add') }}</button>
-            </div>
+            <span v-else class="setting-empty-hint">{{ t('settings.dataSources.noEnabledMarketSources') }}</span>
           </div>
           <div class="setting-item">
             <div class="setting-info">
@@ -386,7 +346,6 @@ import { api } from '../utils/api.js'
 import { useConfirm } from '../utils/confirm.js'
 import { useToast } from '../utils/toast.js'
 import { appVersion } from '../utils/appVersion.js'
-import AppIcon from '../components/AppIcon.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -405,6 +364,7 @@ const form = reactive({
   market_precious_metal_sources_enabled: 'neodata,swissquote',
   market_btc_sources_enabled: 'coingecko,binance,coinbase,kraken,okx,bitstamp,gemini',
   market_gold_sources_enabled: 'neodata,swissquote',
+  news_sources_available: '',
   rate_cache_duration: '60',
   strategy_monitor_interval: '5',
   signal_valid_hours: '24',
@@ -433,14 +393,11 @@ const form = reactive({
 
 const dirty = reactive({ appearance: false, market: false, ai: false, news: false, push: false })
 const saveState = reactive({ appearance: '', market: '', ai: '', news: '', push: '' })
-const enabledSources = ref(['coindesk', 'cointelegraph', 'decrypt', 'panews', 'coingecko'])
-const enabledBtcSources = ref(['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'])
-const enabledGoldSources = ref(['neodata', 'swissquote'])
-const customSources = ref([])
-const newSource = reactive({ name: '', url: '' })
-const marketSources = ref([])
-const newMarketSource = reactive({ name: '', asset_class: 'crypto', url_template: '', price_path: 'price', currency_path: '', timestamp_path: '' })
 const testingPush = ref(false)
+const marketSources = ref([])
+const selectedNewsSources = ref(['coindesk', 'cointelegraph', 'decrypt', 'panews', 'coingecko'])
+const selectedBtcSources = ref(['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'])
+const selectedGoldSources = ref(['neodata', 'swissquote'])
 const webhookPlaceholder = computed(() => {
   const map = {
     wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx',
@@ -451,6 +408,14 @@ const webhookPlaceholder = computed(() => {
   }
   return map[form.push_webhook_type] || map.custom
 })
+
+const pushTypeOptions = computed(() => [
+  { value: 'wecom', label: t('settings.push.wecom') },
+  { value: 'serverchan', label: t('settings.push.serverchan') },
+  { value: 'pushplus', label: t('settings.push.pushplus') },
+  { value: 'bark', label: t('settings.push.bark') },
+  { value: 'custom', label: t('settings.push.custom') },
+])
 
 const builtinNewsSources = computed(() => [
   { key: 'coindesk', label: t('settings.news.builtinSourceLabels.coindesk') },
@@ -481,13 +446,13 @@ const goldMarketSources = computed(() => [
   { key: 'swissquote', label: t('settings.market.sourceLabels.swissquote') },
 ])
 
-const pushTypeOptions = computed(() => [
-  { value: 'wecom', label: t('settings.push.wecom') },
-  { value: 'serverchan', label: t('settings.push.serverchan') },
-  { value: 'pushplus', label: t('settings.push.pushplus') },
-  { value: 'bark', label: t('settings.push.bark') },
-  { value: 'custom', label: t('settings.push.custom') },
-])
+const enabledNewsSourceOptions = computed(() => {
+  const available = new Set(csvToArray(form.news_sources_available, builtinNewsSources.value.map(source => source.key)))
+  return builtinNewsSources.value.filter(source => available.has(source.key))
+})
+
+const enabledBtcSourceOptions = computed(() => enabledMarketSourceOptions('crypto', btcMarketSources.value))
+const enabledGoldSourceOptions = computed(() => enabledMarketSourceOptions('precious_metal', goldMarketSources.value))
 
 const marketColorOptions = computed(() => preferencesStore.supportedMarketColorSchemes.map((value) => ({
   value,
@@ -510,6 +475,43 @@ const groupKeys = {
   push: ['push_enabled', 'push_webhook_type', 'push_webhook_url'],
 }
 
+function csvToArray(value, fallback = []) {
+  const values = String(value || '').split(',').map((source) => source.trim()).filter(Boolean)
+  return values.length ? values : [...fallback]
+}
+
+function enabledMarketSourceOptions(assetClass, definitions) {
+  const rows = marketSources.value.filter(source => source.source_type === 'builtin' && source.asset_class === assetClass && source.enabled !== 0)
+  if (!marketSources.value.length) return definitions
+  const enabledKeys = new Set(rows.map(source => source.key))
+  return definitions.filter(source => enabledKeys.has(source.key))
+}
+
+function filterSelection(values, options) {
+  const allowed = new Set(options.map(option => option.key))
+  return values.filter(value => allowed.has(value))
+}
+
+function syncSelectedSources() {
+  selectedNewsSources.value = filterSelection(csvToArray(form.news_sources_enabled, selectedNewsSources.value), enabledNewsSourceOptions.value)
+  selectedBtcSources.value = filterSelection(csvToArray(form.market_crypto_sources_enabled || form.market_btc_sources_enabled, selectedBtcSources.value), enabledBtcSourceOptions.value)
+  selectedGoldSources.value = filterSelection(csvToArray(form.market_precious_metal_sources_enabled || form.market_gold_sources_enabled, selectedGoldSources.value), enabledGoldSourceOptions.value)
+}
+
+async function refreshSourceAvailability() {
+  const [settingsRes, marketRes] = await Promise.all([
+    api('/api/settings'),
+    api('/api/market/sources'),
+  ])
+  const settingsJson = await settingsRes.json()
+  if (settingsJson.success && 'news_sources_available' in (settingsJson.data || {})) {
+    form.news_sources_available = settingsJson.data.news_sources_available || ''
+  }
+  const marketJson = await marketRes.json()
+  if (marketJson.success) marketSources.value = marketJson.data || []
+  syncSelectedSources()
+}
+
 function markSaved(group) {
   saveState[group] = 'saved'
   setTimeout(() => {
@@ -523,7 +525,10 @@ function showSaveError(error) {
 
 async function load() {
   try {
-    const res = await api('/api/settings')
+    const [res, marketRes] = await Promise.all([
+      api('/api/settings'),
+      api('/api/market/sources'),
+    ])
     const json = await res.json()
     if (json.success) {
       runtimeSettingsStore.mergeValues(json.data)
@@ -534,48 +539,17 @@ async function load() {
       form.theme = preferencesStore.theme
       form.language = preferencesStore.language
       form.market_color_scheme = preferencesStore.marketColorScheme
-      if (form.news_sources_enabled) {
-        enabledSources.value = form.news_sources_enabled.split(',').map((source) => source.trim()).filter(Boolean)
-      }
-      if (form.market_crypto_sources_enabled || form.market_btc_sources_enabled) {
-        enabledBtcSources.value = (form.market_crypto_sources_enabled || form.market_btc_sources_enabled).split(',').map((source) => source.trim()).filter(Boolean)
-      }
-      if (form.market_precious_metal_sources_enabled || form.market_gold_sources_enabled) {
-        enabledGoldSources.value = (form.market_precious_metal_sources_enabled || form.market_gold_sources_enabled).split(',').map((source) => source.trim()).filter(Boolean)
-      }
     }
+    const marketJson = await marketRes.json()
+    if (marketJson.success) marketSources.value = marketJson.data || []
+    syncSelectedSources()
   } catch {}
 
-  try {
-    const res = await api('/api/news/sources')
-    const json = await res.json()
-    customSources.value = json.data || []
-  } catch {}
-
-  await loadMarketSources()
-
-}
-
-async function loadMarketSources() {
-  try {
-    const res = await api('/api/market/sources')
-    const json = await res.json()
-    marketSources.value = json.data || []
-  } catch {}
 }
 
 async function saveGroup(group) {
   const keys = groupKeys[group]
   if (!keys) return
-  if (group === 'news') {
-    form.news_sources_enabled = enabledSources.value.join(',')
-  }
-  if (group === 'market') {
-    form.market_crypto_sources_enabled = enabledBtcSources.value.join(',')
-    form.market_precious_metal_sources_enabled = enabledGoldSources.value.join(',')
-    form.market_btc_sources_enabled = form.market_crypto_sources_enabled
-    form.market_gold_sources_enabled = form.market_precious_metal_sources_enabled
-  }
   try {
     if (group === 'appearance') {
       await preferencesStore.setTheme(form.theme, { persistServer: true })
@@ -587,6 +561,18 @@ async function saveGroup(group) {
       dirty.appearance = false
       markSaved(group)
       return
+    }
+    if (group === 'news' || group === 'market') {
+      await refreshSourceAvailability()
+    }
+    if (group === 'news') {
+      form.news_sources_enabled = selectedNewsSources.value.join(',')
+    }
+    if (group === 'market') {
+      form.market_crypto_sources_enabled = selectedBtcSources.value.join(',')
+      form.market_precious_metal_sources_enabled = selectedGoldSources.value.join(',')
+      form.market_btc_sources_enabled = form.market_crypto_sources_enabled
+      form.market_gold_sources_enabled = form.market_precious_metal_sources_enabled
     }
     const payload = {}
     for (const key of keys) payload[key] = form[key]
@@ -616,82 +602,6 @@ async function saveKey(key, value) {
     runtimeSettingsStore.mergeValues({ [key]: value })
   } catch (error) {
     showSaveError(error)
-  }
-}
-
-async function addCustomSource() {
-  if (!newSource.name || !newSource.url) return
-  try {
-    const res = await api('/api/news/sources', { method: 'POST', body: JSON.stringify({ name: newSource.name, url: newSource.url }) })
-    const json = await res.json()
-    if (!json.success) {
-      throw new Error(json.error || t('settings.alerts.addSourceFailed'))
-    }
-    newSource.name = ''
-    newSource.url = ''
-    const refreshRes = await api('/api/news/sources')
-    customSources.value = (await refreshRes.json()).data || []
-  } catch (error) {
-    toast.error(error.message)
-  }
-}
-
-async function deleteCustomSource(id) {
-  try {
-    await api(`/api/news/sources/${id}`, { method: 'DELETE' })
-    customSources.value = customSources.value.filter((source) => source.id !== id)
-  } catch {}
-}
-
-function sourceHealthText(source) {
-  if (source.cooldown_until) return t('settings.market.sourceCooling', { time: source.cooldown_until })
-  if (source.last_error) return t('settings.market.sourceFailed', { count: source.fail_count || 0 })
-  if (source.last_success_at) return t('settings.market.sourceHealthy')
-  return t('settings.market.sourceUnknown')
-}
-
-async function addMarketSource() {
-  try {
-    const res = await api('/api/market/sources', {
-      method: 'POST',
-      body: JSON.stringify({ ...newMarketSource }),
-    })
-    const json = await res.json()
-    if (!json.success) throw new Error(json.error || t('common.saveFailed'))
-    newMarketSource.name = ''
-    newMarketSource.url_template = ''
-    newMarketSource.price_path = 'price'
-    newMarketSource.currency_path = ''
-    newMarketSource.timestamp_path = ''
-    await loadMarketSources()
-    toast.success(t('settings.market.sourceAdded'))
-  } catch (error) {
-    toast.error(error.message || t('common.saveFailed'))
-  }
-}
-
-async function testMarketSource(source) {
-  try {
-    const res = await api(`/api/market/sources/${source.id}/test`, {
-      method: 'POST',
-      body: JSON.stringify({ symbol: source.asset_class === 'precious_metal' ? 'XAUUSD' : 'BTC', asset_class: source.asset_class, currency: 'USD' }),
-    })
-    const json = await res.json()
-    if (!json.success) throw new Error(json.error || t('settings.market.sourceTestFailed'))
-    toast.success(t('settings.market.sourceTestOk', { price: json.data.price, currency: json.data.currency }))
-  } catch (error) {
-    toast.error(error.message || t('settings.market.sourceTestFailed'))
-  }
-}
-
-async function deleteMarketSource(id) {
-  try {
-    const res = await api(`/api/market/sources/${id}`, { method: 'DELETE' })
-    const json = await res.json()
-    if (!json.success) throw new Error(json.error || t('common.deleteFailed'))
-    marketSources.value = marketSources.value.filter((source) => source.id !== id)
-  } catch (error) {
-    toast.error(error.message || t('common.deleteFailed'))
   }
 }
 
@@ -807,6 +717,16 @@ onMounted(load)
   border-bottom: none;
 }
 
+.setting-nav-item {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.setting-arrow {
+  color: var(--text-muted);
+  font-size: 20px;
+}
+
 .setting-item-vertical {
   flex-direction: column;
   align-items: stretch;
@@ -895,25 +815,10 @@ onMounted(load)
 .switch input:checked + .slider::before { transform: translateX(18px); }
 
 .source-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.source-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 20px; font-size: 13px; cursor: pointer; background: var(--bg); border: 1px solid var(--border); transition: all 0.2s; }
+.source-chip { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border-radius: 999px; font-size: 13px; cursor: pointer; background: var(--bg); border: 1px solid var(--border); transition: all 0.2s; }
 .source-chip input { display: none; }
 .source-chip.active { background: var(--blue); color: #fff; border-color: var(--blue); }
-
-.custom-sources-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.custom-source-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--bg); border-radius: 8px; font-size: 13px; }
-.custom-source-name { font-weight: 500; }
-.custom-source-url { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.btn-tiny { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: 4px; }
-.btn-tiny.danger:hover { color: var(--red); background: var(--danger-soft); }
-.add-source-row { display: flex; gap: 8px; align-items: center; }
-.add-source-row .setting-input-full { padding: 8px 10px; font-size: 13px; }
-.market-source-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
-.market-source-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: var(--bg); border-radius: 8px; font-size: 13px; }
-.market-source-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.market-source-name { font-weight: 600; color: var(--text); }
-.market-source-meta { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.market-source-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.market-source-form { margin-top: 6px; }
+.setting-empty-hint { color: var(--text-muted); font-size: 12px; padding: 8px 0 2px; }
 
 .about-value {
   word-break: break-all;
@@ -933,12 +838,6 @@ onMounted(load)
   .setting-item { padding: 16px; flex-wrap: wrap; gap: 10px; }
   .setting-item .form-select,
   .inline-select { max-width: 100%; width: 100%; }
-  .add-source-row { flex-wrap: wrap; }
-  .add-source-row .setting-input-full { min-width: 0; flex: 1 1 120px; }
-  .btn-tiny { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; }
-  .custom-source-item { flex-wrap: wrap; gap: 6px; }
-  .market-source-item { align-items: flex-start; }
-  .market-source-form { flex-wrap: wrap; }
   .save-btn { min-height: 36px; padding: 8px 16px; }
 }
 </style>

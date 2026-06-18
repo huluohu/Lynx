@@ -9,7 +9,7 @@ const log = createLogger('settings');
 
 // Keys that should be masked when reading
 const SECRET_KEYS = ['ai_api_key', 'agent_search_api_key'];
-const NEWS_EFFECT_KEYS = new Set(['news_refresh_interval', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size']);
+const NEWS_EFFECT_KEYS = new Set(['news_refresh_interval', 'news_sources_available', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size']);
 
 function maskValue(key, value) {
   if (SECRET_KEYS.includes(key) && value) {

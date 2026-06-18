@@ -5,7 +5,7 @@
         <h1 class="page-title">{{ t('assetList.title') }}</h1>
         <div class="page-header-right">
           <div class="page-header-actions">
-            <router-link to="/assets/add" class="btn btn-primary">+ {{ t('assetList.addAsset') }}</router-link>
+            <button class="btn btn-primary" @click="showAssetDrawer = true">+ {{ t('assetList.addAsset') }}</button>
           </div>
         </div>
       </div>
@@ -87,7 +87,7 @@
     </div>
     <div v-else-if="!loading" class="card empty">
       <div class="empty-icon"><AppIcon name="assets" size="34" /></div>
-      <p>{{ t('assetList.empty') }}，<router-link to="/assets/add">{{ t('assetList.addOne') }}</router-link></p>
+      <p>{{ t('assetList.empty') }}，<a href="#" @click.prevent="showAssetDrawer = true">{{ t('assetList.addOne') }}</a></p>
     </div>
     <div v-else class="card">
       <div class="skeleton-card" style="margin-bottom:8px" v-for="i in 3" :key="i">
@@ -127,6 +127,11 @@
       <TransactionForm v-if="txAsset" :asset-id="txAsset.id" @success="onTxSuccess" @cancel="showTxDrawer = false" />
     </AppDrawer>
 
+    <!-- Asset Create Drawer -->
+    <AppDrawer v-model="showAssetDrawer" :title="t('assets.addTitle')" width="640px" mobileHeight="fullscreen">
+      <AssetForm v-if="showAssetDrawer" embedded @created="onAssetCreated" @cancel="showAssetDrawer = false" />
+    </AppDrawer>
+
     <AppDrawer v-model="filterDrawerOpen" :title="t('common.filter')">
       <div class="form-group">
         <label class="form-label">{{ t('common.search') }}</label>
@@ -164,6 +169,7 @@ import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import TransactionForm from '../components/TransactionForm.vue'
+import AssetForm from './AssetForm.vue'
 import SwipeActionItem from '../components/SwipeActionItem.vue'
 import AppIcon from '../components/AppIcon.vue'
 
@@ -175,6 +181,7 @@ const showTxDrawer = ref(false)
 const txAsset = ref(null)
 const showDetailDrawer = ref(false)
 const detailAsset = ref(null)
+const showAssetDrawer = ref(false)
 const filterDrawerOpen = ref(false)
 const mobilePageActions = useMobilePageActions()
 const filters = reactive({ keyword: '', type: '' })
@@ -225,6 +232,11 @@ function onTxSuccess() {
   loadData()
 }
 
+function onAssetCreated() {
+  showAssetDrawer.value = false
+  loadData()
+}
+
 function syncDraftFilters() {
   draftFilters.keyword = filters.keyword
   draftFilters.type = filters.type
@@ -268,7 +280,7 @@ watchEffect(() => {
     {
       key: 'add-asset',
       label: t('assetList.addAsset'),
-      to: '/assets/add',
+      onSelect: () => { showAssetDrawer.value = true },
     },
     {
       key: 'filter-assets',

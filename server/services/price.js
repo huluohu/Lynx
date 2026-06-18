@@ -9,6 +9,7 @@ let cachedRate = { usd_cny: 7.25, updated: 0 };
 const TROY_OUNCE_GRAMS = 31.1034768;
 const DEFAULT_PRECIOUS_METAL_SOURCES = ['neodata', 'swissquote'];
 const DEFAULT_CRYPTO_SOURCES = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'];
+const USD_PEGGED_SYMBOLS = new Set(['USD', 'USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP']);
 const LEGACY_GOLD_SOURCES = DEFAULT_PRECIOUS_METAL_SOURCES;
 const LEGACY_BTC_SOURCES = DEFAULT_CRYPTO_SOURCES;
 
@@ -32,8 +33,7 @@ function getEnabledMarketSources(key, defaults) {
     const keys = Array.isArray(key) ? key : [key];
     for (const item of keys) {
       const row = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(item);
-      const sources = String(row?.value || '').split(',').map(s => s.trim()).filter(Boolean);
-      if (sources.length) return sources;
+      if (row) return String(row.value || '').split(',').map(s => s.trim()).filter(Boolean);
     }
     return defaults;
   } catch {
@@ -97,7 +97,16 @@ function getMarketSourceEntries(assetClass, settingKeys, defaults) {
   const builtins = builtinKeys.map((key, index) => ({ key, name: key, asset_class: assetClass, source_type: 'builtin', priority: index }));
   const custom = getCustomMarketSources(assetClass);
   for (const source of [...builtins, ...custom]) ensureMarketSource(source);
-  return [...builtins, ...custom];
+  const db = getDb();
+  const enabledBuiltins = builtins.filter((source) => {
+    try {
+      const row = db.prepare('SELECT enabled FROM market_sources WHERE key = ?').get(source.key);
+      return row?.enabled !== 0;
+    } catch {
+      return true;
+    }
+  });
+  return [...enabledBuiltins, ...custom];
 }
 
 function getJsonPathValue(input, path) {
@@ -132,7 +141,7 @@ async function fetchCustomHttpSource(asset, source) {
   const url = fillTemplate(config.url_template || config.url, asset, source);
   if (!/^https?:\/\//i.test(url)) throw new Error('Invalid custom source URL');
   const headers = config.headers && typeof config.headers === 'object' ? config.headers : {};
-  const data = await httpGet(url, { timeout: Number(source.timeout_ms || config.timeout_ms || 5000), headers });
+  const data = await httpGet(url, { timeout: Number(source.timeout_ms || config.timeout_ms || 5000), headers, throwOnError: true });
   if (!data) return null;
   const price = Number(getJsonPathValue(data, config.price_path || 'price'));
   if (!Number.isFinite(price) || price <= 0) return null;
@@ -168,6 +177,30 @@ function providerSymbol(asset, provider, fallback) {
 
 function normalizeAssetSymbol(asset) {
   return String(asset?.symbol || '').trim().toUpperCase().replace(/[-_/\s].*$/, '');
+}
+
+function isUsdPeggedCrypto(asset) {
+  const symbol = normalizeAssetSymbol(asset);
+  const subtype = String(asset?.subtype || '').trim().toUpperCase();
+  return USD_PEGGED_SYMBOLS.has(symbol) || USD_PEGGED_SYMBOLS.has(subtype);
+}
+
+async function buildUsdPeggedCryptoQuote(asset) {
+  const rate = await getUsdCny();
+  const symbol = normalizeAssetSymbol(asset);
+
+  return {
+    usd: 1,
+    cny: Math.round(rate * 100) / 100,
+    ch24: 0,
+    ch7d: 0,
+    source: 'stablecoin-peg',
+    details: {
+      stablecoin: true,
+      symbol,
+      peg_currency: 'USD',
+    },
+  };
 }
 
 function isCryptoAsset(asset) {
@@ -242,7 +275,22 @@ export async function getUsdCny() {
 
 // ===== HTTP 工具 =====
 export function httpGet(url, opts = {}) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    function done(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    }
+
+    function fail(error) {
+      if (settled) return;
+      settled = true;
+      if (opts.throwOnError) reject(error);
+      else resolve(null);
+    }
+
     try {
       const lib = url.startsWith('https') ? https : http;
       const reqOpts = {
@@ -251,12 +299,27 @@ export function httpGet(url, opts = {}) {
       const req = lib.get(url, reqOpts, res => {
         let body = '';
         res.on('data', c => body += c);
-        res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
+        res.on('end', () => {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            fail(new Error(`HTTP ${res.statusCode}`));
+            return;
+          }
+
+          try {
+            done(JSON.parse(body));
+          } catch {
+            const summary = String(body || '').slice(0, 120).replace(/\s+/g, ' ');
+            fail(new Error(`Invalid JSON response${summary ? `: ${summary}` : ''}`));
+          }
+        });
       });
-      req.on('error', () => resolve(null));
-      req.setTimeout(opts.timeout || 8000, () => { req.destroy(); resolve(null); });
-    } catch {
-      resolve(null);
+      req.on('error', error => fail(new Error(error?.message || 'HTTP request failed')));
+      req.setTimeout(opts.timeout || 8000, () => {
+        req.destroy();
+        fail(new Error(`Request timeout after ${opts.timeout || 8000}ms`));
+      });
+    } catch (error) {
+      fail(error);
     }
   });
 }
@@ -292,6 +355,10 @@ async function fetchGoldNeodata(asset, isLondonGold) {
     'Remote-URL': 'https://jprx.m.qq.com/aizone/skillserver/v1/proxy/teamrouter_neodata/query',
   });
 
+  if (!data) {
+    throw new Error(`neodata proxy unavailable or returned invalid data on localhost:${port}`);
+  }
+
   const apiData = data?.data?.apiData?.apiRecall || [];
   for (const item of apiData) {
     for (const d of item.data || []) {
@@ -314,7 +381,7 @@ async function fetchGoldNeodata(asset, isLondonGold) {
 async function fetchPreciousMetalSwissquote(asset) {
   const metalCode = resolveMetalCode(asset);
   const instrument = providerSymbol(asset, 'swissquote', `${metalCode}/USD`).toUpperCase();
-  const data = await httpGet(`https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/${encodeURIComponent(instrument)}`, { timeout: 4500 });
+  const data = await httpGet(`https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/${encodeURIComponent(instrument)}`, { timeout: 4500, throwOnError: true });
   if (Array.isArray(data) && data.length > 0) {
     const prices = data[0]?.spreadProfilePrices;
     if (prices && prices.length > 0) {
@@ -332,10 +399,13 @@ export async function fetchPreciousMetal(asset) {
   const { symbol, currency } = asset;
   const isLondonGold = symbol?.includes('AUUSDO') || symbol?.includes('XAUUSD') || currency === 'USD';
   const enabledSources = getMarketSourceEntries('precious_metal', ['market_precious_metal_sources_enabled', 'market_gold_sources_enabled'], DEFAULT_PRECIOUS_METAL_SOURCES);
+  const failures = [];
 
   for (const sourceEntry of enabledSources) {
     const source = sourceEntry.key;
     if (isSourceInCooldown(source)) {
+      const reason = 'Source in cooldown';
+      failures.push({ source, reason });
       log.debug('Precious metal source skipped during cooldown', { source, symbol });
       continue;
     }
@@ -351,15 +421,19 @@ export async function fetchPreciousMetal(asset) {
         recordSourceSuccess(source);
         return result;
       }
-      recordSourceFailure(source, 'No data');
+      const reason = 'No valid price returned';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
       log.debug('Precious metal source returned no data', { source, symbol });
     } catch (e) {
-      recordSourceFailure(source, e?.message || 'Source failed');
-      log.warn('Precious metal source failed', { source, symbol, error: e?.message });
+      const reason = e?.message || 'Source failed';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
+      log.warn('Precious metal source failed', { source, symbol, error: reason });
     }
   }
 
-  log.warn('All precious metal sources failed', { symbol, enabledSources });
+  log.warn('All precious metal sources failed', { symbol, enabledSources, failures });
   return null;
 }
 
@@ -373,7 +447,7 @@ async function fetchCryptoCoinGecko(asset) {
   if (!id) return null;
   const cg = await httpGet(
     `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd&include_24hr_change=true&include_7d_change=true`,
-    { timeout: 4500 }
+    { timeout: 4500, throwOnError: true }
   );
   if (cg?.[id]) {
     const b = cg[id];
@@ -386,7 +460,7 @@ async function fetchCryptoCoinGecko(asset) {
 
 async function fetchCryptoBinance(asset) {
   const symbol = providerSymbol(asset, 'binance', `${normalizeAssetSymbol(asset)}USDT`).toUpperCase();
-  const ticker = await httpGet(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`, { timeout: 4500 });
+  const ticker = await httpGet(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`, { timeout: 4500, throwOnError: true });
   if (ticker?.lastPrice) {
     const price = parseFloat(ticker.lastPrice);
     const change = parseFloat(ticker.priceChangePercent) || 0;
@@ -399,7 +473,7 @@ async function fetchCryptoBinance(asset) {
 
 async function fetchCryptoCoinbase(asset) {
   const pair = providerSymbol(asset, 'coinbase', `${normalizeAssetSymbol(asset)}-USD`).toUpperCase();
-  const data = await httpGet(`https://api.coinbase.com/v2/prices/${encodeURIComponent(pair)}/spot`, { timeout: 4500 });
+  const data = await httpGet(`https://api.coinbase.com/v2/prices/${encodeURIComponent(pair)}/spot`, { timeout: 4500, throwOnError: true });
   const price = Number(data?.data?.amount);
   if (Number.isFinite(price) && price > 0) {
     log.info('Crypto price (Coinbase)', { pair, usd: price });
@@ -413,7 +487,7 @@ async function fetchCryptoKraken(asset) {
   const symbol = normalizeAssetSymbol(asset);
   const pairName = symbol === 'BTC' ? 'XBTUSD' : `${symbol}USD`;
   const pairParam = providerSymbol(asset, 'kraken', pairName).toUpperCase();
-  const data = await httpGet(`https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(pairParam)}`, { timeout: 4500 });
+  const data = await httpGet(`https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(pairParam)}`, { timeout: 4500, throwOnError: true });
   const pair = data?.result ? Object.values(data.result)[0] : null;
   const price = Number(pair?.c?.[0]);
   const open24 = Number(pair?.o);
@@ -428,7 +502,7 @@ async function fetchCryptoKraken(asset) {
 
 async function fetchCryptoOKX(asset) {
   const instId = providerSymbol(asset, 'okx', `${normalizeAssetSymbol(asset)}-USDT`).toUpperCase();
-  const data = await httpGet(`https://www.okx.com/api/v5/market/ticker?instId=${encodeURIComponent(instId)}`, { timeout: 4500 });
+  const data = await httpGet(`https://www.okx.com/api/v5/market/ticker?instId=${encodeURIComponent(instId)}`, { timeout: 4500, throwOnError: true });
   const item = Array.isArray(data?.data) ? data.data[0] : null;
   const price = Number(item?.last);
   const open24 = Number(item?.open24h);
@@ -443,7 +517,7 @@ async function fetchCryptoOKX(asset) {
 
 async function fetchCryptoBitstamp(asset) {
   const pairName = providerSymbol(asset, 'bitstamp', `${normalizeAssetSymbol(asset)}USD`).toLowerCase();
-  const data = await httpGet(`https://www.bitstamp.net/api/v2/ticker/${encodeURIComponent(pairName)}/`, { timeout: 4500 });
+  const data = await httpGet(`https://www.bitstamp.net/api/v2/ticker/${encodeURIComponent(pairName)}/`, { timeout: 4500, throwOnError: true });
   const price = Number(data?.last);
   const open24 = Number(data?.open);
   if (Number.isFinite(price) && price > 0) {
@@ -457,7 +531,7 @@ async function fetchCryptoBitstamp(asset) {
 
 async function fetchCryptoGemini(asset) {
   const pairName = providerSymbol(asset, 'gemini', `${normalizeAssetSymbol(asset)}USD`).toUpperCase();
-  const data = await httpGet(`https://api.gemini.com/v2/ticker/${encodeURIComponent(pairName)}`, { timeout: 4500 });
+  const data = await httpGet(`https://api.gemini.com/v2/ticker/${encodeURIComponent(pairName)}`, { timeout: 4500, throwOnError: true });
   const price = Number(data?.close);
   const open24 = Number(data?.open);
   if (Number.isFinite(price) && price > 0) {
@@ -474,6 +548,11 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
   const symbol = normalizeAssetSymbol(asset);
   log.debug('Fetching crypto price', { symbol });
 
+  if (isUsdPeggedCrypto(asset)) {
+    log.info('Stablecoin price resolved by USD peg', { symbol });
+    return buildUsdPeggedCryptoQuote(asset);
+  }
+
   const enabledSources = getMarketSourceEntries('crypto', ['market_crypto_sources_enabled', 'market_btc_sources_enabled'], DEFAULT_CRYPTO_SOURCES);
   const fetchers = {
     coingecko: fetchCryptoCoinGecko,
@@ -484,15 +563,21 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
     bitstamp: fetchCryptoBitstamp,
     gemini: fetchCryptoGemini,
   };
+  const failures = [];
 
   for (const sourceEntry of enabledSources) {
     const source = sourceEntry.key;
     if (isSourceInCooldown(source)) {
+      const reason = 'Source in cooldown';
+      failures.push({ source, reason });
       log.debug('Crypto source skipped during cooldown', { source, symbol });
       continue;
     }
     const fetcher = sourceEntry.source_type === 'custom_http' ? null : fetchers[source];
-    if (!fetcher && sourceEntry.source_type !== 'custom_http') continue;
+    if (!fetcher && sourceEntry.source_type !== 'custom_http') {
+      failures.push({ source, reason: 'No fetcher registered' });
+      continue;
+    }
     try {
       const result = sourceEntry.source_type === 'custom_http'
         ? await fetchCustomHttpSource(asset, sourceEntry)
@@ -501,15 +586,19 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
         recordSourceSuccess(source);
         return result;
       }
-      recordSourceFailure(source, 'No data');
+      const reason = 'No valid price returned';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
       log.debug('Crypto source returned no data', { source, symbol });
     } catch (e) {
-      recordSourceFailure(source, e?.message || 'Source failed');
-      log.warn('Crypto source failed', { source, symbol, error: e?.message });
+      const reason = e?.message || 'Source failed';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
+      log.warn('Crypto source failed', { source, symbol, error: reason });
     }
   }
 
-  log.warn('All crypto sources failed', { symbol, enabledSources });
+  log.warn('All crypto sources failed', { symbol, enabledSources, failures });
   return null;
 }
 

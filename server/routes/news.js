@@ -18,9 +18,93 @@ function extractJSON(text) {
   return null;
 }
 
-function truncateForTranslation(text, max = 12000) {
-  const value = String(text || '').trim();
-  return value.length > max ? `${value.slice(0, max)}\n\n[内容过长，已截断翻译]` : value;
+function splitArticleParagraphs(text) {
+  return String(text || '')
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}|(?<=。|！|？|\.|!|\?)\s+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function detectLanguage(text) {
+  const value = String(text || '');
+  if (!value.trim()) return 'unknown';
+  const cjk = (value.match(/[\u4e00-\u9fff]/g) || []).length;
+  const kana = (value.match(/[\u3040-\u30ff]/g) || []).length;
+  const hangul = (value.match(/[\uac00-\ud7af]/g) || []).length;
+  const latin = (value.match(/[A-Za-z]/g) || []).length;
+  if (cjk > Math.max(latin * 0.3, 8)) return 'zh';
+  if (kana > 8) return 'ja';
+  if (hangul > 8) return 'ko';
+  if (latin > 20) return 'en';
+  return 'unknown';
+}
+
+function resolveTargetLanguage(requestedTarget, sourceLanguage) {
+  if (requestedTarget && requestedTarget !== 'auto') return requestedTarget;
+  return sourceLanguage === 'zh' ? 'English' : '简体中文';
+}
+
+function buildTranslationChunks(text, { maxChars = 1000, maxChunks = 8 } = {}) {
+  const paragraphs = splitArticleParagraphs(text);
+  const chunks = [];
+  let current = [];
+  let currentLength = 0;
+
+  for (const paragraph of paragraphs) {
+    const nextLength = currentLength + paragraph.length + 2;
+    if (current.length && nextLength > maxChars) {
+      chunks.push(current.join('\n\n'));
+      current = [];
+      currentLength = 0;
+      if (chunks.length >= maxChunks) break;
+    }
+    current.push(paragraph.slice(0, maxChars));
+    currentLength += paragraph.length + 2;
+  }
+  if (current.length && chunks.length < maxChunks) chunks.push(current.join('\n\n'));
+  return chunks;
+}
+
+async function translateMetadata({ callLLM, config, targetLanguage, title, summary }) {
+  const response = await callLLM(config.apiUrl, config.apiKey, config.analysisModel || config.model, [
+    { role: 'system', content: '你是专业财经资讯翻译助手。只输出严格 JSON，不要 markdown。' },
+    { role: 'user', content: `请把标题和摘要翻译成${targetLanguage}，保留事实和数字。返回严格 JSON：{"title":"...","summary":"..."}\n\n标题：\n${title || ''}\n\n摘要：\n${summary || ''}` },
+  ], { temperature: 0.1, maxTokens: 900, timeout: 25000, retries: 0 });
+  const parsed = extractJSON(response?.choices?.[0]?.message?.content || '');
+  if (!parsed) throw new Error('标题/摘要翻译结果解析失败');
+  return {
+    title: String(parsed.title || title || ''),
+    summary: String(parsed.summary || summary || ''),
+  };
+}
+
+async function translateContentChunk({ callLLM, config, targetLanguage, chunk, index, total }) {
+  const response = await callLLM(config.apiUrl, config.apiKey, config.analysisModel || config.model, [
+    { role: 'system', content: '你是专业财经资讯翻译助手。只输出翻译后的正文，不要解释，不要 markdown。' },
+    { role: 'user', content: `请把下面第 ${index + 1}/${total} 段资讯正文翻译成${targetLanguage}。尽量保留原有段落，用空行分隔。\n\n${chunk}` },
+  ], { temperature: 0.1, maxTokens: 1800, timeout: 30000, retries: 0 });
+  const translated = String(response?.choices?.[0]?.message?.content || '').trim();
+  if (!translated) throw new Error(`第 ${index + 1} 段翻译为空`);
+  return translated.replace(/^```(?:\w+)?\s*|```$/g, '').trim();
+}
+
+async function translateContentChunksSafely({ callLLM, config, targetLanguage, chunks }) {
+  const translatedChunks = [];
+  const warnings = [];
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      translatedChunks.push(await translateContentChunk({ callLLM, config, targetLanguage, chunk: chunks[i], index: i, total: chunks.length }));
+    } catch (error) {
+      warnings.push(error.message || `第 ${i + 1} 段翻译失败`);
+      translatedChunks.push(chunks[i]);
+    }
+  }
+  return { content: translatedChunks.join('\n\n'), warnings };
+}
+
+function writeNdjson(res, event, data = {}) {
+  res.write(`${JSON.stringify({ event, ...data })}\n`);
 }
 
 // GET 新闻列表
@@ -93,6 +177,17 @@ router.post('/:id/translate', async (req, res) => {
   const db = getDb();
   let row = db.prepare('SELECT id, title, summary, url, content, cache_status FROM news WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+  const sourceLanguage = detectLanguage(`${row.title || ''}\n${row.summary || ''}\n${row.content || ''}`);
+  const targetLanguage = resolveTargetLanguage(req.body?.target_language || 'auto', sourceLanguage);
+  const force = req.body?.force === true;
+
+  if (!force) {
+    const cached = db.prepare(`SELECT title, summary, content, target_language, updated_at
+      FROM news_translations
+      WHERE news_id = ? AND target_language = ? AND status = 'cached'
+      LIMIT 1`).get(row.id, targetLanguage);
+    if (cached) return res.json({ success: true, data: { ...cached, cached: true } });
+  }
 
   if (!row.content && row.url) {
     await cacheNewsContent(row.id);
@@ -106,28 +201,134 @@ router.post('/:id/translate', async (req, res) => {
       return res.status(400).json({ success: false, error: 'AI 翻译未配置，请先在设置中配置 AI API。' });
     }
 
-    const targetLanguage = req.body?.target_language || '简体中文';
-    const prompt = `请把以下资讯翻译成${targetLanguage}，保留事实和数字，不添加评论。返回严格 JSON：{"title":"...","summary":"...","content":"..."}。\n\n标题：\n${row.title || ''}\n\n摘要：\n${row.summary || ''}\n\n正文：\n${truncateForTranslation(row.content || row.summary || '')}`;
-    const response = await callLLM(config.apiUrl, config.apiKey, config.analysisModel || config.model, [
-      { role: 'system', content: '你是专业财经资讯翻译助手。只输出严格 JSON，不要 markdown。' },
-      { role: 'user', content: prompt },
-    ], { temperature: 0.1, maxTokens: 3000, timeout: 60000, retries: 1 });
+    db.prepare(`INSERT INTO news_translations (news_id, target_language, status, updated_at)
+      VALUES (?, ?, 'fetching', datetime('now'))
+      ON CONFLICT(news_id, target_language) DO UPDATE SET status = 'fetching', error = NULL, updated_at = datetime('now')`).run(row.id, targetLanguage);
 
-    const content = response?.choices?.[0]?.message?.content || '';
-    const parsed = extractJSON(content);
-    if (!parsed) return res.status(502).json({ success: false, error: '翻译结果解析失败' });
+    const metadata = await translateMetadata({ callLLM, config, targetLanguage, title: row.title, summary: row.summary });
+    const sourceContent = row.content || row.summary || '';
+    const chunks = buildTranslationChunks(sourceContent);
+    const translated = await translateContentChunksSafely({ callLLM, config, targetLanguage, chunks });
+    const translatedContent = translated.content;
+
+    db.prepare(`INSERT INTO news_translations (news_id, target_language, title, summary, content, status, error, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'cached', NULL, datetime('now'))
+      ON CONFLICT(news_id, target_language) DO UPDATE SET
+        title = excluded.title,
+        summary = excluded.summary,
+        content = excluded.content,
+        status = 'cached',
+        error = NULL,
+        updated_at = datetime('now')`).run(row.id, targetLanguage, metadata.title, metadata.summary, translatedContent || metadata.summary);
 
     res.json({
       success: true,
       data: {
-        title: String(parsed.title || row.title || ''),
-        summary: String(parsed.summary || row.summary || ''),
-        content: String(parsed.content || row.content || row.summary || ''),
+        title: metadata.title,
+        summary: metadata.summary,
+        content: translatedContent || metadata.summary,
+        source_language: sourceLanguage,
         target_language: targetLanguage,
+        cached: false,
+        chunks: chunks.length,
+        warnings: translated.warnings,
       },
     });
   } catch (error) {
+    try {
+      db.prepare(`INSERT INTO news_translations (news_id, target_language, status, error, updated_at)
+        VALUES (?, ?, 'failed', ?, datetime('now'))
+        ON CONFLICT(news_id, target_language) DO UPDATE SET status = 'failed', error = excluded.error, updated_at = datetime('now')`)
+        .run(row.id, targetLanguage, error.message || '翻译失败');
+    } catch {}
     res.status(500).json({ success: false, error: error.message || '翻译失败' });
+  }
+});
+
+// POST 流式翻译新闻：逐段返回 NDJSON，前端可边翻译边显示
+router.post('/:id/translate/stream', async (req, res) => {
+  const db = getDb();
+  let row = db.prepare('SELECT id, title, summary, url, content, cache_status FROM news WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ success: false, error: 'Not found' });
+
+  if (!row.content && row.url) {
+    await cacheNewsContent(row.id);
+    row = db.prepare('SELECT id, title, summary, url, content, cache_status FROM news WHERE id = ?').get(req.params.id);
+  }
+
+  const sourceLanguage = detectLanguage(`${row.title || ''}\n${row.summary || ''}\n${row.content || ''}`);
+  const targetLanguage = resolveTargetLanguage(req.body?.target_language || 'auto', sourceLanguage);
+  const force = req.body?.force === true;
+
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  writeNdjson(res, 'start', { source_language: sourceLanguage, target_language: targetLanguage });
+
+  try {
+    if (!force) {
+      const cached = db.prepare(`SELECT title, summary, content, target_language, updated_at
+        FROM news_translations
+        WHERE news_id = ? AND target_language = ? AND status = 'cached'
+        LIMIT 1`).get(row.id, targetLanguage);
+      if (cached) {
+        writeNdjson(res, 'done', { data: { ...cached, source_language: sourceLanguage, cached: true } });
+        return res.end();
+      }
+    }
+
+    const { getAgentConfig, callLLM } = await import('../services/strategy-agent.js');
+    const config = getAgentConfig(db);
+    if (!config.apiUrl || !config.apiKey) {
+      writeNdjson(res, 'error', { error: 'AI 翻译未配置，请先在设置中配置 AI API。' });
+      return res.end();
+    }
+
+    db.prepare(`INSERT INTO news_translations (news_id, target_language, status, updated_at)
+      VALUES (?, ?, 'fetching', datetime('now'))
+      ON CONFLICT(news_id, target_language) DO UPDATE SET status = 'fetching', error = NULL, updated_at = datetime('now')`).run(row.id, targetLanguage);
+
+    const metadata = await translateMetadata({ callLLM, config, targetLanguage, title: row.title, summary: row.summary });
+    writeNdjson(res, 'meta', { data: { ...metadata, source_language: sourceLanguage, target_language: targetLanguage } });
+
+    const chunks = buildTranslationChunks(row.content || row.summary || '');
+    const translatedChunks = [];
+    const warnings = [];
+    for (let i = 0; i < chunks.length; i++) {
+      let text = chunks[i];
+      writeNdjson(res, 'chunk_start', { index: i, total: chunks.length });
+      try {
+        text = await translateContentChunk({ callLLM, config, targetLanguage, chunk: chunks[i], index: i, total: chunks.length });
+      } catch (error) {
+        warnings.push(error.message || `第 ${i + 1} 段翻译失败`);
+      }
+      translatedChunks.push(text);
+      writeNdjson(res, 'chunk', { index: i, total: chunks.length, text, warnings: warnings.slice() });
+    }
+
+    const content = translatedChunks.join('\n\n');
+    db.prepare(`INSERT INTO news_translations (news_id, target_language, title, summary, content, status, error, updated_at)
+      VALUES (?, ?, ?, ?, ?, 'cached', NULL, datetime('now'))
+      ON CONFLICT(news_id, target_language) DO UPDATE SET
+        title = excluded.title,
+        summary = excluded.summary,
+        content = excluded.content,
+        status = 'cached',
+        error = NULL,
+        updated_at = datetime('now')`).run(row.id, targetLanguage, metadata.title, metadata.summary, content || metadata.summary);
+
+    writeNdjson(res, 'done', { data: { ...metadata, content: content || metadata.summary, source_language: sourceLanguage, target_language: targetLanguage, cached: false, chunks: chunks.length, warnings } });
+    res.end();
+  } catch (error) {
+    try {
+      db.prepare(`INSERT INTO news_translations (news_id, target_language, status, error, updated_at)
+        VALUES (?, ?, 'failed', ?, datetime('now'))
+        ON CONFLICT(news_id, target_language) DO UPDATE SET status = 'failed', error = excluded.error, updated_at = datetime('now')`)
+        .run(row.id, targetLanguage, error.message || '翻译失败');
+    } catch {}
+    writeNdjson(res, 'error', { error: error.message || '翻译失败' });
+    res.end();
   }
 });
 

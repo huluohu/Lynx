@@ -1,9 +1,9 @@
 <template>
-  <div>
-    <div class="page-header">
+  <div class="asset-form-page" :class="{ embedded }">
+    <div v-if="!embedded" class="page-header">
       <h1 class="page-title">{{ t('assets.addTitle') }}</h1>
     </div>
-    <div class="card" style="max-width:600px">
+    <div class="card asset-form-card">
       <form @submit.prevent="submit">
         <div class="section-title">{{ t('assets.sections.basic') }}</div>
         <div class="form-row">
@@ -103,9 +103,10 @@
           </div>
         </div>
 
-        <MobileActionBar>
+        <MobileActionBar :drawer="embedded">
           <button type="submit" class="btn btn-primary" :disabled="submitting">{{ submitting ? t('assets.creating') : t('assets.createAsset') }}</button>
-          <router-link to="/assets" class="btn">{{ t('common.cancel') }}</router-link>
+          <button v-if="embedded" type="button" class="btn" @click="emit('cancel')">{{ t('common.cancel') }}</button>
+          <router-link v-else to="/assets" class="btn">{{ t('common.cancel') }}</router-link>
         </MobileActionBar>
       </form>
     </div>
@@ -121,6 +122,8 @@ import { useToast } from '../utils/toast.js'
 import MobileActionBar from '../components/MobileActionBar.vue'
 
 const router = useRouter()
+const props = defineProps({ embedded: { type: Boolean, default: false } })
+const emit = defineEmits(['created', 'cancel'])
 const { t } = useI18n()
 const toast = useToast()
 const submitting = ref(false)
@@ -216,7 +219,11 @@ async function submit() {
       if (!hJson.success) { toast.error(t('assets.holdingInitFailed', { message: hJson.error })); }
     }
     toast.success(t('assets.createdSuccess'))
-    router.push('/assets')
+    if (props.embedded) {
+      emit('created', json.data)
+    } else {
+      router.push('/assets')
+    }
   } catch (e) {
     toast.error(t('assets.createFailed', { message: e.message }))
   } finally {
@@ -226,6 +233,22 @@ async function submit() {
 </script>
 
 <style scoped>
+.asset-form-page {
+  max-width: 600px;
+}
+.asset-form-page.embedded {
+  max-width: none;
+}
+.asset-form-card {
+  max-width: 600px;
+}
+.asset-form-page.embedded .asset-form-card {
+  max-width: none;
+  margin-bottom: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
 .crypto-presets { margin-bottom: 16px; }
 .preset-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
 .preset-btn {
@@ -238,8 +261,11 @@ async function submit() {
 .preset-icon { font-size: 20px; }
 .preset-name { font-size: 11px; color: var(--text-dim); }
 @media (max-width: 768px) {
-  .card {
+  .asset-form-card {
     margin-bottom: 120px;
+  }
+  .asset-form-page.embedded .asset-form-card {
+    margin-bottom: 0;
   }
   .preset-grid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
   .preset-btn { padding: 8px 2px; }

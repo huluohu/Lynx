@@ -1,4 +1,4 @@
-列表页<template>
+<template>
   <Teleport to="body">
     <Transition :name="isMobile ? 'sheet' : 'drawer'">
       <div v-if="modelValue" class="overlay" :class="{ 'overlay-mobile': isMobile }" @click.self="close">

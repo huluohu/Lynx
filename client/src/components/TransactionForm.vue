@@ -37,7 +37,7 @@
       <label class="form-label">{{ t('transactionForm.notes') }}</label>
       <textarea class="form-textarea" v-model="form.reason" :placeholder="t('transactionForm.notesPlaceholder')" rows="2"></textarea>
     </div>
-    <MobileActionBar>
+    <MobileActionBar drawer>
       <button type="submit" class="btn btn-primary" :disabled="submitting">
         {{ submitting ? t('transactionForm.submitting') : t('transactionForm.submit') }}
       </button>

@@ -73,9 +73,8 @@
       </div>
     </div>
 
-    <div class="card" v-if="showForm" style="max-width:540px;margin-bottom:20px">
-      <div class="section-title">{{ t('history.recordTrade') }}</div>
-      <form @submit.prevent="addRecord">
+    <AppDrawer v-model="showForm" :title="t('history.recordTrade')" width="560px" mobileHeight="fullscreen">
+      <form id="history-create-form" class="history-create-form" @submit.prevent="addRecord">
         <div class="form-row">
           <div class="form-group">
               <label class="form-label">{{ t('history.asset') }}</label>
@@ -112,12 +111,14 @@
           <div class="form-group"><label class="form-label">{{ t('history.pnlRate') }}</label><input class="form-input" type="number" step="any" v-model="form.pnl_pct" /></div>
         </div>
         <div class="form-group"><label class="form-label">{{ t('history.reason') }}</label><textarea class="form-textarea" v-model="form.reason" :placeholder="t('history.reasonPlaceholder')"></textarea></div>
-        <div style="display:flex;gap:12px">
-          <button type="submit" class="btn btn-primary" :disabled="submitting">{{ t('history.save') }}</button>
-          <button type="button" class="btn" @click="showForm=false">{{ t('common.cancel') }}</button>
-        </div>
       </form>
-    </div>
+      <template #footer>
+        <div class="history-drawer-actions">
+          <button type="button" class="btn" @click="cancelCreateRecord">{{ t('common.cancel') }}</button>
+          <button type="submit" form="history-create-form" class="btn btn-primary" :disabled="submitting">{{ submitting ? t('common.sending') : t('history.save') }}</button>
+        </div>
+      </template>
+    </AppDrawer>
 
     <div class="card" v-if="history.length">
       <table class="hide-mobile">
@@ -436,6 +437,11 @@ function resetForm() {
   form.reason = ''
 }
 
+function cancelCreateRecord() {
+  showForm.value = false
+  resetForm()
+}
+
 function resetFilters() {
   filters.asset_id = ''
   filters.type = ''
@@ -648,11 +654,19 @@ onUnmounted(() => {
 watch(filterDrawerOpen, (open) => {
   if (open) syncDraftFilters()
 })
+watch(showForm, (open) => {
+  if (!open && !submitting.value) resetForm()
+})
 </script>
 
 <style scoped>
 .hide-mobile { display: table; }
 .show-mobile { display: none !important; }
+.history-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .currency-help { margin-top: 6px; font-size: 12px; color: var(--text-dim); }
 .history-drawer-actions {
   display: flex;
@@ -710,7 +724,6 @@ watch(filterDrawerOpen, (open) => {
 .history-card-body { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 13px; }
 .history-card-currency { font-size: 12px; color: var(--text-muted); }
 .history-card-reason { margin-top: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
-.history-card-actions { margin-top: 12px; }
 
 .detail-drawer-content { display: flex; flex-direction: column; gap: 16px; }
 .detail-section { background: var(--bg); border-radius: 10px; padding: 4px 0; }

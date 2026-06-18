@@ -62,6 +62,10 @@
           <AppIcon name="news" class="nav-icon" />
           {{ t('nav.news') }}
         </router-link>
+        <router-link to="/data-sources" class="nav-item" @click="sidebarOpen = false">
+          <AppIcon name="market" class="nav-icon" />
+          {{ t('nav.dataSources') }}
+        </router-link>
 
         <div class="nav-section">{{ t('nav.sections.system') }}</div>
         <router-link to="/settings" class="nav-item" @click="sidebarOpen = false">
@@ -209,6 +213,10 @@
             <router-link to="/news" class="action-sheet-item" @click="moreMenuOpen = false">
               <AppIcon name="news" class="nav-icon" />
               {{ t('nav.news') }}
+            </router-link>
+            <router-link to="/data-sources" class="action-sheet-item" @click="moreMenuOpen = false">
+              <AppIcon name="market" class="nav-icon" />
+              {{ t('nav.dataSources') }}
             </router-link>
             <div class="action-sheet-group-label">{{ t('nav.sections.strategy') }}</div>
             <router-link to="/plans" class="action-sheet-item" @click="moreMenuOpen = false">
