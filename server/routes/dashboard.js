@@ -67,8 +67,12 @@ function buildSummary(db, usdCny) {
 
   // 活跃计划
   const activePlans = db.prepare(`SELECT p.*, a.name as asset_name, a.symbol
-    FROM trading_plans p JOIN assets a ON p.asset_id = a.id
-    WHERE p.status IN ('pending', 'triggered') ORDER BY p.seq`).all();
+    FROM trading_plans p
+    JOIN assets a ON p.asset_id = a.id
+    LEFT JOIN plan_sets ps ON ps.id = p.plan_set_id
+    WHERE p.status IN ('pending', 'triggered', 'partial')
+      AND (p.plan_set_id IS NULL OR ps.status = 'active')
+    ORDER BY p.seq`).all();
 
   const activeStrategyCount = db.prepare(`
     SELECT COUNT(*) AS count

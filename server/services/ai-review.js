@@ -223,10 +223,11 @@ export async function generateStrategyReview(strategyId) {
     }
   }
 
-  const info = db.prepare(`INSERT INTO strategy_reviews (strategy_id, review_type, summary, performance_score, deviation_analysis, recommendations, market_context)
-    VALUES (?, 'periodic', ?, ?, ?, ?, ?)`)
+  const info = db.prepare(`INSERT INTO strategy_reviews (strategy_id, plan_set_id, review_type, summary, performance_score, deviation_analysis, recommendations, market_context)
+    VALUES (?, ?, 'periodic', ?, ?, ?, ?, ?)`)
     .run(
       strategyId,
+      activePlanSet?.id || null,
       result.summary || '',
       result.performance_score ?? 5,
       JSON.stringify(result.deviation_analysis || null),

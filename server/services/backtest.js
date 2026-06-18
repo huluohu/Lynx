@@ -205,7 +205,7 @@ export function runBacktest(strategyId) {
 
   if (!strategy) throw new Error('策略不存在');
 
-  const { plans } = loadActivePlanSetPlans(db, strategyId);
+  const { planSet, plans } = loadActivePlanSetPlans(db, strategyId);
   if (!plans.length) throw new Error('策略暂无操盘计划');
 
   const assetId = strategy.asset_id || plans[0]?.asset_id;
@@ -220,11 +220,12 @@ export function runBacktest(strategyId) {
   const simulation = simulateBacktest({ strategy, plans, prices, assetId });
 
   const insert = db.prepare(`INSERT INTO backtest_results (
-      strategy_id, asset_id, start_date, end_date, initial_investment, final_value,
+      strategy_id, plan_set_id, asset_id, start_date, end_date, initial_investment, final_value,
       total_return_pct, max_drawdown_pct, win_rate, total_trades, sharpe_ratio, details
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const info = insert.run(
     strategy.id,
+    planSet.id,
     assetId,
     simulation.start_date,
     simulation.end_date,

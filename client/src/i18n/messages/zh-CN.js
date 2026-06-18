@@ -330,7 +330,7 @@ export default {
     },
   },
   history: {
-    title: '操盘历史',
+    title: '交易历史',
     addRecord: '添加记录',
     filterRecords: '筛选记录',
     asset: '资产',
@@ -743,7 +743,7 @@ export default {
     triggerTime: '时间',
   },
   strategyList: {
-    title: '策略管理',
+    title: '策略中心',
     drafts: '草稿',
     compare: 'AI 对比方案',
     aiGenerate: 'AI 生成',

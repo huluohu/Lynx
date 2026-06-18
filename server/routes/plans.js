@@ -90,6 +90,9 @@ router.get('/', (req, res) => {
   if (include_cancelled !== '1') {
     sql += " AND p.status != 'cancelled'";
   }
+  if (!plan_set_id && include_superseded !== '1') {
+    sql += " AND (p.plan_set_id IS NULL OR ps.status = 'active')";
+  }
   if (strategy_id) {
     sql += ' AND p.strategy_id = ?';
     params.push(strategy_id);

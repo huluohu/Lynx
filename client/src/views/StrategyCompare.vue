@@ -141,9 +141,11 @@
                 <div v-else class="empty-inline">{{ t('strategyCompare.noPlans') }}</div>
               </div>
 
-              <button class="btn btn-primary" style="width:100%;margin-top:16px" @click="adoptStrategy(item)" :disabled="savingRiskLevel === item.risk_level">
-                {{ savingRiskLevel === item.risk_level ? t('strategyCompare.saving') : t('strategyCompare.adopt') }}
-              </button>
+              <div class="compare-card-actions">
+                <button class="btn btn-primary compare-adopt-btn" @click="adoptStrategy(item)" :disabled="savingRiskLevel === item.risk_level">
+                  {{ savingRiskLevel === item.risk_level ? t('strategyCompare.saving') : t('strategyCompare.adopt') }}
+                </button>
+              </div>
             </template>
           </div>
         </div>
@@ -435,9 +437,12 @@ onUnmounted(() => {
 .compare-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
   gap: 16px;
 }
 .compare-card {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
@@ -533,6 +538,13 @@ onUnmounted(() => {
 .empty-inline {
   font-size: 12px;
   color: var(--text-muted);
+}
+.compare-card-actions {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.compare-adopt-btn {
+  width: 100%;
 }
 @media (max-width: 960px) {
   .compare-grid { grid-template-columns: 1fr; }

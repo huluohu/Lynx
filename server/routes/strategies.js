@@ -387,17 +387,31 @@ router.post('/:id/review', async (req, res) => {
 
 // GET /api/strategies/:id/reviews — get review history
 router.get('/:id/reviews', (req, res) => {
-  const rows = getDb().prepare(`SELECT * FROM strategy_reviews
-    WHERE strategy_id = ?
-    ORDER BY created_at DESC, id DESC`).all(req.params.id).map(normalizeReview);
+  const db = getDb();
+  const activePlanSetId = getActivePlanSetId(db, req.params.id);
+  const params = [req.params.id];
+  let sql = 'SELECT * FROM strategy_reviews WHERE strategy_id = ?';
+  if (req.query.include_superseded !== '1' && activePlanSetId) {
+    sql += ' AND plan_set_id = ?';
+    params.push(activePlanSetId);
+  }
+  sql += ' ORDER BY created_at DESC, id DESC';
+  const rows = db.prepare(sql).all(...params).map(normalizeReview);
   res.json({ success: true, data: rows });
 });
 
 // GET 策略回测结果
 router.get('/:id/backtest-results', (req, res) => {
-  const rows = getDb().prepare(`SELECT * FROM backtest_results
-    WHERE strategy_id = ?
-    ORDER BY created_at DESC, id DESC`).all(req.params.id).map(row => {
+  const db = getDb();
+  const activePlanSetId = getActivePlanSetId(db, req.params.id);
+  const params = [req.params.id];
+  let sql = 'SELECT * FROM backtest_results WHERE strategy_id = ?';
+  if (req.query.include_superseded !== '1' && activePlanSetId) {
+    sql += ' AND plan_set_id = ?';
+    params.push(activePlanSetId);
+  }
+  sql += ' ORDER BY created_at DESC, id DESC';
+  const rows = db.prepare(sql).all(...params).map(row => {
       let details = [];
       try { details = row.details ? JSON.parse(row.details) : []; } catch {}
       return normalizeBacktestRow({ ...row, details });

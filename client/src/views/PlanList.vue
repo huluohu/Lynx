@@ -333,7 +333,8 @@ function statusBadge(status) {
 }
 
 function canExecute(plan) {
-  return ['pending', 'triggered', 'partial'].includes(plan.status)
+  const planSetExecutable = !plan.plan_set_id || plan.plan_set_status === 'active'
+  return planSetExecutable && ['pending', 'triggered', 'partial'].includes(plan.status)
 }
 
 function quantityText(value) {
