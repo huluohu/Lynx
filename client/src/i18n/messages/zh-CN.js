@@ -330,7 +330,7 @@ export default {
     },
   },
   history: {
-    title: '交易历史',
+    title: '交易记录',
     addRecord: '添加记录',
     filterRecords: '筛选记录',
     asset: '资产',

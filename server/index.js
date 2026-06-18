@@ -90,22 +90,6 @@ if (!existsSync(distDir)) {
   log.info('Production mode - serving static files from dist/');
 }
 
-// ===== 启动 =====
-app.listen(PORT, () => {
-  log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/lynx.db' });
-  startMonitor();
-
-  // 启动后延迟30秒拉取新闻（避免阻塞启动）
-  setTimeout(async () => {
-    try {
-      const { fetchAllNews } = await import('./services/news.js');
-      await fetchAllNews();
-    } catch (e) {
-      log.warn('Initial news fetch failed', { error: e.message });
-    }
-  }, 30000);
-});
-
 // 定时拉取新闻（从设置读取间隔）
 let newsTimer = null;
 export async function scheduleNewsFetch() {
@@ -125,7 +109,36 @@ export async function scheduleNewsFetch() {
     log.warn('News scheduler setup failed', { error: e.message });
   }
 }
-scheduleNewsFetch();
+
+// ===== 启动 =====
+const server = app.listen(PORT, () => {
+  log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/lynx.db' });
+  startMonitor();
+  scheduleNewsFetch();
+
+  // 启动后延迟30秒拉取新闻（避免阻塞启动）
+  setTimeout(async () => {
+    try {
+      const { fetchAllNews } = await import('./services/news.js');
+      await fetchAllNews();
+    } catch (e) {
+      log.warn('Initial news fetch failed', { error: e.message });
+    }
+  }, 30000);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    log.error('Port already in use', {
+      port: PORT,
+      hint: `Another Lynx server may already be running. Try: lsof -nP -iTCP:${PORT} -sTCP:LISTEN`,
+    });
+  } else {
+    log.error('Server failed to start', { error: err.message, stack: err.stack });
+  }
+  closeDb();
+  process.exit(1);
+});
 
 // 优雅关闭
 process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); closeDb(); process.exit(0); });

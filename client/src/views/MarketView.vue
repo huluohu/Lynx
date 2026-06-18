@@ -303,7 +303,8 @@ onUnmounted(() => {
 <style scoped>
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
-.market-swipe-item { border-radius: 12px; }
+.market-swipe-item { border-radius: 12px; height: 100%; }
+.market-swipe-item :deep(.swipe-action-content) { height: 100%; }
 .market-card { height: 100%; margin-bottom: 0; transition: transform 0.15s; cursor: pointer; }
 .market-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .market-card:hover { transform: translateY(-1px); }
@@ -350,6 +351,10 @@ onUnmounted(() => {
   font-family: inherit;
   font-size: 13px;
   font-weight: 700;
+}
+@media (min-width: 769px) {
+  .market-swipe-item :deep(.swipe-action-content) { transform: none !important; }
+  .market-swipe-item :deep(.swipe-action-actions) { display: none; }
 }
 @media (max-width: 768px) {
   .market-price { font-size: 24px; }
