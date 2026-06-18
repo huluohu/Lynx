@@ -4,6 +4,8 @@ import { getDb } from '../db/database.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('push');
+const PUSH_MAX_ATTEMPTS = Math.max(1, Number(process.env.PUSH_MAX_ATTEMPTS || 3));
+const PUSH_RETRY_DELAYS_MS = [800, 2000];
 
 /**
  * Supported push channels:
@@ -77,6 +79,27 @@ function postWebhook(url, payload) {
   });
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function postWebhookWithRetry(url, payload) {
+  let lastError;
+  for (let attempt = 1; attempt <= PUSH_MAX_ATTEMPTS; attempt++) {
+    try {
+      const result = await postWebhook(url, payload);
+      return { ...result, attempts: attempt };
+    } catch (error) {
+      lastError = error;
+      if (attempt >= PUSH_MAX_ATTEMPTS) break;
+      const delayMs = PUSH_RETRY_DELAYS_MS[Math.min(attempt - 1, PUSH_RETRY_DELAYS_MS.length - 1)] || 2000;
+      log.warn('Push attempt failed, retrying', { attempt, nextAttempt: attempt + 1, delayMs, error: error.message });
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
+}
+
 /**
  * Send a push notification via configured webhook
  * @param {string} title - Notification title
@@ -91,9 +114,9 @@ export async function sendPush(title, content) {
 
   try {
     const payload = buildPayload(config.type, title, content);
-    const result = await postWebhook(config.url, payload);
-    log.info('Push sent', { type: config.type, title });
-    return { success: true };
+    const result = await postWebhookWithRetry(config.url, payload);
+    log.info('Push sent', { type: config.type, title, attempts: result.attempts });
+    return { success: true, attempts: result.attempts };
   } catch (e) {
     log.warn('Push failed', { type: config.type, title, error: e.message });
     return { success: false, error: e.message };
@@ -114,8 +137,8 @@ export async function sendTestPush() {
 
   try {
     const payload = buildPayload(config.type, title, content);
-    await postWebhook(config.url, payload);
-    return { success: true };
+    const result = await postWebhookWithRetry(config.url, payload);
+    return { success: true, attempts: result.attempts };
   } catch (e) {
     return { success: false, error: e.message };
   }

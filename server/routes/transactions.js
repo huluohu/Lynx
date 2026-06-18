@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { createNotification } from './notifications.js';
+import { pushPendingNotifications } from '../services/push.js';
 
 const router = Router();
 
@@ -136,6 +137,7 @@ router.post('/', (req, res) => {
   try {
     const lastId = executeTransaction();
     const row = db.prepare('SELECT t.*, a.name, a.symbol FROM transactions t JOIN assets a ON t.asset_id = a.id WHERE t.id = ?').get(lastId);
+    pushPendingNotifications().catch(() => {});
     res.status(201).json({ success: true, data: row });
   } catch (e) {
     res.status(500).json({ success: false, error: '交易处理失败: ' + e.message });

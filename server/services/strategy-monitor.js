@@ -188,6 +188,7 @@ export function startMonitor(intervalMs) {
 
   try {
     checkStrategyAlerts();
+    pushPendingNotifications().catch(() => {});
   } catch (error) {
     log.warn('Initial monitor run failed', { error: error.message });
   }

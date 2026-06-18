@@ -33,18 +33,42 @@
         <span class="trend-empty-icon">〰️</span>
         <span>{{ emptyText }}</span>
       </div>
-      <svg v-else class="trend-svg" viewBox="0 0 320 150" preserveAspectRatio="none" role="img" :aria-label="title">
+      <svg
+        v-else
+        class="trend-svg"
+        viewBox="0 0 320 150"
+        preserveAspectRatio="none"
+        role="img"
+        :aria-label="title"
+        @pointermove="handlePointerMove"
+        @pointerleave="clearActivePoint"
+        @touchstart.passive="handlePointerMove"
+        @touchmove.passive="handlePointerMove"
+      >
         <defs>
           <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" :stop-color="lineColor" stop-opacity="0.24" />
             <stop offset="100%" :stop-color="lineColor" stop-opacity="0" />
           </linearGradient>
         </defs>
-        <line v-for="y in gridLines" :key="y" x1="0" x2="320" :y1="y" :y2="y" class="trend-grid-line" />
+        <g v-for="tick in yAxisTicks" :key="tick.y">
+          <line :x1="chartLeft" :x2="chartRight" :y1="tick.y" :y2="tick.y" class="trend-grid-line" />
+        </g>
         <path :d="areaPath" :fill="`url(#${gradientId})`" />
         <path :d="linePath" fill="none" :stroke="lineColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-        <circle :cx="lastPoint.x" :cy="lastPoint.y" r="3" :fill="lineColor" />
+        <g v-if="activePoint">
+          <line :x1="activePoint.x" :x2="activePoint.x" :y1="chartTop" :y2="chartBottom" class="trend-crosshair" />
+        </g>
       </svg>
+      <div v-if="chartPoints.length" class="trend-y-axis" aria-hidden="true">
+        <span v-for="tick in yAxisTicks" :key="tick.y" :style="axisLabelStyle(tick)">{{ tick.label }}</span>
+      </div>
+      <span v-if="chartPoints.length" class="trend-point trend-last-point" :style="pointStyle(lastPoint)" aria-hidden="true"></span>
+      <span v-if="activePoint" class="trend-point trend-active-point" :style="pointStyle(activePoint)" aria-hidden="true"></span>
+      <div v-if="activePoint" class="trend-tooltip" :style="tooltipStyle">
+        <strong>{{ props.valueFormatter(activePoint.rawValue) }}</strong>
+        <span>{{ pointTimeLabel(activePoint) }}</span>
+      </div>
     </div>
 
     <div v-if="chartPoints.length" class="trend-foot">
@@ -56,7 +80,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
@@ -76,7 +100,13 @@ defineEmits(['update:modelValue'])
 
 const { t, locale } = useI18n()
 const gradientId = `trend-gradient-${Math.random().toString(36).slice(2)}`
-const gridLines = [28, 58, 88, 118]
+const chartWidth = 320
+const chartHeight = 150
+const chartLeft = 44
+const chartRight = 314
+const chartTop = 12
+const chartBottom = 132
+const activePoint = ref(null)
 
 const chartPoints = computed(() => (props.points || [])
   .map(point => ({ ...point, rawValue: Number(point.value) }))
@@ -98,15 +128,12 @@ const minMax = computed(() => {
 const plotted = computed(() => {
   const points = chartPoints.value
   const { min, max } = minMax.value
-  const width = 320
-  const height = 150
-  const top = 12
-  const bottom = 18
-  const chartHeight = height - top - bottom
+  const plotWidth = chartRight - chartLeft
+  const plotHeight = chartBottom - chartTop
   return points.map((point, index) => {
-    const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width
+    const x = points.length === 1 ? chartLeft + plotWidth / 2 : chartLeft + (index / (points.length - 1)) * plotWidth
     const ratio = (point.rawValue - min) / (max - min)
-    const y = top + (1 - ratio) * chartHeight
+    const y = chartTop + (1 - ratio) * plotHeight
     return { ...point, x, y }
   })
 })
@@ -116,7 +143,15 @@ const areaPath = computed(() => {
   if (!plotted.value.length) return ''
   const first = plotted.value[0]
   const last = plotted.value[plotted.value.length - 1]
-  return `${linePath.value} L ${last.x.toFixed(2)} 150 L ${first.x.toFixed(2)} 150 Z`
+  return `${linePath.value} L ${last.x.toFixed(2)} ${chartBottom} L ${first.x.toFixed(2)} ${chartBottom} Z`
+})
+const yAxisTicks = computed(() => {
+  const { min, max } = minMax.value
+  return [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+    const value = max - (max - min) * ratio
+    const y = chartTop + (chartBottom - chartTop) * ratio
+    return { y, label: compactValue(value) }
+  })
 })
 const lastPoint = computed(() => plotted.value[plotted.value.length - 1] || { x: 0, y: 0 })
 const lastRawValue = computed(() => chartPoints.value[chartPoints.value.length - 1]?.rawValue ?? null)
@@ -135,6 +170,7 @@ const formattedChangePct = computed(() => {
 })
 const lastValueLabel = computed(() => lastRawValue.value == null ? '-' : props.valueFormatter(lastRawValue.value))
 const dateFormatter = computed(() => new Intl.DateTimeFormat(locale.value || undefined, { month: 'short', day: 'numeric' }))
+const pointFormatter = computed(() => new Intl.DateTimeFormat(locale.value || undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
 const startLabel = computed(() => {
   const value = chartPoints.value[0]?.t
   return value ? dateFormatter.value.format(new Date(value)) : ''
@@ -147,6 +183,66 @@ const endLabel = computed(() => {
 function rangeLabel(range) {
   return t(`trend.ranges.${range}`, range)
 }
+function compactValue(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '-'
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (abs >= 10_000) return `${(n / 1_000).toFixed(0)}K`
+  if (abs >= 1000) return `${(n / 1000).toFixed(1)}K`
+  if (abs >= 100) return n.toFixed(0)
+  if (abs >= 10) return n.toFixed(1)
+  return n.toFixed(2)
+}
+function eventClientX(event) {
+  return event.touches?.[0]?.clientX ?? event.clientX
+}
+function handlePointerMove(event) {
+  if (!plotted.value.length) return
+  const clientX = eventClientX(event)
+  const rect = event.currentTarget.getBoundingClientRect()
+  const svgX = ((clientX - rect.left) / rect.width) * chartWidth
+  activePoint.value = plotted.value.reduce((nearest, point) => Math.abs(point.x - svgX) < Math.abs(nearest.x - svgX) ? point : nearest, plotted.value[0])
+}
+function clearActivePoint() {
+  activePoint.value = null
+}
+function pointTimeLabel(point) {
+  return point?.t ? pointFormatter.value.format(new Date(point.t)) : ''
+}
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value))
+}
+function pctX(point) {
+  return (point.x / chartWidth) * 100
+}
+function pctY(point) {
+  return (point.y / chartHeight) * 100
+}
+function axisLabelStyle(tick) {
+  return { top: `${pctY(tick)}%` }
+}
+function pointStyle(point) {
+  return {
+    left: `${pctX(point)}%`,
+    top: `${pctY(point)}%`,
+    background: lineColor.value,
+  }
+}
+const tooltipStyle = computed(() => {
+  if (!activePoint.value) return {}
+  const rawLeftPct = pctX(activePoint.value)
+  const rawTopPct = pctY(activePoint.value)
+  const leftPct = clamp(rawLeftPct, 10, 94)
+  const topPct = clamp(rawTopPct, 18, 86)
+  const xTransform = rawLeftPct > 72 ? '-100%' : rawLeftPct < 18 ? '8px' : '-50%'
+  const yTransform = rawTopPct < 28 ? '12px' : 'calc(-100% - 12px)'
+  return {
+    left: `${leftPct}%`,
+    top: `${topPct}%`,
+    transform: `translate(${xTransform}, ${yTransform})`,
+  }
+})
 </script>
 
 <style scoped>
@@ -210,6 +306,7 @@ function rangeLabel(range) {
   border-radius: 16px;
   background: linear-gradient(180deg, var(--bg-soft), transparent);
   overflow: hidden;
+  touch-action: pan-y;
 }
 .trend-svg {
   width: 100%;
@@ -221,6 +318,36 @@ function rangeLabel(range) {
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
+.trend-y-axis { position:absolute; inset:0; pointer-events:none; }
+.trend-y-axis span { position:absolute; left:8px; transform:translateY(-50%); color:var(--text-muted); font-size:10px; font-weight:700; line-height:1; }
+.trend-crosshair {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.75;
+}
+.trend-point { position:absolute; width:8px; height:8px; border-radius:50%; transform:translate(-50%,-50%); pointer-events:none; box-shadow:0 0 0 2px var(--bg-card); }
+.trend-active-point { width:10px; height:10px; z-index:2; }
+.trend-tooltip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 170px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-overlay);
+  color: var(--text);
+  box-shadow: 0 10px 24px var(--shadow-color);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.trend-tooltip strong { font-size: 13px; }
+.trend-tooltip span { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
 .trend-empty,
 .trend-skeleton {
   min-height: 170px;

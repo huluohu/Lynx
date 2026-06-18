@@ -33,16 +33,18 @@ const icons = {
 <style scoped>
 .toast-container {
   position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: calc(12px + var(--safe-top, env(safe-area-inset-top, 0px)));
+  left: calc(12px + var(--safe-left, env(safe-area-inset-left, 0px)));
+  right: calc(12px + var(--safe-right, env(safe-area-inset-right, 0px)));
   z-index: 2000;
   display: flex;
   flex-direction: column;
   gap: 8px;
   align-items: center;
+  pointer-events: none;
 }
 .toast-item {
+  max-width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -52,14 +54,15 @@ const icons = {
   gap: 8px;
   font-size: 14px;
   box-shadow: 0 4px 20px var(--shadow-color);
-  white-space: nowrap;
+  white-space: normal;
+  pointer-events: auto;
 }
 .toast-success { border-color: var(--green); }
 .toast-error { border-color: var(--red); }
 .toast-icon { display: inline-flex; align-items: center; }
 .toast-success .toast-icon { color: var(--green); }
 .toast-error .toast-icon { color: var(--red); }
-.toast-msg { color: var(--text); }
+.toast-msg { color: var(--text); overflow-wrap: anywhere; }
 
 .toast-enter-active,
 .toast-leave-active {

@@ -11,7 +11,20 @@ function applyDisplayMode() {
   document.documentElement.dataset.displayMode = standalone ? 'standalone' : 'browser'
 }
 
+function preventPageZoom() {
+  document.addEventListener('gesturestart', event => event.preventDefault(), { passive: false })
+  document.addEventListener('gesturechange', event => event.preventDefault(), { passive: false })
+  document.addEventListener('gestureend', event => event.preventDefault(), { passive: false })
+  document.addEventListener('touchmove', event => {
+    if (event.touches?.length > 1) event.preventDefault()
+  }, { passive: false })
+  window.addEventListener('wheel', event => {
+    if (event.ctrlKey) event.preventDefault()
+  }, { passive: false })
+}
+
 applyDisplayMode()
+preventPageZoom()
 
 const standaloneMediaQuery = window.matchMedia?.('(display-mode: standalone)')
 standaloneMediaQuery?.addEventListener?.('change', applyDisplayMode)
