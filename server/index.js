@@ -71,8 +71,13 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/signals', signalsRouter);
 app.use('/api/system', systemRouter);
 
+// API 404 必须在静态前端兜底之前返回 JSON，避免客户端把 index.html 当 JSON 解析
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, error: `API endpoint not found: ${req.method} ${req.originalUrl}` });
+});
+
 // ===== 全局错误处理（必须在所有路由之后） =====
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   log.error('Unhandled error', { path: req.url, error: err.message, stack: err.stack?.split('\n')[1]?.trim() });
   res.status(500).json({ success: false, error: '服务器内部错误' });
 });

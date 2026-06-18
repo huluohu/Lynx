@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test:market-data": "node --test tests/market-data-resolver.test.mjs"
+  },
   "dependencies": {
     "better-sqlite3": "^12.10.1",
     "express": "^4.21.0",

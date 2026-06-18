@@ -66,6 +66,10 @@
           <AppIcon name="market" class="nav-icon" />
           {{ t('nav.dataSources') }}
         </router-link>
+        <router-link to="/market-data-rules" class="nav-item" @click="sidebarOpen = false">
+          <AppIcon name="settings" class="nav-icon" />
+          {{ t('nav.marketDataRules') }}
+        </router-link>
 
         <div class="nav-section">{{ t('nav.sections.system') }}</div>
         <router-link to="/settings" class="nav-item" @click="sidebarOpen = false">
@@ -217,6 +221,10 @@
             <router-link to="/data-sources" class="action-sheet-item" @click="moreMenuOpen = false">
               <AppIcon name="market" class="nav-icon" />
               {{ t('nav.dataSources') }}
+            </router-link>
+            <router-link to="/market-data-rules" class="action-sheet-item" @click="moreMenuOpen = false">
+              <AppIcon name="settings" class="nav-icon" />
+              {{ t('nav.marketDataRules') }}
             </router-link>
             <div class="action-sheet-group-label">{{ t('nav.sections.strategy') }}</div>
             <router-link to="/plans" class="action-sheet-item" @click="moreMenuOpen = false">

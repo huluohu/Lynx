@@ -3,7 +3,6 @@
     <section class="source-hero">
       <div>
         <div class="hero-kicker">{{ t('dataSources.consoleKicker') }}</div>
-        <h1 class="page-title hero-title">{{ t('dataSources.title') }}</h1>
         <p class="hero-subtitle">{{ t('dataSources.productSubtitle') }}</p>
       </div>
       <div class="hero-actions desktop-actions">
@@ -46,11 +45,6 @@
         </span>
         <span class="mode-arrow">›</span>
       </button>
-    </div>
-
-    <div class="source-toolbar mobile-actions">
-      <button class="btn" type="button" :disabled="loading" @click="load">{{ t('common.refresh') }}</button>
-      <button class="btn btn-primary" type="button" :disabled="saving || !hasChanges" @click="saveAvailability">{{ saveButtonText }}</button>
     </div>
 
     <div v-if="loading" class="source-skeleton-grid" aria-busy="true">
@@ -106,13 +100,8 @@
                 <h3>{{ t('dataSources.customRssTitle') }}</h3>
                 <p>{{ t('dataSources.customRssDesc') }}</p>
               </div>
+              <button class="btn btn-sm" type="button" @click="openSourceDrawer('news')">{{ t('common.add') }}</button>
             </div>
-
-            <form class="inline-create-form" @submit.prevent="addCustomNewsSource">
-              <input class="form-input" v-model.trim="newNewsSource.name" :placeholder="t('settings.news.sourceNamePlaceholder')" autocomplete="off" />
-              <input class="form-input" v-model.trim="newNewsSource.url" type="url" :placeholder="t('settings.news.sourceUrlPlaceholder')" autocomplete="off" />
-              <button class="btn btn-primary" type="submit" :disabled="addingNewsSource || !canAddNewsSource">{{ addingNewsSource ? t('dataSources.adding') : t('common.add') }}</button>
-            </form>
 
             <div v-if="customNewsSources.length" class="source-row-list custom-list">
               <article v-for="source in customNewsSources" :key="source.id" class="source-manage-row custom-row" :class="{ enabled: isCustomNewsEnabled(source) }">
@@ -205,25 +194,8 @@
                 <h3>{{ t('dataSources.customHttpTitle') }}</h3>
                 <p>{{ t('dataSources.customHttpDesc') }}</p>
               </div>
-              <button class="btn btn-sm" type="button" @click="showMarketForm = !showMarketForm">{{ showMarketForm ? t('common.close') : t('dataSources.addCustomHttp') }}</button>
+              <button class="btn btn-sm" type="button" @click="openSourceDrawer('market')">{{ t('common.add') }}</button>
             </div>
-
-            <Transition name="source-fold">
-              <form v-if="showMarketForm" class="market-create-form" @submit.prevent="addMarketSource">
-                <input class="form-input" v-model.trim="newMarketSource.name" :placeholder="t('settings.market.sourceNamePlaceholder')" autocomplete="off" />
-                <select class="form-select" v-model="newMarketSource.asset_class">
-                  <option value="crypto">{{ t('assets.types.crypto') }}</option>
-                  <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
-                  <option value="all">{{ t('common.all') }}</option>
-                </select>
-                <input class="form-input full" v-model.trim="newMarketSource.url_template" :placeholder="t('settings.market.urlTemplatePlaceholder')" autocomplete="off" />
-                <input class="form-input" v-model.trim="newMarketSource.price_path" :placeholder="t('settings.market.pricePathPlaceholder')" autocomplete="off" />
-                <input class="form-input" v-model.trim="newMarketSource.currency_path" :placeholder="t('dataSources.currencyPathPlaceholder')" autocomplete="off" />
-                <input class="form-input" v-model.trim="newMarketSource.timestamp_path" :placeholder="t('dataSources.timestampPathPlaceholder')" autocomplete="off" />
-                <button class="btn btn-primary full" type="submit" :disabled="addingMarketSource || !canAddMarketSource">{{ addingMarketSource ? t('dataSources.adding') : t('common.add') }}</button>
-                <p class="form-helper full">{{ t('dataSources.urlTemplateHelp') }}</p>
-              </form>
-            </Transition>
 
             <div v-if="customMarketSources.length" class="source-row-list custom-list">
               <article v-for="source in customMarketSources" :key="source.id" class="source-manage-row custom-row" :class="{ enabled: isMarketEnabled(source) }">
@@ -245,12 +217,61 @@
         </div>
       </section>
     </template>
+
+    <AppDrawer v-model="sourceDrawerOpen" :title="t('dataSources.addSourceTitle')" mobileHeight="fixed">
+      <form class="source-drawer-form" @submit.prevent="addSourceFromDrawer">
+        <div class="source-kind-toggle" role="tablist" :aria-label="t('dataSources.sourceKindLabel')">
+          <button class="source-kind-card" :class="{ active: sourceKind === 'news' }" type="button" @click="sourceKind = 'news'">
+            <strong>{{ t('dataSources.newsTab') }}</strong>
+            <small>{{ t('dataSources.newsKindDesc') }}</small>
+          </button>
+          <button class="source-kind-card" :class="{ active: sourceKind === 'market' }" type="button" @click="sourceKind = 'market'">
+            <strong>{{ t('dataSources.marketTab') }}</strong>
+            <small>{{ t('dataSources.marketKindDesc') }}</small>
+          </button>
+        </div>
+
+        <template v-if="sourceKind === 'news'">
+          <input ref="newsNameInputRef" class="form-input" v-model.trim="newNewsSource.name" :placeholder="t('settings.news.sourceNamePlaceholder')" autocomplete="off" />
+          <input class="form-input" v-model.trim="newNewsSource.url" type="url" :placeholder="t('settings.news.sourceUrlPlaceholder')" autocomplete="off" />
+          <p class="form-helper">{{ t('dataSources.rssDrawerHelp') }}</p>
+        </template>
+
+        <template v-else>
+          <input ref="marketNameInputRef" class="form-input" v-model.trim="newMarketSource.name" :placeholder="t('settings.market.sourceNamePlaceholder')" autocomplete="off" />
+          <select class="form-select" v-model="newMarketSource.asset_class">
+            <option value="crypto">{{ t('assets.types.crypto') }}</option>
+            <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
+            <option value="equity">{{ t('dataSources.assetClasses.equity') }}</option>
+            <option value="forex">{{ t('dataSources.assetClasses.forex') }}</option>
+            <option value="fund">{{ t('dataSources.assetClasses.fund') }}</option>
+            <option value="index">{{ t('dataSources.assetClasses.index') }}</option>
+            <option value="all">{{ t('common.all') }}</option>
+          </select>
+          <input class="form-input" v-model.trim="newMarketSource.url_template" :placeholder="t('settings.market.urlTemplatePlaceholder')" autocomplete="off" />
+          <input class="form-input" v-model.trim="newMarketSource.price_path" :placeholder="t('settings.market.pricePathPlaceholder')" autocomplete="off" />
+          <input class="form-input" v-model.trim="newMarketSource.currency_path" :placeholder="t('dataSources.currencyPathPlaceholder')" autocomplete="off" />
+          <input class="form-input" v-model.trim="newMarketSource.timestamp_path" :placeholder="t('dataSources.timestampPathPlaceholder')" autocomplete="off" />
+          <p class="form-helper">{{ t('dataSources.urlTemplateHelp') }}</p>
+        </template>
+      </form>
+
+      <template #footer>
+        <div class="drawer-footer-actions">
+          <button class="btn" type="button" @click="sourceDrawerOpen = false">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" type="button" :disabled="addingSource || !canAddCurrentSource" @click="addSourceFromDrawer">
+            {{ addingSource ? t('dataSources.adding') : t('common.add') }}
+          </button>
+        </div>
+      </template>
+    </AppDrawer>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppDrawer from '../components/AppDrawer.vue'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import { api } from '../utils/api.js'
@@ -269,8 +290,11 @@ const addingNewsSource = ref(false)
 const addingMarketSource = ref(false)
 const loadError = ref('')
 const activeTab = ref('news')
-const showMarketForm = ref(false)
 const testingSourceId = ref(null)
+const newsNameInputRef = ref(null)
+const marketNameInputRef = ref(null)
+const sourceDrawerOpen = ref(false)
+const sourceKind = ref('news')
 
 const newsAvailableSources = ref([])
 const settingsValues = ref({})
@@ -299,6 +323,7 @@ const builtinNewsSources = computed(() => [
 ])
 
 const btcMarketSources = computed(() => [
+  { key: 'stablecoin_peg', label: t('settings.market.sourceLabels.stablecoin_peg') },
   { key: 'coingecko', label: t('settings.market.sourceLabels.coingecko') },
   { key: 'binance', label: t('settings.market.sourceLabels.binance') },
   { key: 'coinbase', label: t('settings.market.sourceLabels.coinbase') },
@@ -308,6 +333,7 @@ const btcMarketSources = computed(() => [
   { key: 'gemini', label: t('settings.market.sourceLabels.gemini') },
 ])
 const goldMarketSources = computed(() => [
+  { key: 'sge_sina', label: t('settings.market.sourceLabels.sge_sina') },
   { key: 'neodata', label: t('settings.market.sourceLabels.neodata') },
   { key: 'swissquote', label: t('settings.market.sourceLabels.swissquote') },
 ])
@@ -316,6 +342,8 @@ const customMarketSources = computed(() => marketSources.value.filter(source => 
 const enabledMarketCount = computed(() => marketSources.value.filter(source => isMarketEnabled(source)).length)
 const canAddNewsSource = computed(() => newNewsSource.name && isValidHttpUrl(newNewsSource.url))
 const canAddMarketSource = computed(() => newMarketSource.name && newMarketSource.price_path && isValidUrlTemplate(newMarketSource.url_template))
+const canAddCurrentSource = computed(() => sourceKind.value === 'news' ? canAddNewsSource.value : canAddMarketSource.value)
+const addingSource = computed(() => sourceKind.value === 'news' ? addingNewsSource.value : addingMarketSource.value)
 const hasChanges = computed(() => serialize(newsAvailableSources.value) !== initialNewsAvailable.value || customNewsSources.value.some(source => isCustomNewsEnabled(source) !== initialCustomNewsEnabled[source.id]) || marketSources.value.some(source => isMarketEnabled(source) !== initialMarketEnabled[source.id]))
 const saveButtonText = computed(() => hasChanges.value ? t('dataSources.saveChanges') : t('common.saved'))
 const tabs = computed(() => [
@@ -496,6 +524,7 @@ async function addCustomNewsSource() {
     newNewsSource.url = ''
     await loadCustomNewsSources()
     captureInitialState()
+    sourceDrawerOpen.value = false
     toast.success(t('dataSources.customRssAdded'))
   } catch (error) {
     toast.error(error.message || t('common.saveFailed'))
@@ -533,9 +562,9 @@ async function addMarketSource() {
     newMarketSource.price_path = 'price'
     newMarketSource.currency_path = ''
     newMarketSource.timestamp_path = ''
-    showMarketForm.value = false
     await loadMarketSources()
     captureInitialState()
+    sourceDrawerOpen.value = false
     toast.success(t('settings.market.sourceAdded'))
   } catch (error) {
     toast.error(error.message || t('common.saveFailed'))
@@ -546,7 +575,15 @@ async function addMarketSource() {
 async function testMarketSource(source) {
   testingSourceId.value = source.id
   try {
-    const res = await api(`/api/market/sources/${source.id}/test`, { method: 'POST', body: JSON.stringify({ symbol: source.asset_class === 'precious_metal' ? 'XAUUSD' : 'BTC', asset_class: source.asset_class, currency: 'USD' }) })
+    const samples = {
+      precious_metal: { symbol: 'XAUUSD', currency: 'USD', unit: 'oz' },
+      equity: { symbol: 'AAPL', currency: 'USD', unit: 'share' },
+      forex: { symbol: 'EURUSD', currency: 'USD', unit: 'pair' },
+      fund: { symbol: 'SPY', currency: 'USD', unit: 'share' },
+      index: { symbol: 'SPX', currency: 'USD', unit: 'point' },
+    }
+    const sample = samples[source.asset_class] || { symbol: 'BTC', currency: 'USD', unit: 'coin' }
+    const res = await api(`/api/market/sources/${source.id}/test`, { method: 'POST', body: JSON.stringify({ ...sample, asset_class: source.asset_class }) })
     const json = await res.json()
     if (!json.success) throw new Error(json.error || t('settings.market.sourceTestFailed'))
     toast.success(t('settings.market.sourceTestOk', { price: json.data.price, currency: json.data.currency }))
@@ -573,14 +610,39 @@ async function deleteMarketSource(id) {
     toast.error(error.message || t('common.deleteFailed'))
   }
 }
+async function focusDrawerFirstInput() {
+  await nextTick()
+  window.setTimeout(() => {
+    const target = sourceKind.value === 'news' ? newsNameInputRef.value : marketNameInputRef.value
+    target?.focus?.({ preventScroll: true })
+  }, 180)
+}
+
+function openSourceDrawer(kind = activeTab.value) {
+  sourceKind.value = kind === 'market' ? 'market' : 'news'
+  sourceDrawerOpen.value = true
+  focusDrawerFirstInput()
+}
+
+async function addSourceFromDrawer() {
+  if (sourceKind.value === 'news') await addCustomNewsSource()
+  else await addMarketSource()
+}
 
 function syncMobileActions() {
-  mobilePageActions.setActions([
-    { key: 'save', label: saveButtonText.value, onSelect: saveAvailability, disabled: saving.value || !hasChanges.value },
+  const actions = [
+    { key: 'add-source', label: t('dataSources.addSourceTitle'), onSelect: () => openSourceDrawer(activeTab.value) },
     { key: 'refresh', label: t('common.refresh'), onSelect: load, disabled: loading.value },
-    { key: 'add-rss', label: t('dataSources.addRssTitle'), onSelect: () => { activeTab.value = 'news' } },
-    { key: 'add-http', label: t('dataSources.addCustomHttp'), onSelect: () => { activeTab.value = 'market'; showMarketForm.value = true } },
-  ])
+  ]
+  if (hasChanges.value || saving.value) {
+    actions.splice(1, 0, {
+      key: 'save',
+      label: saving.value ? t('dataSources.saving') : t('dataSources.saveChanges'),
+      onSelect: saveAvailability,
+      disabled: saving.value,
+    })
+  }
+  mobilePageActions.setActions(actions)
 }
 
 watch([saveButtonText, hasChanges, saving, loading], syncMobileActions, { immediate: true })
@@ -589,7 +651,8 @@ onUnmounted(() => mobilePageActions.clearActions())
 </script>
 
 <style scoped>
-.data-sources-page { max-width: 1180px; padding-bottom: 36px; }
+.data-sources-page { width: 100%; max-width: 1180px; min-width: 0; overflow-x: hidden; padding-bottom: 36px; }
+.data-sources-page * { box-sizing: border-box; }
 .source-hero {
   display: flex; justify-content: space-between; align-items: flex-start; gap: 24px;
   padding: 24px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 22px;
@@ -597,10 +660,8 @@ onUnmounted(() => mobilePageActions.clearActions())
   box-shadow: 0 18px 42px color-mix(in srgb, var(--shadow-color) 70%, transparent);
 }
 .hero-kicker, .panel-kicker { color: var(--primary); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.hero-title { display: block; margin: 4px 0 8px; }
 .hero-subtitle { color: var(--text-dim); font-size: 14px; line-height: 1.65; }
 .hero-actions { display: flex; gap: 10px; flex-shrink: 0; }
-.mobile-actions { display: none; }
 .scope-callout {
   display: flex; gap: 12px; padding: 14px 16px; margin-bottom: 16px;
   border: 1px solid color-mix(in srgb, var(--warning) 42%, var(--border)); border-radius: 16px;
@@ -610,8 +671,8 @@ onUnmounted(() => mobilePageActions.clearActions())
 .scope-callout p { margin: 2px 0 0; color: var(--text-dim); font-size: 13px; line-height: 1.5; }
 .source-alert { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 16px; margin-bottom: 16px; border: 1px solid var(--danger-border); border-radius: 14px; background: var(--danger-soft); color: var(--red); }
 .source-alert div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-.source-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
-.source-mode-card { display: flex; align-items: center; gap: 14px; min-height: 86px; padding: 16px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); cursor: pointer; text-align: left; font: inherit; transition: border-color .18s, background .18s, transform .18s; }
+.source-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; min-width: 0; margin-bottom: 18px; }
+.source-mode-card { display: flex; align-items: center; gap: 14px; min-width: 0; min-height: 86px; padding: 16px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); cursor: pointer; text-align: left; font: inherit; transition: border-color .18s, background .18s, transform .18s; }
 .source-mode-card:active { transform: scale(.99); }
 .source-mode-card.active.news { border-color: var(--primary); background: color-mix(in srgb, var(--blue) 13%, var(--bg-card)); }
 .source-mode-card.active.market { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 13%, var(--bg-card)); }
@@ -620,7 +681,7 @@ onUnmounted(() => mobilePageActions.clearActions())
 .mode-copy strong { font-size: 16px; }
 .mode-copy small { color: var(--text-dim); }
 .mode-arrow { color: var(--text-muted); font-size: 24px; }
-.management-panel { border: 1px solid var(--border); border-radius: 24px; padding: 20px; background: var(--bg-card); }
+.management-panel { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 24px; padding: 20px; background: var(--bg-card); }
 .news-panel { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--blue) 64%, transparent); }
 .market-panel { box-shadow: inset 4px 0 0 color-mix(in srgb, var(--gold) 64%, transparent); }
 .panel-title-block { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
@@ -629,7 +690,7 @@ onUnmounted(() => mobilePageActions.clearActions())
 .count-pill { display: inline-flex; align-items: center; min-height: 30px; padding: 4px 11px; border-radius: 999px; color: var(--primary); background: var(--info-soft); font-size: 12px; font-weight: 800; white-space: nowrap; }
 .panel-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, .82fr); gap: 16px; align-items: start; }
 .market-grid { grid-template-columns: minmax(0, .92fr) minmax(420px, 1fr); }
-.manager-card { border: 1px solid var(--border); border-radius: 18px; padding: 16px; background: var(--bg); }
+.manager-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; padding: 16px; background: var(--bg); }
 .primary-card { background: color-mix(in srgb, var(--bg) 90%, var(--blue)); }
 .custom-card { background: color-mix(in srgb, var(--bg) 92%, var(--gold)); }
 .manager-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
@@ -654,9 +715,12 @@ onUnmounted(() => mobilePageActions.clearActions())
 .enabled .source-switch::after { transform: translateX(16px); }
 .custom-row { cursor: default; }
 .icon-danger-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--danger-border); border-radius: 10px; background: var(--danger-soft); color: var(--red); cursor: pointer; font-size: 18px; line-height: 1; flex-shrink: 0; }
-.inline-create-form { display: grid; grid-template-columns: minmax(120px, .8fr) minmax(180px, 1.4fr) auto; gap: 10px; margin-bottom: 14px; }
-.market-create-form { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(130px, .7fr); gap: 10px; margin-bottom: 14px; padding: 12px; border: 1px dashed color-mix(in srgb, var(--gold) 50%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--gold) 5%, var(--bg-card)); }
-.market-create-form .full { grid-column: 1 / -1; }
+.source-drawer-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.source-kind-toggle { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 4px; }
+.source-kind-card { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.source-kind-card.active { border-color: var(--primary); background: var(--info-soft); }
+.source-kind-card small { color: var(--text-dim); font-size: 12px; line-height: 1.35; }
+.drawer-footer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-helper { margin: 0; }
 .market-group + .market-group { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
 .market-group-title { margin-bottom: 10px; color: var(--text-dim); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
@@ -668,11 +732,9 @@ onUnmounted(() => mobilePageActions.clearActions())
 .source-fold-enter-from, .source-fold-leave-to { opacity: 0; transform: translateY(-4px); }
 @media (max-width: 1080px) { .panel-grid, .market-grid { grid-template-columns: 1fr; } }
 @media (max-width: 768px) {
-  .data-sources-page { max-width: 100%; padding-bottom: 104px; }
+  .data-sources-page { max-width: 100%; padding-bottom: 112px; }
   .source-hero { padding: 18px; border-radius: 18px; margin-bottom: 12px; }
-  .hero-title { display: none; }
   .desktop-actions { display: none; }
-  .mobile-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
   .scope-callout { padding: 12px; }
   .source-mode-switch { position: sticky; top: 0; z-index: 10; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 0; background: var(--surface-overlay); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
   .source-mode-card { min-height: 72px; padding: 12px; border-radius: 16px; }
@@ -681,8 +743,8 @@ onUnmounted(() => mobilePageActions.clearActions())
   .management-panel { padding: 14px; border-radius: 20px; }
   .panel-title-block, .manager-card-header { flex-direction: column; align-items: stretch; gap: 10px; }
   .action-header { flex-direction: row; align-items: center; }
-  .inline-create-form, .market-create-form { grid-template-columns: 1fr; }
-  .market-create-form .full { grid-column: auto; }
+  .source-drawer-form .form-input,
+  .source-drawer-form .form-select { min-width: 0; font-size: 16px; }
   .source-manage-row { align-items: flex-start; }
   .source-row-main a, .source-row-main span { white-space: normal; word-break: break-all; }
   .custom-row { flex-wrap: wrap; }
@@ -690,7 +752,15 @@ onUnmounted(() => mobilePageActions.clearActions())
   .source-skeleton-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
-  .source-mode-card { flex-direction: column; align-items: flex-start; }
+  .source-hero { padding: 14px; }
+  .source-mode-switch { gap: 8px; }
+  .source-mode-card { min-height: 86px; flex-direction: column; align-items: flex-start; padding: 10px; }
+  .mode-copy strong { font-size: 14px; }
+  .mode-copy small { font-size: 11px; }
+  .management-panel { padding: 12px; border-radius: 18px; }
+  .manager-card { padding: 12px; border-radius: 16px; }
+  .source-kind-toggle { grid-template-columns: 1fr; }
+  .source-manage-row { gap: 10px; padding: 10px; }
   .state-copy { display: none; }
 }
 </style>

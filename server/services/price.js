@@ -2,31 +2,23 @@ import http from 'http';
 import https from 'https';
 import { createLogger } from '../utils/logger.js';
 import { getDb } from '../db/database.js';
+import {
+  isStablePegProfile,
+  loadConfiguredSourceEntries,
+  loadMarketProfile,
+  loadSourceAdapter,
+  recordMarketSourceAttempt,
+  renderEndpointTemplate,
+  resolveProviderSymbol,
+  selectCapableSourceEntries,
+} from './market-data/config.js';
 
 const log = createLogger('price');
 let cachedRate = { usd_cny: 7.25, updated: 0 };
 
 const TROY_OUNCE_GRAMS = 31.1034768;
-const DEFAULT_PRECIOUS_METAL_SOURCES = ['neodata', 'swissquote'];
-const DEFAULT_CRYPTO_SOURCES = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'];
-const USD_PEGGED_SYMBOLS = new Set(['USD', 'USDT', 'USDC', 'DAI', 'BUSD', 'FDUSD', 'TUSD', 'USDP']);
-const LEGACY_GOLD_SOURCES = DEFAULT_PRECIOUS_METAL_SOURCES;
-const LEGACY_BTC_SOURCES = DEFAULT_CRYPTO_SOURCES;
-
-const COINGECKO_IDS = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  BNB: 'binancecoin',
-  SOL: 'solana',
-  XRP: 'ripple',
-  ADA: 'cardano',
-  DOGE: 'dogecoin',
-  TRX: 'tron',
-  DOT: 'polkadot',
-  AVAX: 'avalanche-2',
-  USDT: 'tether',
-  USDC: 'usd-coin',
-};
+const DEFAULT_PRECIOUS_METAL_SOURCES = ['sge_sina', 'neodata', 'swissquote'];
+const DEFAULT_CRYPTO_SOURCES = ['stablecoin_peg', 'coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'];
 
 function getEnabledMarketSources(key, defaults) {
   try {
@@ -115,7 +107,7 @@ function getJsonPathValue(input, path) {
   if (!normalized) return input;
   return normalized.split('.').reduce((current, part) => {
     if (current == null) return undefined;
-    const match = part.match(/^([^[]+)(?:\[(\d+)\])?$/);
+    const match = part.match(/^([^[]+)(?:\[(\d+)])?$/);
     if (!match) return current?.[part];
     const value = current?.[match[1]];
     return match[2] == null ? value : value?.[Number(match[2])];
@@ -133,7 +125,7 @@ function fillTemplate(template, asset, source) {
     type: asset?.type || '',
     subtype: asset?.subtype || '',
   };
-  return String(template || '').replace(/\{(asset_id|symbol|provider_symbol|currency|quote_currency|type|subtype)\}/g, (_, key) => encodeURIComponent(values[key]));
+  return String(template || '').replace(/{(asset_id|symbol|provider_symbol|currency|quote_currency|type|subtype)}/g, (_, key) => encodeURIComponent(values[key]));
 }
 
 async function fetchCustomHttpSource(asset, source) {
@@ -159,46 +151,34 @@ export async function testCustomMarketSource(asset, source) {
   });
 }
 
-function parseProviderSymbols(asset) {
-  if (!asset?.provider_symbols) return {};
-  try {
-    const parsed = typeof asset.provider_symbols === 'string' ? JSON.parse(asset.provider_symbols) : asset.provider_symbols;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
+function providerSymbol(asset, provider, fallback) {
+  return resolveProviderSymbol(asset, asset?.__marketProfile, provider, fallback || asset?.symbol || '');
 }
 
-function providerSymbol(asset, provider, fallback) {
-  const symbols = parseProviderSymbols(asset);
-  const value = symbols?.[provider];
-  return String(value || fallback || asset?.symbol || '').trim();
+function withMarketProfile(asset, profile) {
+  return { ...asset, __marketProfile: profile };
 }
 
 function normalizeAssetSymbol(asset) {
-  return String(asset?.symbol || '').trim().toUpperCase().replace(/[-_/\s].*$/, '');
+  return String(asset?.__marketProfile?.baseSymbol || asset?.symbol || '').trim().toUpperCase().replace(/[-_/\s].*$/, '');
 }
 
-function isUsdPeggedCrypto(asset) {
-  const symbol = normalizeAssetSymbol(asset);
-  const subtype = String(asset?.subtype || '').trim().toUpperCase();
-  return USD_PEGGED_SYMBOLS.has(symbol) || USD_PEGGED_SYMBOLS.has(subtype);
-}
-
-async function buildUsdPeggedCryptoQuote(asset) {
+async function buildStablePegCryptoQuote(asset, profile) {
   const rate = await getUsdCny();
-  const symbol = normalizeAssetSymbol(asset);
+  const symbol = profile?.baseSymbol || normalizeAssetSymbol(asset);
+  const pegPrice = Number(profile?.rules?.peg_price || 1);
 
   return {
-    usd: 1,
-    cny: Math.round(rate * 100) / 100,
+    usd: pegPrice,
+    cny: Math.round(pegPrice * rate * 100) / 100,
     ch24: 0,
     ch7d: 0,
-    source: 'stablecoin-peg',
+    source: 'stablecoin_peg',
     details: {
       stablecoin: true,
       symbol,
-      peg_currency: 'USD',
+      peg_currency: profile?.rules?.peg_currency || 'USD',
+      resolver: 'configured_profile',
     },
   };
 }
@@ -209,10 +189,13 @@ function isCryptoAsset(asset) {
 
 function isPreciousMetalAsset(asset) {
   const type = String(asset?.type || '').toLowerCase();
+  const subtype = String(asset?.subtype || '').toLowerCase();
   const symbol = String(asset?.symbol || '').toUpperCase();
-  return type === 'gold'
-    || type === 'precious_metal'
-    || ['XAU', 'XAG', 'XPT', 'XPD', 'AU', 'AG'].some(prefix => symbol.includes(prefix));
+  if (type === 'gold' || type === 'precious_metal') return true;
+  if (type && type !== 'unknown') return false;
+  if (['gold', 'silver', 'platinum', 'palladium'].includes(subtype)) return true;
+  return /^(XAU|XAG|XPT|XPD)(USD|CNY|USDT)?$/.test(symbol)
+    || /^(AU|AG)\d{3,6}$/.test(symbol);
 }
 
 function resolveMetalCode(asset) {
@@ -324,6 +307,56 @@ export function httpGet(url, opts = {}) {
   });
 }
 
+export function httpGetText(url, opts = {}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    function done(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    }
+
+    function fail(error) {
+      if (settled) return;
+      settled = true;
+      if (opts.throwOnError) reject(error);
+      else resolve(null);
+    }
+
+    try {
+      const lib = url.startsWith('https') ? https : http;
+      const reqOpts = {
+        headers: { 'Accept': '*/*', 'User-Agent': 'InvestTracker/1.0', ...opts.headers }
+      };
+      const req = lib.get(url, reqOpts, res => {
+        const chunks = [];
+        res.on('data', c => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        res.on('end', () => {
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            fail(new Error(`HTTP ${res.statusCode}`));
+            return;
+          }
+          const buffer = Buffer.concat(chunks);
+          const encoding = opts.encoding || 'utf8';
+          try {
+            done(new TextDecoder(encoding).decode(buffer));
+          } catch {
+            done(buffer.toString(encoding));
+          }
+        });
+      });
+      req.on('error', error => fail(new Error(error?.message || 'HTTP request failed')));
+      req.setTimeout(opts.timeout || 8000, () => {
+        req.destroy();
+        fail(new Error(`Request timeout after ${opts.timeout || 8000}ms`));
+      });
+    } catch (error) {
+      fail(error);
+    }
+  });
+}
+
 export function httpPost(hostname, port, pathname, body, headers = {}) {
   return new Promise((resolve) => {
     const opts = { hostname, port, path: pathname, method: 'POST', headers: { 'Content-Type': 'application/json', ...headers } };
@@ -378,10 +411,165 @@ async function fetchGoldNeodata(asset, isLondonGold) {
   return null;
 }
 
+async function fetchConfiguredMarketSource(asset, profile, sourceEntry) {
+  const adapter = loadSourceAdapter(sourceEntry.key);
+  if (!adapter) return null;
+
+  const provider = providerSymbol(asset, sourceEntry.key, profile?.canonicalSymbol || asset?.symbol);
+  if (!provider) throw new Error(`No provider symbol resolved for ${sourceEntry.key}`);
+
+  const url = renderEndpointTemplate(adapter.endpointTemplate, profile, encodeURIComponent(provider));
+  const started = Date.now();
+
+  if (adapter.method && adapter.method.toUpperCase() !== 'GET') {
+    throw new Error(`Unsupported adapter method ${adapter.method}`);
+  }
+
+  let price;
+  let parsedCurrency;
+  let parsedUnit;
+  let details = {};
+
+  if (adapter.adapterType === 'json_http' && adapter.parserType === 'json_path') {
+    const data = await httpGet(url, { timeout: adapter.timeoutMs, throwOnError: true, headers: adapter.headers });
+    const pricePath = renderEndpointTemplate(adapter.parserConfig.price_path || 'price', profile, provider);
+    price = Number(getJsonPathValue(data, pricePath));
+    if (adapter.parserConfig.currency_path) parsedCurrency = getJsonPathValue(data, adapter.parserConfig.currency_path);
+    if (adapter.parserConfig.unit_path) parsedUnit = getJsonPathValue(data, adapter.parserConfig.unit_path);
+    details = {
+      parser_type: 'json_path',
+      price_path: pricePath,
+      timestamp: adapter.parserConfig.timestamp_path ? getJsonPathValue(data, adapter.parserConfig.timestamp_path) : null,
+    };
+  } else if (adapter.adapterType === 'text_http' && adapter.parserType === 'sina_hq_csv') {
+    const text = await httpGetText(url, {
+      timeout: adapter.timeoutMs,
+      throwOnError: true,
+      headers: adapter.headers,
+      encoding: adapter.parserConfig.encoding || 'utf8',
+    });
+    const match = String(text || '').match(/="([^"]*)"/);
+    const fields = match?.[1]?.split(',') || [];
+    price = Number(fields[Number(adapter.parserConfig.price_index ?? 0)]);
+    details = {
+      parser_type: 'sina_hq_csv',
+      name: fields[Number(adapter.parserConfig.name_index ?? -1)] || null,
+      timestamp: fields[Number(adapter.parserConfig.timestamp_index ?? -1)] || null,
+    };
+  } else if (adapter.adapterType === 'text_http' && adapter.parserType === 'text_regex') {
+    const text = await httpGetText(url, {
+      timeout: adapter.timeoutMs,
+      throwOnError: true,
+      headers: adapter.headers,
+      encoding: adapter.parserConfig.encoding || 'utf8',
+    });
+    const pattern = adapter.parserConfig.pattern;
+    if (!pattern) throw new Error('text_regex parser requires pattern');
+    const flags = adapter.parserConfig.flags || '';
+    const match = String(text || '').match(new RegExp(pattern, flags));
+    price = Number(match?.[Number(adapter.parserConfig.price_group || 1)]);
+    details = { parser_type: 'text_regex', matched: Boolean(match) };
+  } else {
+    return null;
+  }
+
+  const latencyMs = Date.now() - started;
+
+  if (!Number.isFinite(price) || price <= 0) {
+    throw new Error(`${sourceEntry.key} returned no valid price for ${provider}`);
+  }
+
+  const quote = {
+    price: Math.round(price * 100) / 100,
+    currency: String(parsedCurrency || adapter.parserConfig.currency || profile.quoteCurrency || asset?.currency || 'USD').toUpperCase(),
+    unit: parsedUnit || adapter.parserConfig.unit || profile.unit || asset?.unit || null,
+    source: sourceEntry.key,
+    details: {
+      ...details,
+      provider_symbol: provider,
+      market: profile.market,
+      exchange: profile.exchange,
+      quote_contract: 'market-data-v1',
+      profile_source: profile.source,
+      latency_ms: latencyMs,
+    },
+  };
+  if (profile.assetClass === 'crypto') {
+    if (quote.currency === 'USD') {
+      const rate = await getUsdCny();
+      quote.usd = quote.price;
+      quote.cny = Math.round(quote.price * rate);
+    } else if (quote.currency === 'CNY') {
+      const rate = await getUsdCny();
+      quote.cny = quote.price;
+      quote.usd = Math.round((quote.price / rate) * 100) / 100;
+    }
+    quote.ch24 = 0;
+    quote.ch7d = 0;
+  }
+  recordMarketSourceAttempt({ sourceKey: sourceEntry.key, asset, status: 'success', latencyMs, quote });
+  return quote;
+}
+
+async function fetchConfiguredAssetPrice(asset) {
+  const profile = loadMarketProfile(asset);
+  const runtimeAsset = withMarketProfile(asset, profile);
+  const sourceEntries = loadConfiguredSourceEntries(profile.assetClass);
+  const { selected: enabledSources, skipped } = selectCapableSourceEntries(profile, sourceEntries);
+  const failures = skipped.map(item => ({ source: item.source, reason: item.reason, skipped: true }));
+
+  for (const item of skipped) {
+    recordMarketSourceAttempt({ sourceKey: item.source, asset, status: 'skipped', reason: item.reason, metadata: { profile } });
+  }
+
+  for (const sourceEntry of enabledSources) {
+    const source = sourceEntry.key;
+    if (isSourceInCooldown(source)) {
+      const reason = 'Source in cooldown';
+      failures.push({ source, reason });
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
+      log.debug('Configured source skipped during cooldown', { source, symbol: asset?.symbol, assetClass: profile.assetClass });
+      continue;
+    }
+
+    const hasAdapter = sourceEntry.source_type === 'custom_http' || Boolean(loadSourceAdapter(source));
+    if (!hasAdapter) {
+      const reason = 'No adapter configured';
+      failures.push({ source, reason, skipped: true });
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
+      continue;
+    }
+
+    try {
+      const result = sourceEntry.source_type === 'custom_http'
+        ? await fetchCustomHttpSource(runtimeAsset, sourceEntry)
+        : await fetchConfiguredMarketSource(runtimeAsset, profile, sourceEntry);
+      if (result) {
+        recordSourceSuccess(source);
+        return result;
+      }
+      const reason = 'No valid price returned';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile } });
+    } catch (e) {
+      const reason = e?.message || 'Source failed';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile } });
+      log.warn('Configured source failed', { source, symbol: asset?.symbol, assetClass: profile.assetClass, error: reason });
+    }
+  }
+
+  log.debug('No configured market data source produced a price', { symbol: asset?.symbol, assetClass: profile.assetClass, profile, failures });
+  return null;
+}
+
 async function fetchPreciousMetalSwissquote(asset) {
   const metalCode = resolveMetalCode(asset);
   const instrument = providerSymbol(asset, 'swissquote', `${metalCode}/USD`).toUpperCase();
-  const data = await httpGet(`https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/${encodeURIComponent(instrument)}`, { timeout: 4500, throwOnError: true });
+  const instrumentPath = instrument.split('/').map(part => encodeURIComponent(part)).join('/');
+  const data = await httpGet(`https://forex-data-feed.swissquote.com/public-quotes/bboquotes/instrument/${instrumentPath}`, { timeout: 4500, throwOnError: true });
   if (Array.isArray(data) && data.length > 0) {
     const prices = data[0]?.spreadProfilePrices;
     if (prices && prices.length > 0) {
@@ -397,26 +585,34 @@ async function fetchPreciousMetalSwissquote(asset) {
 // ===== 贵金属查询（兼容旧 gold） =====
 export async function fetchPreciousMetal(asset) {
   const { symbol, currency } = asset;
-  const isLondonGold = symbol?.includes('AUUSDO') || symbol?.includes('XAUUSD') || currency === 'USD';
-  const enabledSources = getMarketSourceEntries('precious_metal', ['market_precious_metal_sources_enabled', 'market_gold_sources_enabled'], DEFAULT_PRECIOUS_METAL_SOURCES);
-  const failures = [];
+  const profile = loadMarketProfile(asset);
+  const runtimeAsset = withMarketProfile(asset, profile);
+  const isLondonGold = profile.market === 'global_spot' || symbol?.includes('AUUSDO') || symbol?.includes('XAUUSD') || currency === 'USD';
+  const configuredSources = getMarketSourceEntries('precious_metal', ['market_precious_metal_sources_enabled', 'market_gold_sources_enabled'], DEFAULT_PRECIOUS_METAL_SOURCES);
+  const { selected: enabledSources, skipped } = selectCapableSourceEntries(profile, configuredSources);
+  const failures = skipped.map(item => ({ source: item.source, reason: item.reason, skipped: true }));
+  for (const item of skipped) {
+    recordMarketSourceAttempt({ sourceKey: item.source, asset, status: 'skipped', reason: item.reason, metadata: { profile } });
+  }
 
   for (const sourceEntry of enabledSources) {
     const source = sourceEntry.key;
     if (isSourceInCooldown(source)) {
       const reason = 'Source in cooldown';
       failures.push({ source, reason });
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
       log.debug('Precious metal source skipped during cooldown', { source, symbol });
       continue;
     }
     try {
       const result = sourceEntry.source_type === 'custom_http'
-        ? await fetchCustomHttpSource(asset, sourceEntry)
-        : source === 'neodata'
-        ? await fetchGoldNeodata(asset, isLondonGold)
-        : source === 'swissquote'
-          ? await fetchPreciousMetalSwissquote(asset)
-          : null;
+        ? await fetchCustomHttpSource(runtimeAsset, sourceEntry)
+        : await fetchConfiguredMarketSource(runtimeAsset, profile, sourceEntry)
+          || (source === 'neodata'
+            ? await fetchGoldNeodata(runtimeAsset, isLondonGold)
+            : source === 'swissquote'
+              ? await fetchPreciousMetalSwissquote(runtimeAsset)
+              : null);
       if (result) {
         recordSourceSuccess(source);
         return result;
@@ -424,16 +620,18 @@ export async function fetchPreciousMetal(asset) {
       const reason = 'No valid price returned';
       failures.push({ source, reason });
       recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile } });
       log.debug('Precious metal source returned no data', { source, symbol });
     } catch (e) {
       const reason = e?.message || 'Source failed';
       failures.push({ source, reason });
       recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile } });
       log.warn('Precious metal source failed', { source, symbol, error: reason });
     }
   }
 
-  log.warn('All precious metal sources failed', { symbol, enabledSources, failures });
+  log.warn('All precious metal sources failed', { symbol, profile, enabledSources, failures });
   return null;
 }
 
@@ -443,7 +641,7 @@ export async function fetchGold(asset) {
 
 async function fetchCryptoCoinGecko(asset) {
   const symbol = normalizeAssetSymbol(asset);
-  const id = providerSymbol(asset, 'coingecko', COINGECKO_IDS[symbol] || asset?.subtype);
+  const id = providerSymbol(asset, 'coingecko', asset?.subtype || symbol.toLowerCase());
   if (!id) return null;
   const cg = await httpGet(
     `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd&include_24hr_change=true&include_7d_change=true`,
@@ -485,7 +683,7 @@ async function fetchCryptoCoinbase(asset) {
 
 async function fetchCryptoKraken(asset) {
   const symbol = normalizeAssetSymbol(asset);
-  const pairName = symbol === 'BTC' ? 'XBTUSD' : `${symbol}USD`;
+  const pairName = `${symbol}USD`;
   const pairParam = providerSymbol(asset, 'kraken', pairName).toUpperCase();
   const data = await httpGet(`https://api.kraken.com/0/public/Ticker?pair=${encodeURIComponent(pairParam)}`, { timeout: 4500, throwOnError: true });
   const pair = data?.result ? Object.values(data.result)[0] : null;
@@ -545,15 +743,20 @@ async function fetchCryptoGemini(asset) {
 
 // ===== 加密货币查询（兼容旧 BTC） =====
 export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', currency: 'USD' }) {
-  const symbol = normalizeAssetSymbol(asset);
+  const profile = loadMarketProfile(asset);
+  const runtimeAsset = withMarketProfile(asset, profile);
+  const symbol = normalizeAssetSymbol(runtimeAsset);
   log.debug('Fetching crypto price', { symbol });
 
-  if (isUsdPeggedCrypto(asset)) {
-    log.info('Stablecoin price resolved by USD peg', { symbol });
-    return buildUsdPeggedCryptoQuote(asset);
+  if (isStablePegProfile(profile)) {
+    log.info('Stablecoin price resolved by configured peg profile', { symbol, profileSource: profile.source });
+    const quote = await buildStablePegCryptoQuote(runtimeAsset, profile);
+    recordMarketSourceAttempt({ sourceKey: 'stablecoin_peg', asset, status: 'success', quote, metadata: { profile } });
+    return quote;
   }
 
-  const enabledSources = getMarketSourceEntries('crypto', ['market_crypto_sources_enabled', 'market_btc_sources_enabled'], DEFAULT_CRYPTO_SOURCES);
+  const configuredSources = getMarketSourceEntries('crypto', ['market_crypto_sources_enabled', 'market_btc_sources_enabled'], DEFAULT_CRYPTO_SOURCES);
+  const { selected: enabledSources, skipped } = selectCapableSourceEntries(profile, configuredSources);
   const fetchers = {
     coingecko: fetchCryptoCoinGecko,
     binance: fetchCryptoBinance,
@@ -563,25 +766,30 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
     bitstamp: fetchCryptoBitstamp,
     gemini: fetchCryptoGemini,
   };
-  const failures = [];
+  const failures = skipped.map(item => ({ source: item.source, reason: item.reason, skipped: true }));
+  for (const item of skipped) {
+    recordMarketSourceAttempt({ sourceKey: item.source, asset, status: 'skipped', reason: item.reason, metadata: { profile } });
+  }
 
   for (const sourceEntry of enabledSources) {
     const source = sourceEntry.key;
     if (isSourceInCooldown(source)) {
       const reason = 'Source in cooldown';
       failures.push({ source, reason });
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
       log.debug('Crypto source skipped during cooldown', { source, symbol });
       continue;
     }
     const fetcher = sourceEntry.source_type === 'custom_http' ? null : fetchers[source];
-    if (!fetcher && sourceEntry.source_type !== 'custom_http') {
+    const hasConfiguredAdapter = sourceEntry.source_type !== 'custom_http' && Boolean(loadSourceAdapter(source));
+    if (!fetcher && !hasConfiguredAdapter && sourceEntry.source_type !== 'custom_http') {
       failures.push({ source, reason: 'No fetcher registered' });
       continue;
     }
     try {
       const result = sourceEntry.source_type === 'custom_http'
-        ? await fetchCustomHttpSource(asset, sourceEntry)
-        : await fetcher(asset);
+        ? await fetchCustomHttpSource(runtimeAsset, sourceEntry)
+        : await fetchConfiguredMarketSource(runtimeAsset, profile, sourceEntry) || (fetcher ? await fetcher(runtimeAsset) : null);
       if (result) {
         recordSourceSuccess(source);
         return result;
@@ -589,16 +797,18 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
       const reason = 'No valid price returned';
       failures.push({ source, reason });
       recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile } });
       log.debug('Crypto source returned no data', { source, symbol });
     } catch (e) {
       const reason = e?.message || 'Source failed';
       failures.push({ source, reason });
       recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile } });
       log.warn('Crypto source failed', { source, symbol, error: reason });
     }
   }
 
-  log.warn('All crypto sources failed', { symbol, enabledSources, failures });
+  log.warn('All crypto sources failed', { symbol, profile, enabledSources, failures });
   return null;
 }
 
@@ -623,8 +833,7 @@ export async function fetchPrice(asset) {
       const price = currency === 'CNY' ? data.cny : data.usd;
       return { price, currency, source: data.source || 'crypto', details: data };
     }
-    log.debug('No fetcher for asset type', { type: asset.type });
-    return null;
+    return await fetchConfiguredAssetPrice(asset);
   } catch (e) {
     log.error('fetchPrice exception', { assetId: asset.id, error: e.message });
     return null;

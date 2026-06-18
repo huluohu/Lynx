@@ -360,10 +360,10 @@ const form = reactive({
   market_color_scheme: preferencesStore.marketColorScheme,
   refresh_interval: '60',
   market_refresh_interval: '5',
-  market_crypto_sources_enabled: 'coingecko,binance,coinbase,kraken,okx,bitstamp,gemini',
-  market_precious_metal_sources_enabled: 'neodata,swissquote',
-  market_btc_sources_enabled: 'coingecko,binance,coinbase,kraken,okx,bitstamp,gemini',
-  market_gold_sources_enabled: 'neodata,swissquote',
+  market_crypto_sources_enabled: 'stablecoin_peg,coingecko,binance,coinbase,kraken,okx,bitstamp,gemini',
+  market_precious_metal_sources_enabled: 'sge_sina,neodata,swissquote',
+  market_btc_sources_enabled: 'stablecoin_peg,coingecko,binance,coinbase,kraken,okx,bitstamp,gemini',
+  market_gold_sources_enabled: 'sge_sina,neodata,swissquote',
   news_sources_available: '',
   rate_cache_duration: '60',
   strategy_monitor_interval: '5',
@@ -396,8 +396,8 @@ const saveState = reactive({ appearance: '', market: '', ai: '', news: '', push:
 const testingPush = ref(false)
 const marketSources = ref([])
 const selectedNewsSources = ref(['coindesk', 'cointelegraph', 'decrypt', 'panews', 'coingecko'])
-const selectedBtcSources = ref(['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'])
-const selectedGoldSources = ref(['neodata', 'swissquote'])
+const selectedBtcSources = ref(['stablecoin_peg', 'coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'])
+const selectedGoldSources = ref(['sge_sina', 'neodata', 'swissquote'])
 const webhookPlaceholder = computed(() => {
   const map = {
     wecom: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx',
@@ -432,6 +432,7 @@ const builtinNewsSources = computed(() => [
 ])
 
 const btcMarketSources = computed(() => [
+  { key: 'stablecoin_peg', label: t('settings.market.sourceLabels.stablecoin_peg') },
   { key: 'coingecko', label: t('settings.market.sourceLabels.coingecko') },
   { key: 'binance', label: t('settings.market.sourceLabels.binance') },
   { key: 'coinbase', label: t('settings.market.sourceLabels.coinbase') },
@@ -442,6 +443,7 @@ const btcMarketSources = computed(() => [
 ])
 
 const goldMarketSources = computed(() => [
+  { key: 'sge_sina', label: t('settings.market.sourceLabels.sge_sina') },
   { key: 'neodata', label: t('settings.market.sourceLabels.neodata') },
   { key: 'swissquote', label: t('settings.market.sourceLabels.swissquote') },
 ])
