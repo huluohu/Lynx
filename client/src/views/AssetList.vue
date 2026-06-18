@@ -21,7 +21,7 @@
             <label class="form-label">{{ t('assetList.type') }}</label>
             <select class="form-select" v-model="draftFilters.type">
               <option value="">{{ t('history.allTypes') }}</option>
-              <option value="gold">{{ t('assets.types.gold') }}</option>
+              <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
               <option value="crypto">{{ t('assets.types.crypto') }}</option>
               <option value="stock">{{ t('assets.types.stock') }}</option>
               <option value="forex">{{ t('assets.types.forex') }}</option>
@@ -136,7 +136,7 @@
         <label class="form-label">{{ t('assetList.type') }}</label>
         <select class="form-select" v-model="draftFilters.type">
           <option value="">{{ t('history.allTypes') }}</option>
-          <option value="gold">{{ t('assets.types.gold') }}</option>
+          <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
           <option value="crypto">{{ t('assets.types.crypto') }}</option>
           <option value="stock">{{ t('assets.types.stock') }}</option>
           <option value="forex">{{ t('assets.types.forex') }}</option>
@@ -160,7 +160,6 @@ import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatCurrencyAmount } from '../utils/currency.js'
-import { formatNumber } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
 import AppDrawer from '../components/AppDrawer.vue'
 import PullRefreshView from '../components/PullRefreshView.vue'
@@ -185,7 +184,7 @@ const filteredAssets = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase()
   return assets.value.filter((asset) => {
     const matchesKeyword = !keyword || [asset.name, asset.symbol].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword))
-    const matchesType = !filters.type || asset.type === filters.type
+    const matchesType = !filters.type || asset.type === filters.type || (filters.type === 'precious_metal' && asset.type === 'gold')
     return matchesKeyword && matchesType
   })
 })
@@ -255,10 +254,10 @@ function removeFilter(key) {
 }
 
 function typeBadge(type) {
-  return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
+  return { gold: 'badge-gold', precious_metal: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
 function assetTypeLabel(type) {
-  return t(`assets.types.${type}`)
+  return type === 'gold' ? t('assets.types.precious_metal') : t(`assets.types.${type}`)
 }
 function money(value, currency) {
   return formatCurrencyAmount(value, currency, { maximumFractionDigits: 0 })

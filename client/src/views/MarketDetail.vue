@@ -14,7 +14,7 @@
     <div class="grid-4 market-detail-stats" style="margin-bottom:20px">
       <div class="stat-card">
         <div class="stat-label">{{ t('marketDetail.currentPrice') }}</div>
-        <div class="stat-value stat-value-wrap">{{ snapshot.price ? money(snapshot.price, snapshot.currency) : '-' }}</div>
+        <div class="stat-value stat-value-wrap">{{ snapshot.price ? money(snapshot.price, snapshot.currency) : '-' }}<span v-if="snapshot.price && snapshot.unit" class="price-unit">/ {{ snapshot.unit }}</span></div>
       </div>
       <div class="stat-card">
         <div class="stat-label">{{ t('assets.fields.symbol') }}</div>
@@ -46,6 +46,7 @@
       <div class="section-title">{{ t('marketDetail.snapshotInfo') }}</div>
       <div class="info-list">
         <div class="info-row"><span class="info-label">{{ t('history.currency') }}</span><span>{{ snapshot.currency || asset.currency || '-' }}</span></div>
+        <div class="info-row"><span class="info-label">{{ t('assets.unitLabel') }}</span><span>{{ snapshot.unit || asset.unit || '-' }}</span></div>
         <div class="info-row"><span class="info-label">{{ t('marketDetail.cacheStatus') }}</span><span>{{ statusText }}</span></div>
         <div class="info-row"><span class="info-label">{{ t('marketDetail.updatedAt') }}</span><span>{{ snapshot.fetched_at ? formatDateTime(snapshot.fetched_at) : '-' }}</span></div>
       </div>
@@ -120,7 +121,7 @@ function formatTrendPercent(value) {
   return `${Number(value || 0).toFixed(1)}%`
 }
 function typeBadge(type) {
-  return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
+  return { gold: 'badge-gold', precious_metal: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
 function assetTypeLabel(type) {
   return type ? t(`assets.types.${type}`, type) : '-'
@@ -158,6 +159,7 @@ onUnmounted(() => {
 
 <style scoped>
 .info-list { font-size: 14px; }
+.price-unit { margin-left: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600; }
 .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); gap: 12px; }
 .info-row:last-child { border-bottom: none; }
 .info-label { color: var(--text-dim); font-size: 13px; }

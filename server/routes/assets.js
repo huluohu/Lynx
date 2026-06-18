@@ -35,11 +35,22 @@ router.get('/:id', (req, res) => {
 // POST 创建
 router.post('/', (req, res) => {
   const db = getDb();
-  const { name, symbol, type, currency = 'CNY', icon, data_source } = req.body;
+  const { name, symbol, type, currency = 'CNY', icon, data_source, subtype, quote_currency, unit, provider_symbols } = req.body;
   if (!name || !symbol || !type) return res.status(400).json({ success: false, error: 'name/symbol/type required' });
 
-  const info = db.prepare(`INSERT INTO assets (name, symbol, type, currency, icon, data_source)
-    VALUES (?, ?, ?, ?, ?, ?)`).run(name, symbol, type, currency, icon || null, data_source || null);
+  const info = db.prepare(`INSERT INTO assets (name, symbol, type, currency, icon, data_source, subtype, quote_currency, unit, provider_symbols)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      name,
+      symbol,
+      type,
+      currency,
+      icon || null,
+      data_source || null,
+      subtype || null,
+      quote_currency || currency || null,
+      unit || null,
+      provider_symbols ? (typeof provider_symbols === 'string' ? provider_symbols : JSON.stringify(provider_symbols)) : null,
+    );
 
   const row = db.prepare('SELECT * FROM assets WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ success: true, data: row });
@@ -51,11 +62,13 @@ router.put('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
 
-  const { name, symbol, type, currency, icon, data_source } = req.body;
-  db.prepare(`UPDATE assets SET name=?, symbol=?, type=?, currency=?, icon=?, data_source=?, updated_at=datetime('now')
+  const { name, symbol, type, currency, icon, data_source, subtype, quote_currency, unit, provider_symbols } = req.body;
+  db.prepare(`UPDATE assets SET name=?, symbol=?, type=?, currency=?, icon=?, data_source=?, subtype=?, quote_currency=?, unit=?, provider_symbols=?, updated_at=datetime('now')
     WHERE id=?`).run(
     name ?? existing.name, symbol ?? existing.symbol, type ?? existing.type,
     currency ?? existing.currency, icon ?? existing.icon, data_source ?? existing.data_source,
+    subtype ?? existing.subtype, quote_currency ?? existing.quote_currency, unit ?? existing.unit,
+    provider_symbols == null ? existing.provider_symbols : (typeof provider_symbols === 'string' ? provider_symbols : JSON.stringify(provider_symbols)),
     req.params.id
   );
 

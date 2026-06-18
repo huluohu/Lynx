@@ -56,7 +56,7 @@
       <p style="font-size:12px;color:var(--text-dim);margin-top:8px">{{ t('newsList.emptyHint') }}</p>
     </div>
 
-    <AppDrawer v-model="detailDrawerOpen" :title="selectedNews?.title || t('newsList.detailTitle')" mobileHeight="fixed">
+    <AppDrawer v-model="detailDrawerOpen" :title="displayNewsTitle || t('newsList.detailTitle')" mobileHeight="fixed">
       <div v-if="detailLoading" class="news-detail-loading">
         <div class="skeleton skeleton-text long"></div>
         <div class="skeleton skeleton-text"></div>
@@ -67,6 +67,12 @@
           <span v-if="selectedNews.source" class="news-source">{{ selectedNews.source }}</span>
           <span>{{ formatClockTime(selectedNews.published_at, { second: '2-digit' }) }}</span>
           <span class="cache-badge cache-cached">{{ cacheLabel(selectedNews.cache_status) }}</span>
+        </div>
+        <div class="news-detail-actions">
+          <button v-if="!translatedNews" class="btn btn-sm" type="button" @click="translateSelectedNews" :disabled="translating">
+            {{ translating ? t('newsList.translating') : t('newsList.translate') }}
+          </button>
+          <button v-else class="btn btn-sm" type="button" @click="restoreOriginalNews">{{ t('newsList.restoreOriginal') }}</button>
         </div>
         <div class="news-detail-content">
           <template v-for="(block, index) in formattedDetailBlocks" :key="index">
@@ -109,9 +115,13 @@ const mobilePageActions = useMobilePageActions()
 const detailDrawerOpen = ref(false)
 const detailLoading = ref(false)
 const selectedNews = ref(null)
+const translatedNews = ref(null)
+const translating = ref(false)
 
 const pendingCacheCount = computed(() => news.value.filter(n => n.cache_status === 'pending' && n.url).length)
-const formattedDetailBlocks = computed(() => formatArticleBlocks(selectedNews.value?.content || selectedNews.value?.summary || ''))
+const displayNewsTitle = computed(() => translatedNews.value?.title || selectedNews.value?.title || '')
+const displayNewsContent = computed(() => translatedNews.value?.content || translatedNews.value?.summary || selectedNews.value?.content || selectedNews.value?.summary || '')
+const formattedDetailBlocks = computed(() => formatArticleBlocks(displayNewsContent.value))
 
 async function loadData() {
   try {
@@ -155,6 +165,7 @@ async function refresh() {
 }
 
 async function openNews(n) {
+  translatedNews.value = null
   if (!n.read) {
     api(`/api/news/${n.id}`, { method: 'PUT' })
     n.read = 1
@@ -181,6 +192,28 @@ async function openNews(n) {
     }).catch(() => { n.cache_status = 'failed' })
   }
   if (n.url) window.open(n.url, '_blank')
+}
+
+async function translateSelectedNews() {
+  if (!selectedNews.value?.id || translating.value) return
+  translating.value = true
+  try {
+    const res = await api(`/api/news/${selectedNews.value.id}/translate`, {
+      method: 'POST',
+      body: JSON.stringify({ target_language: '简体中文' }),
+    })
+    const json = await res.json()
+    if (!json.success) throw new Error(json.error || t('newsList.translateFailed'))
+    translatedNews.value = json.data
+  } catch (error) {
+    toast.error(error.message || t('newsList.translateFailed'))
+  } finally {
+    translating.value = false
+  }
+}
+
+function restoreOriginalNews() {
+  translatedNews.value = null
 }
 
 async function cacheAll() {
@@ -295,6 +328,7 @@ onUnmounted(() => {
 .news-detail-loading { padding: 8px 0; }
 .news-detail { display: flex; flex-direction: column; gap: 14px; }
 .news-detail-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text-muted); font-size: 12px; }
+.news-detail-actions { display: flex; gap: 8px; align-items: center; }
 .news-detail-content { color: var(--text-dim); line-height: 1.75; font-size: 14px; }
 .news-detail-content h3 { margin: 18px 0 8px; color: var(--text); font-size: 16px; line-height: 1.45; }
 .news-detail-content h3:first-child { margin-top: 0; }

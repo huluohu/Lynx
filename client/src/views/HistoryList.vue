@@ -373,7 +373,7 @@ const filters = reactive({ asset_id: '', type: '', status: '', currency: '', sta
 const draftFilters = reactive({ asset_id: '', type: '', status: '', currency: '', start_date: '', end_date: '' })
 
 const selectedAsset = computed(() => assets.value.find(asset => String(asset.id) === String(form.asset_id)) || null)
-const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto')
+const showCurrencyField = computed(() => selectedAsset.value?.type === 'crypto' || (selectedAsset.value?.currency && selectedAsset.value.currency !== 'CNY'))
 const currentSortLabel = computed(() => sortOptions.value.find(option => option.value === filters.sort)?.label || t('history.sort'))
 const totalPages = computed(() => Math.max(1, Math.ceil(totalCount.value / pageSize)))
 const activeFilterCount = computed(() => ['asset_id', 'type', 'status', 'currency', 'start_date', 'end_date'].filter(key => filters[key]).length)

@@ -18,7 +18,9 @@
         <div class="info-list">
           <div class="info-row"><span class="info-label">{{ t('assets.fields.symbol') }}</span><span style="color:var(--text-dim)">{{ asset.symbol }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('assets.fields.type') }}</span><span class="badge" :class="typeBadge(asset.type)">{{ assetTypeLabel(asset.type) }}</span></div>
+          <div v-if="asset.subtype" class="info-row"><span class="info-label">{{ t('assets.subtypeLabel') }}</span><span>{{ asset.subtype }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('assets.fields.currency') }}</span><span>{{ asset.currency }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('assets.unitLabel') }}</span><span>{{ asset.unit || '-' }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('assetDetail.dataSource') }}</span><span style="color:var(--text-dim)">{{ asset.data_source || t('assetDetail.auto') }}</span></div>
         </div>
       </div>
@@ -26,7 +28,7 @@
       <div class="card" v-if="holding">
         <div class="section-title section-title-inline"><AppIcon name="holdings" size="16" /> {{ t('assetDetail.holdingInfo') }}</div>
         <div class="info-list">
-          <div class="info-row"><span class="info-label">{{ t('holdings.fields.quantity') }}</span><span style="font-weight:600">{{ holding.quantity }}</span></div>
+          <div class="info-row"><span class="info-label">{{ t('holdings.fields.quantity') }}</span><span style="font-weight:600">{{ holding.quantity }} {{ asset.unit || '' }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('holdings.fields.avgCost') }}</span><span>{{ money(holding.avg_cost) }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('holdings.fields.totalInvested') }}</span><span>{{ money(holding.total_invested) }}</span></div>
           <div class="info-row"><span class="info-label">{{ t('assetDetail.targetPrice') }}</span><span>{{ holding.target_price ? money(holding.target_price) : '-' }}</span></div>
@@ -93,7 +95,7 @@
         <div class="form-row">
           <div class="form-group"><label class="form-label">{{ t('assets.fields.type') }}</label>
             <select class="form-select" v-model="editForm.type">
-              <option value="gold">{{ assetTypeLabel('gold') }}</option><option value="crypto">{{ assetTypeLabel('crypto') }}</option><option value="stock">{{ assetTypeLabel('stock') }}</option><option value="forex">{{ assetTypeLabel('forex') }}</option><option value="commodity">{{ assetTypeLabel('commodity') }}</option>
+              <option value="precious_metal">{{ assetTypeLabel('precious_metal') }}</option><option value="crypto">{{ assetTypeLabel('crypto') }}</option><option value="stock">{{ assetTypeLabel('stock') }}</option><option value="forex">{{ assetTypeLabel('forex') }}</option><option value="commodity">{{ assetTypeLabel('commodity') }}</option>
             </select>
           </div>
           <div class="form-group"><label class="form-label">{{ t('assets.fields.currency') }}</label>
@@ -105,6 +107,10 @@
         <div class="form-row">
           <div class="form-group"><label class="form-label">{{ t('assets.fields.icon') }}</label><input class="form-input" v-model="editForm.icon" /></div>
           <div class="form-group"><label class="form-label">{{ t('assetDetail.dataSource') }}</label><input class="form-input" v-model="editForm.data_source" :placeholder="t('assetDetail.auto')" /></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">{{ t('assets.subtypeLabel') }}</label><input class="form-input" v-model="editForm.subtype" :placeholder="t('assets.subtypePlaceholder')" /></div>
+          <div class="form-group"><label class="form-label">{{ t('assets.unitLabel') }}</label><input class="form-input" v-model="editForm.unit" placeholder="g / oz / coin" /></div>
         </div>
 
         <div class="section-title" style="margin-top:20px">{{ t('assetDetail.holdingInfo') }}</div>
@@ -174,7 +180,7 @@ const deleting = ref(false)
 const profitTrendRange = ref('1m')
 const profitTrend = ref({ points: [], summary: null })
 const profitTrendLoading = ref(false)
-const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '', quantity: '', avg_cost: '', total_invested: '', target_price: '', stop_loss: '' })
+const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '', subtype: '', unit: '', quote_currency: '', provider_symbols: '', quantity: '', avg_cost: '', total_invested: '', target_price: '', stop_loss: '' })
 const mobilePageActions = useMobilePageActions()
 
 watch([() => editForm.quantity, () => editForm.avg_cost], ([qty, cost]) => {
@@ -190,8 +196,9 @@ async function loadData() {
     asset.value = json.data
     holding.value = json.data.quantity ? json.data : null
     Object.assign(editForm, {
-      name: json.data.name, symbol: json.data.symbol, type: json.data.type,
+      name: json.data.name, symbol: json.data.symbol, type: json.data.type === 'gold' ? 'precious_metal' : json.data.type,
       currency: json.data.currency, icon: json.data.icon || '', data_source: json.data.data_source || '',
+      subtype: json.data.subtype || '', unit: json.data.unit || '', quote_currency: json.data.quote_currency || json.data.currency || '', provider_symbols: json.data.provider_symbols || '',
       quantity: json.data.quantity || '', avg_cost: json.data.avg_cost || '',
       total_invested: json.data.total_invested || '', target_price: json.data.target_price || '',
       stop_loss: json.data.stop_loss || '',
@@ -223,7 +230,7 @@ async function saveEdit() {
   saving.value = true
   try {
     // Save asset fields
-    const assetPayload = { name: editForm.name, symbol: editForm.symbol, type: editForm.type, currency: editForm.currency, icon: editForm.icon, data_source: editForm.data_source }
+    const assetPayload = { name: editForm.name, symbol: editForm.symbol, type: editForm.type, currency: editForm.currency, icon: editForm.icon, data_source: editForm.data_source, subtype: editForm.subtype, unit: editForm.unit, quote_currency: editForm.quote_currency || editForm.currency, provider_symbols: editForm.provider_symbols }
     const res = await api(`/api/assets/${route.params.id}`, { method: 'PUT', body: JSON.stringify(assetPayload) })
     const json = await res.json()
     if (!json.success) { toast.error(json.error || t('common.saveFailed')); saving.value = false; return }
@@ -282,11 +289,12 @@ async function doDelete() {
 }
 
 function typeBadge(type) {
-  return { gold: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
+  return { gold: 'badge-gold', precious_metal: 'badge-gold', crypto: 'badge-crypto', stock: 'badge-stock' }[type] || 'badge-pending'
 }
 function assetTypeLabel(type) {
   return {
-    gold: t('assets.types.gold'),
+    gold: t('assets.types.precious_metal'),
+    precious_metal: t('assets.types.precious_metal'),
     crypto: t('assets.types.crypto'),
     stock: t('assets.types.stock'),
     forex: t('assets.types.forex'),

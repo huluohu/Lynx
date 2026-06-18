@@ -314,15 +314,15 @@ async function collectData(db, assetIds, config) {
   // External data (parallel, non-blocking)
   const externalPromises = [];
 
-  const hasCrypto = result.assets.some(a => a.asset.type === 'crypto');
+  const hasCrypto = result.assets.some(a => isCryptoAsset(a.asset));
   if (hasCrypto) {
     externalPromises.push(
       fetchFearGreedIndex().then(data => { result.macroIndicators.fearGreed = data; })
     );
   }
 
-  const hasGold = result.assets.some(a => a.asset.type === 'gold' || a.asset.symbol?.includes('AU'));
-  if (hasGold) {
+  const hasPreciousMetal = result.assets.some(a => isPreciousMetalAsset(a.asset));
+  if (hasPreciousMetal) {
     externalPromises.push(
       fetchGoldMacro().then(data => { result.macroIndicators.gold = data; })
     );
@@ -362,6 +362,22 @@ async function fetchFearGreedIndex() {
     }
   } catch (e) { log.warn('Failed to fetch Fear & Greed', { error: e.message }); }
   return null;
+}
+
+function isCryptoAsset(asset) {
+  return asset?.type === 'crypto';
+}
+
+function isPreciousMetalAsset(asset) {
+  const type = String(asset?.type || '').toLowerCase();
+  const symbol = String(asset?.symbol || '').toUpperCase();
+  return type === 'gold'
+    || type === 'precious_metal'
+    || ['XAU', 'XAG', 'XPT', 'XPD', 'AU', 'AG'].some(prefix => symbol.includes(prefix));
+}
+
+function priceUnitLabel(asset) {
+  return asset?.unit ? `/${asset.unit}` : '';
 }
 
 async function fetchGoldMacro() {
@@ -416,6 +432,7 @@ function buildAnalystPrompt(collectedData) {
 
   const portfolioSection = assets.map(a => {
     const { asset, holding, priceHistory, latestPrice, latestPriceQuality, existingStrategies, indicators, tradePatterns, pnlPct } = a;
+    const unit = priceUnitLabel(asset);
     const latestPriceHint = latestPriceQuality === 'stale'
       ? '（陈旧缓存）'
       : latestPriceQuality === 'missing'
@@ -423,7 +440,7 @@ function buildAnalystPrompt(collectedData) {
         : '';
 
     const holdingStr = holding
-      ? `持仓: ${holding.quantity}单位, 成本¥${holding.avg_cost}, 总投入¥${holding.total_invested}, 当前价¥${latestPrice || '未知'}${latestPriceHint}, 盈亏: ${pnlPct != null ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : '未知'}`
+      ? `持仓: ${holding.quantity}${asset.unit || '单位'}, 成本¥${holding.avg_cost}${unit}, 总投入¥${holding.total_invested}, 当前价¥${latestPrice || '未知'}${unit}${latestPriceHint}, 盈亏: ${pnlPct != null ? (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%' : '未知'}`
       : '暂无持仓';
 
     const trendStr = priceHistory.length >= 2
@@ -434,9 +451,9 @@ function buildAnalystPrompt(collectedData) {
         const high = Math.max(...priceHistory.map(p => p.price));
         const low = Math.min(...priceHistory.map(p => p.price));
         const indStr = indicators.volatility != null
-          ? `, 日均波动率:${indicators.volatility}%, SMA7:¥${indicators.sma7}, SMA20:¥${indicators.sma20}${indicators.momentum5 != null ? `, 5日动能:${indicators.momentum5}%` : ''}`
+          ? `, 日均波动率:${indicators.volatility}%, SMA7:¥${indicators.sma7}${unit}, SMA20:¥${indicators.sma20}${unit}${indicators.momentum5 != null ? `, 5日动能:${indicators.momentum5}%` : ''}`
           : '';
-        return `30日走势: ${change > 0 ? '+' : ''}${change}%, 高¥${high.toFixed(2)}, 低¥${low.toFixed(2)}${indStr}`;
+        return `30日走势: ${change > 0 ? '+' : ''}${change}%, 高¥${high.toFixed(2)}${unit}, 低¥${low.toFixed(2)}${unit}${indStr}`;
       })()
       : '价格历史数据不足';
 

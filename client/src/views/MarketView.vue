@@ -48,6 +48,7 @@
               <div class="market-price">
                 <template v-if="p.price">{{ money(p.price, p.currency) }}</template>
                 <template v-else><span style="color:var(--text-muted)">--</span></template>
+                <span v-if="p.price && p.unit" class="market-price-unit">/ {{ p.unit }}</span>
               </div>
               <div v-if="p.details?.ch24" :class="p.details.ch24 >= 0 ? 'pnl positive' : 'pnl negative'" style="font-size:13px">
                 {{ p.details.ch24 >= 0 ? '+' : '' }}{{ p.details.ch24.toFixed(1) }}% (24h)
@@ -185,7 +186,7 @@ function resolveLastUpdated(items) {
   return dates[0] || null
 }
 function typeBadge(t) {
-  return { gold:'badge-gold', crypto:'badge-crypto', stock:'badge-stock' }[t] || 'badge-pending'
+  return { gold:'badge-gold', precious_metal: 'badge-gold', crypto:'badge-crypto', stock:'badge-stock' }[t] || 'badge-pending'
 }
 function fmtTime(d) {
   return formatTime(d, { second: '2-digit' })
@@ -313,6 +314,7 @@ onUnmounted(() => {
 .market-card-action { margin-top: 10px; padding: 6px 10px; font-size: 12px; }
 .market-asset-name { font-size: 13px; color: var(--text-dim); }
 .market-price { font-size: 32px; font-weight: 800; margin: 4px 0; }
+.market-price-unit { margin-left: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600; }
 .market-status { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 .market-status.warn { color: var(--red); opacity: 0.8; }
 .market-updated-at { margin-top: 4px; color: var(--text-muted); font-size: 11px; line-height: 1.4; }

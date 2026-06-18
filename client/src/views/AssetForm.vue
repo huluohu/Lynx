@@ -21,7 +21,7 @@
             <label class="form-label">{{ t('assets.type') }} *</label>
             <select class="form-select" v-model="form.type" required>
               <option value="">{{ t('assets.selectType') }}</option>
-              <option value="gold">{{ t('assets.types.gold') }}</option>
+              <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
               <option value="crypto">{{ t('assets.types.crypto') }}</option>
               <option value="stock">{{ t('assets.types.stock') }}</option>
               <option value="forex">{{ t('assets.types.forex') }}</option>
@@ -48,6 +48,15 @@
             </button>
           </div>
         </div>
+        <div v-if="isPreciousMetal" class="crypto-presets">
+          <label class="form-label">{{ t('assets.preciousMetalPresets') }}</label>
+          <div class="preset-grid">
+            <button v-for="m in preciousMetalPresets" :key="m.symbol" type="button" class="preset-btn" :class="{ active: form.symbol === m.symbol }" @click="applyPreciousMetalPreset(m)">
+              <span class="preset-icon">{{ m.icon }}</span>
+              <span class="preset-name">{{ m.name }}</span>
+            </button>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">{{ t('assets.iconLabel') }}</label>
@@ -59,7 +68,25 @@
               <option value="">{{ t('assets.autoSource') }}</option>
               <option value="neodata">{{ t('assets.sources.neodata') }}</option>
               <option value="coingecko">{{ t('assets.sources.coingecko') }}</option>
+              <option value="swissquote">{{ t('assets.sources.swissquote') }}</option>
               <option value="manual">{{ t('assets.manualSource') }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">{{ t('assets.subtypeLabel') }}</label>
+            <input class="form-input" v-model="form.subtype" :placeholder="t('assets.subtypePlaceholder')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">{{ t('assets.unitLabel') }}</label>
+            <select class="form-select" v-model="form.unit">
+              <option value="coin">coin</option>
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+              <option value="oz">oz</option>
+              <option value="share">share</option>
+              <option value="unit">unit</option>
             </select>
           </div>
         </div>
@@ -86,7 +113,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
@@ -97,20 +124,28 @@ const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
 const submitting = ref(false)
-const form = reactive({ name: '', symbol: '', type: '', currency: 'CNY', icon: '', data_source: '' })
+const form = reactive({ name: '', symbol: '', type: '', currency: 'CNY', icon: '', data_source: '', subtype: '', quote_currency: 'CNY', unit: 'unit', provider_symbols: '' })
 const holding = reactive({ quantity: '', avg_cost: '' })
+const isPreciousMetal = computed(() => form.type === 'gold' || form.type === 'precious_metal')
 
 const cryptoPresets = [
-  { name: 'Bitcoin', symbol: 'BTC', icon: '₿', coingeckoId: 'bitcoin' },
-  { name: 'Ethereum', symbol: 'ETH', icon: '⟠', coingeckoId: 'ethereum' },
-  { name: 'BNB', symbol: 'BNB', icon: '🔶', coingeckoId: 'binancecoin' },
-  { name: 'Solana', symbol: 'SOL', icon: '◎', coingeckoId: 'solana' },
-  { name: 'XRP', symbol: 'XRP', icon: '✕', coingeckoId: 'ripple' },
-  { name: 'Cardano', symbol: 'ADA', icon: '◆', coingeckoId: 'cardano' },
-  { name: 'Dogecoin', symbol: 'DOGE', icon: '🐕', coingeckoId: 'dogecoin' },
-  { name: 'TRON', symbol: 'TRX', icon: '⚡', coingeckoId: 'tron' },
-  { name: 'Polkadot', symbol: 'DOT', icon: '●', coingeckoId: 'polkadot' },
-  { name: 'Avalanche', symbol: 'AVAX', icon: '🔺', coingeckoId: 'avalanche-2' },
+  { name: 'Bitcoin', symbol: 'BTC', icon: '₿', subtype: 'bitcoin', coingeckoId: 'bitcoin' },
+  { name: 'Ethereum', symbol: 'ETH', icon: '⟠', subtype: 'ethereum', coingeckoId: 'ethereum' },
+  { name: 'BNB', symbol: 'BNB', icon: '🔶', subtype: 'bnb', coingeckoId: 'binancecoin' },
+  { name: 'Solana', symbol: 'SOL', icon: '◎', subtype: 'solana', coingeckoId: 'solana' },
+  { name: 'XRP', symbol: 'XRP', icon: '✕', subtype: 'xrp', coingeckoId: 'ripple' },
+  { name: 'Cardano', symbol: 'ADA', icon: '◆', subtype: 'cardano', coingeckoId: 'cardano' },
+  { name: 'Dogecoin', symbol: 'DOGE', icon: '🐕', subtype: 'dogecoin', coingeckoId: 'dogecoin' },
+  { name: 'TRON', symbol: 'TRX', icon: '⚡', subtype: 'tron', coingeckoId: 'tron' },
+  { name: 'Polkadot', symbol: 'DOT', icon: '●', subtype: 'polkadot', coingeckoId: 'polkadot' },
+  { name: 'Avalanche', symbol: 'AVAX', icon: '🔺', subtype: 'avalanche', coingeckoId: 'avalanche-2' },
+]
+
+const preciousMetalPresets = [
+  { name: '黄金 XAU/USD', symbol: 'XAUUSD', icon: '🥇', subtype: 'gold', currency: 'USD', unit: 'oz', dataSource: 'swissquote', providerSymbols: { swissquote: 'XAU/USD' } },
+  { name: '白银 XAG/USD', symbol: 'XAGUSD', icon: '🥈', subtype: 'silver', currency: 'USD', unit: 'oz', dataSource: 'swissquote', providerSymbols: { swissquote: 'XAG/USD' } },
+  { name: '铂金 XPT/USD', symbol: 'XPTUSD', icon: '⚪', subtype: 'platinum', currency: 'USD', unit: 'oz', dataSource: 'swissquote', providerSymbols: { swissquote: 'XPT/USD' } },
+  { name: '钯金 XPD/USD', symbol: 'XPDUSD', icon: '⚙️', subtype: 'palladium', currency: 'USD', unit: 'oz', dataSource: 'swissquote', providerSymbols: { swissquote: 'XPD/USD' } },
 ]
 
 function applyCryptoPreset(c) {
@@ -118,8 +153,43 @@ function applyCryptoPreset(c) {
   form.symbol = c.symbol
   form.icon = c.icon
   form.currency = 'USD'
+  form.quote_currency = 'USD'
+  form.subtype = c.subtype
+  form.unit = 'coin'
   form.data_source = 'coingecko'
+  form.provider_symbols = JSON.stringify({
+    coingecko: c.coingeckoId,
+    binance: `${c.symbol}USDT`,
+    okx: `${c.symbol}-USDT`,
+    coinbase: `${c.symbol}-USD`,
+    kraken: c.symbol === 'BTC' ? 'XBTUSD' : `${c.symbol}USD`,
+    bitstamp: `${c.symbol}USD`,
+    gemini: `${c.symbol}USD`,
+  })
 }
+
+function applyPreciousMetalPreset(m) {
+  form.type = 'precious_metal'
+  form.name = m.name
+  form.symbol = m.symbol
+  form.icon = m.icon
+  form.currency = m.currency
+  form.quote_currency = m.currency
+  form.subtype = m.subtype
+  form.unit = m.unit
+  form.data_source = m.dataSource
+  form.provider_symbols = JSON.stringify(m.providerSymbols)
+}
+
+watch(() => form.type, (type) => {
+  if (type === 'crypto' && form.unit === 'unit') form.unit = 'coin'
+  if ((type === 'gold' || type === 'precious_metal') && form.unit === 'unit') form.unit = form.currency === 'USD' ? 'oz' : 'g'
+  if (type === 'stock' && form.unit === 'unit') form.unit = 'share'
+})
+
+watch(() => form.currency, (currency) => {
+  form.quote_currency = currency
+})
 
 async function submit() {
   submitting.value = true

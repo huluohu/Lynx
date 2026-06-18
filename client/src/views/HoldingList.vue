@@ -16,7 +16,7 @@
             <label class="form-label">{{ t('history.type') }}</label>
             <select class="form-select" v-model="draftFilters.type">
               <option value="">{{ t('history.allTypes') }}</option>
-              <option value="gold">{{ t('assets.types.gold') }}</option>
+              <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
               <option value="crypto">{{ t('assets.types.crypto') }}</option>
               <option value="stock">{{ t('assets.types.stock') }}</option>
               <option value="forex">{{ t('assets.types.forex') }}</option>
@@ -154,7 +154,7 @@
         <label class="form-label">{{ t('history.type') }}</label>
         <select class="form-select" v-model="draftFilters.type">
           <option value="">{{ t('history.allTypes') }}</option>
-          <option value="gold">{{ t('assets.types.gold') }}</option>
+          <option value="precious_metal">{{ t('assets.types.precious_metal') }}</option>
           <option value="crypto">{{ t('assets.types.crypto') }}</option>
           <option value="stock">{{ t('assets.types.stock') }}</option>
           <option value="forex">{{ t('assets.types.forex') }}</option>
@@ -205,7 +205,7 @@ const filteredHoldings = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase()
   return holdings.value.filter((holding) => {
     const matchesKeyword = !keyword || [holding.name, holding.symbol].filter(Boolean).some((value) => String(value).toLowerCase().includes(keyword))
-    const matchesType = !filters.type || holding.type === filters.type
+    const matchesType = !filters.type || holding.type === filters.type || (filters.type === 'precious_metal' && holding.type === 'gold')
     return matchesKeyword && matchesType
   })
 })

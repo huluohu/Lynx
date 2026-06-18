@@ -66,7 +66,11 @@ function formatTrades(trades) {
 
 function formatPrices(prices) {
   if (!prices.length) return '暂无最新价格';
-  return prices.map(p => `${p.asset_name || p.symbol || `资产#${p.asset_id}`}: ${p.currency === 'USD' ? '$' : '¥'}${Number(p.price).toFixed(2)} (${p.fetched_at || '-'})`).join('；');
+  return prices.map(p => {
+    const unit = p.unit ? `/${p.unit}` : '';
+    const source = p.source ? `，来源:${p.source}` : '';
+    return `${p.asset_name || p.symbol || `资产#${p.asset_id}`}: ${p.currency === 'USD' ? '$' : '¥'}${Number(p.price).toFixed(2)}${unit} (${p.fetched_at || '-'})${source}`;
+  }).join('；');
 }
 
 function formatHoldings(holdings, latestPriceMap) {
