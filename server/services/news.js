@@ -4,6 +4,103 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('news');
 
+export const NEWS_CATEGORIES = Object.freeze([
+  'markets',
+  'macro',
+  'equity',
+  'crypto',
+  'precious_metals',
+  'forex',
+  'commodities',
+  'strategy',
+  'risk',
+  'other',
+]);
+
+const CATEGORY_PRIORITY = ['risk', 'crypto', 'precious_metals', 'forex', 'commodities', 'equity', 'macro', 'strategy', 'markets', 'other'];
+const SOURCE_CATEGORY_HINTS = new Map([
+  ['coindesk', 'crypto'],
+  ['cointelegraph', 'crypto'],
+  ['decrypt', 'crypto'],
+  ['crypto.news', 'crypto'],
+  ['blockchain.news', 'crypto'],
+  ['panews', 'crypto'],
+  ['bitcoin magazine', 'crypto'],
+  ['coingecko trending', 'crypto'],
+  ['kitco news', 'precious_metals'],
+  ['fxstreet', 'forex'],
+  ['yahoo finance', 'markets'],
+  ['bbc business', 'macro'],
+  ['bbc world', 'risk'],
+  ['cnbc economy', 'macro'],
+  ['cnbc world', 'risk'],
+  ['china daily business', 'macro'],
+  ['china daily china', 'macro'],
+  ['china daily world', 'risk'],
+]);
+
+const CATEGORY_KEYWORDS = {
+  risk: ['hack', 'exploit', 'fraud', 'lawsuit', 'sued', 'sanction', 'ban', 'liquidation', 'bankruptcy', 'default', 'warning', 'risk', 'war', 'conflict', 'geopolitical', 'geopolitics', 'tariff', 'trade war', 'election', 'military', 'diplomatic', '警告', '风险', '暴雷', '破产', '黑客', '诉讼', '制裁', '清算', '违约', '监管', '战争', '冲突', '地缘', '关税', '贸易战', '选举', '军事', '外交'],
+  crypto: ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'blockchain', 'token', 'defi', 'nft', 'stablecoin', 'binance', 'coinbase', 'solana', 'xrp', 'doge', '加密', '比特币', '以太坊', '区块链', '代币', '稳定币'],
+  precious_metals: ['gold', 'silver', 'xau', 'xag', 'kitco', 'bullion', 'precious metal', '黄金', '白银', '金价', '银价', '贵金属'],
+  forex: ['forex', 'fx', 'currency', 'dollar', 'euro', 'yen', 'yuan', 'usd', 'eur/usd', 'usd/cny', 'dxy', '汇率', '外汇', '美元', '欧元', '日元', '人民币'],
+  commodities: ['oil', 'crude', 'brent', 'wti', 'gas', 'copper', 'commodity', 'opec', 'soybean', 'wheat', '原油', '石油', '天然气', '铜', '大宗商品', '欧佩克'],
+  equity: ['stock', 'stocks', 'shares', 'equities', 'earnings', 'revenue', 'nasdaq', 's&p', 'dow', 'ipo', 'dividend', 'tesla', 'nvidia', 'apple', '股票', '股市', '美股', '港股', 'a股', '财报', '纳斯达克', '标普'],
+  macro: ['fed', 'federal reserve', 'inflation', 'cpi', 'ppi', 'gdp', 'rates', 'treasury', 'bond', 'yield', 'unemployment', 'jobs', 'central bank', 'economy', 'recession', 'fomc', 'policy', 'politics', 'government', 'china', 'domestic demand', 'trade', 'import', 'export', '通胀', '利率', '央行', '美联储', '经济', '衰退', '国债', '就业', '政策', '政治', '政府', '国内', '内需', '贸易', '进口', '出口'],
+  strategy: ['strategy', 'analysis', 'forecast', 'outlook', 'technical', 'support', 'resistance', 'portfolio', 'allocation', 'trading plan', '策略', '分析', '展望', '预测', '技术', '支撑', '阻力', '配置'],
+  markets: ['market', 'markets', 'rally', 'selloff', 'futures', 'index', 'indices', 'volatility', '行情', '市场', '指数', '期货', '波动', '反弹', '下跌'],
+};
+
+export function normalizeNewsCategory(value) {
+  const category = String(value || '').trim();
+  return NEWS_CATEGORIES.includes(category) ? category : '';
+}
+
+function addCategoryScore(scores, category, amount = 1) {
+  if (!NEWS_CATEGORIES.includes(category)) return;
+  scores[category] = (scores[category] || 0) + amount;
+}
+
+function scoreKeywords(scores, text) {
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (text.includes(keyword)) addCategoryScore(scores, category, 1);
+    }
+  }
+}
+
+export function categorizeNewsItem(item = {}, source = {}) {
+  const explicit = normalizeNewsCategory(item.category || source.category);
+  if (explicit) return explicit;
+
+  const scores = {};
+  const sourceKey = String(source.key || '').toLowerCase();
+  const sourceName = String(item.source || source.name || '').toLowerCase();
+  const sourceType = String(source.type || '').toLowerCase();
+  const assetType = String(source.assetType || '').toLowerCase();
+  const text = `${item.title || ''} ${item.summary || ''} ${item.source || ''} ${source.name || ''}`.toLowerCase();
+
+  for (const [hint, category] of SOURCE_CATEGORY_HINTS.entries()) {
+    if (sourceKey === hint || sourceName.includes(hint)) addCategoryScore(scores, category, 3);
+  }
+  if (sourceType === 'crypto' || assetType === 'crypto') addCategoryScore(scores, 'crypto', 3);
+  if (sourceType === 'gold' || assetType === 'gold') addCategoryScore(scores, 'precious_metals', 3);
+  if (sourceType === 'markets') addCategoryScore(scores, 'markets', 1);
+
+  scoreKeywords(scores, text);
+
+  let best = '';
+  let bestScore = 0;
+  for (const category of CATEGORY_PRIORITY) {
+    const score = scores[category] || 0;
+    if (score > bestScore) {
+      best = category;
+      bestScore = score;
+    }
+  }
+  return best || (sourceType === 'markets' ? 'markets' : 'other');
+}
+
 // RSS 源配置 (内置)
 const BUILTIN_SOURCES = {
   coindesk: {
@@ -70,7 +167,58 @@ const BUILTIN_SOURCES = {
     type: 'markets',
     assetType: 'general',
   },
+  bbc_business: {
+    name: 'BBC Business',
+    url: 'https://feeds.bbci.co.uk/news/business/rss.xml',
+    type: 'macro',
+    assetType: 'general',
+    category: 'macro',
+  },
+  bbc_world: {
+    name: 'BBC World',
+    url: 'https://feeds.bbci.co.uk/news/world/rss.xml',
+    type: 'geopolitics',
+    assetType: 'general',
+    category: 'risk',
+  },
+  cnbc_economy: {
+    name: 'CNBC Economy',
+    url: 'https://www.cnbc.com/id/20910258/device/rss/rss.html',
+    type: 'macro',
+    assetType: 'general',
+    category: 'macro',
+  },
+  cnbc_world: {
+    name: 'CNBC World',
+    url: 'https://www.cnbc.com/id/100727362/device/rss/rss.html',
+    type: 'geopolitics',
+    assetType: 'general',
+    category: 'risk',
+  },
+  china_daily_business: {
+    name: 'China Daily Business',
+    url: 'https://www.chinadaily.com.cn/rss/bizchina_rss.xml',
+    type: 'macro',
+    assetType: 'general',
+    category: 'macro',
+  },
+  china_daily_china: {
+    name: 'China Daily China',
+    url: 'https://www.chinadaily.com.cn/rss/china_rss.xml',
+    type: 'domestic',
+    assetType: 'general',
+    category: 'macro',
+  },
+  china_daily_world: {
+    name: 'China Daily World',
+    url: 'https://www.chinadaily.com.cn/rss/world_rss.xml',
+    type: 'geopolitics',
+    assetType: 'general',
+    category: 'risk',
+  },
 };
+
+const DEFAULT_ENABLED_NEWS_SOURCES = 'coindesk,cointelegraph,decrypt,panews,coingecko,kitco,fxstreet,bbc_business,bbc_world,cnbc_economy,cnbc_world,china_daily_business,china_daily_china,china_daily_world';
 
 // 简易 XML 解析 — 提取 RSS <item> 节点
 function parseRssItems(xml) {
@@ -127,6 +275,20 @@ function normalizeDate(dateStr) {
   }
 }
 
+function decodeXmlBuffer(buffer, headers = {}) {
+  const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
+  const head = buffer.subarray(0, Math.min(buffer.length, 512)).toString('latin1').toLowerCase();
+  const charset = contentType.match(/charset=([^;\s]+)/)?.[1]
+    || head.match(/encoding=["']([^"']+)/)?.[1]
+    || 'utf-8';
+  const normalized = charset.replace(/^gb2312$/i, 'gb18030').replace(/^gbk$/i, 'gb18030');
+  try {
+    return new TextDecoder(normalized).decode(buffer);
+  } catch {
+    return buffer.toString('utf8');
+  }
+}
+
 // 获取 RSS XML 文本
 import https from 'https';
 import http from 'http';
@@ -144,9 +306,9 @@ function fetchRss(url, _depth = 0) {
           res.resume();
           return fetchRss(redirectUrl, _depth + 1).then(resolve);
         }
-        let body = '';
-        res.on('data', c => body += c);
-        res.on('end', () => resolve(body));
+        const chunks = [];
+        res.on('data', c => chunks.push(Buffer.from(c)));
+        res.on('end', () => resolve(decodeXmlBuffer(Buffer.concat(chunks), res.headers)));
       });
       req.on('error', () => resolve(''));
       req.setTimeout(10000, () => { req.destroy(); resolve(''); });
@@ -208,7 +370,7 @@ async function fetchFromSource(source) {
 
     const db = getDb();
     const insert = db.prepare(
-      'INSERT OR IGNORE INTO news (title, summary, url, source, published_at) VALUES (?, ?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO news (title, summary, url, source, published_at, category) VALUES (?, ?, ?, ?, ?, ?)'
     );
 
     let inserted = 0;
@@ -218,7 +380,8 @@ async function fetchFromSource(source) {
         const exists = db.prepare('SELECT id FROM news WHERE url = ?').get(item.url);
         if (exists) continue;
       }
-      insert.run(item.title, item.summary, item.url, source.name, item.published_at);
+      const category = categorizeNewsItem(item, source);
+      insert.run(item.title, item.summary, item.url, source.name, item.published_at, category);
       inserted++;
     }
 
@@ -249,8 +412,8 @@ async function fetchCoinGeckoNews() {
       const exists = db.prepare('SELECT id FROM news WHERE url = ?').get(url);
       if (exists) continue;
 
-      db.prepare('INSERT OR IGNORE INTO news (title, summary, url, source, published_at) VALUES (?, ?, ?, ?, ?)')
-        .run(title, `Score: ${item.score}, Price BTC: ${item.price_btc?.toFixed(8) || 'N/A'}`, url, 'CoinGecko Trending', now);
+      db.prepare('INSERT OR IGNORE INTO news (title, summary, url, source, published_at, category) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(title, `Score: ${item.score}, Price BTC: ${item.price_btc?.toFixed(8) || 'N/A'}`, url, 'CoinGecko Trending', now, 'crypto');
       inserted++;
     }
     return inserted;
@@ -266,7 +429,7 @@ function getEnabledSources() {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'news_sources_enabled'").get();
   const availableRow = db.prepare("SELECT value FROM settings WHERE key = 'news_sources_available'").get();
   const availableKeys = new Set((availableRow?.value || Object.keys(BUILTIN_SOURCES).join(',')).split(',').map(s => s.trim()).filter(Boolean));
-  const configuredValue = row ? String(row.value || '') : 'coindesk,cointelegraph,decrypt,panews,coingecko';
+  const configuredValue = row ? String(row.value || '') : DEFAULT_ENABLED_NEWS_SOURCES;
   const enabledKeys = configuredValue.split(',').map(s => s.trim()).filter(Boolean).filter(key => availableKeys.has(key));
 
   const sources = [];

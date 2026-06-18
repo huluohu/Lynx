@@ -67,7 +67,7 @@
           {{ t('nav.dataSources') }}
         </router-link>
         <router-link to="/market-data-rules" class="nav-item" @click="sidebarOpen = false">
-          <AppIcon name="settings" class="nav-icon" />
+          <AppIcon name="plug" class="nav-icon" />
           {{ t('nav.marketDataRules') }}
         </router-link>
 
@@ -105,44 +105,101 @@
         </div>
         <div class="app-shell-header-right">
           <div class="header-toolbar desktop-only">
-            <label class="shell-toolbar-select" :title="t('appHeader.theme')">
-              <svg class="shell-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3v4"/>
-                <path d="M12 17v4"/>
-                <path d="M4.93 4.93l2.83 2.83"/>
-                <path d="M16.24 16.24l2.83 2.83"/>
-                <path d="M3 12h4"/>
-                <path d="M17 12h4"/>
-                <path d="M4.93 19.07l2.83-2.83"/>
-                <path d="M16.24 7.76l2.83-2.83"/>
-                <circle cx="12" cy="12" r="4"/>
-              </svg>
-              <select
-                class="form-select shell-select shell-select-compact"
-                :value="preferencesStore.theme"
-                :aria-label="t('appHeader.theme')"
-                @change="applyTheme($event.target.value)"
+            <div ref="themeMenuRef" class="shell-preference-menu" :class="{ open: themeMenuOpen }">
+              <button
+                type="button"
+                class="shell-preference-trigger shell-preference-trigger--theme"
+                :title="t('appHeader.theme')"
+                aria-haspopup="menu"
+                :aria-expanded="themeMenuOpen ? 'true' : 'false'"
+                @click="toggleThemeMenu"
               >
-                <option v-for="value in preferencesStore.supportedThemes" :key="value" :value="value">{{ t(`preferences.themes.${value}`) }}</option>
-              </select>
-            </label>
-            <label class="shell-toolbar-select" :title="t('appHeader.language')">
-              <svg class="shell-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 5h8"/>
-                <path d="M8 3v2c0 4-2 7-4 9"/>
-                <path d="M6 9c1.5 2 3.5 3.5 6 4.5"/>
-                <path d="M14 15h6"/>
-                <path d="M17 12v6"/>
-              </svg>
-              <select
-                class="form-select shell-select shell-select-compact"
-                :value="preferencesStore.language"
-                :aria-label="t('appHeader.language')"
-                @change="applyLanguage($event.target.value)"
+                <span class="theme-preview" :class="`theme-preview--${currentThemeOption.value}`" aria-hidden="true">
+                  <span class="theme-preview-pane theme-preview-pane-sidebar"></span>
+                  <span class="theme-preview-pane theme-preview-pane-header"></span>
+                  <span class="theme-preview-pane theme-preview-pane-body"></span>
+                </span>
+                <span class="shell-preference-trigger-copy">
+                  <span class="shell-preference-kicker">{{ t('appHeader.theme') }}</span>
+                  <strong>{{ currentThemeOption.label }}</strong>
+                </span>
+                <svg class="shell-preference-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <Transition name="shell-menu">
+                <div v-if="themeMenuOpen" class="shell-preference-popover shell-theme-popover" role="menu" :aria-label="t('appHeader.theme')">
+                  <div class="shell-popover-header">
+                    <span>{{ t('appHeader.themeQuickSwitch') }}</span>
+                    <small>{{ t('appHeader.themePanelHint') }}</small>
+                  </div>
+                  <div class="shell-theme-menu-grid">
+                    <button
+                      v-for="option in themeOptions"
+                      :key="option.value"
+                      type="button"
+                      class="shell-theme-menu-item"
+                      :class="{ active: preferencesStore.theme === option.value }"
+                      role="menuitemradio"
+                      :aria-checked="preferencesStore.theme === option.value ? 'true' : 'false'"
+                      @click="selectTheme(option.value)"
+                    >
+                      <span class="theme-option-preview" :class="`theme-preview--${option.value}`" aria-hidden="true">
+                        <span class="theme-preview-pane theme-preview-pane-sidebar"></span>
+                        <span class="theme-preview-pane theme-preview-pane-header"></span>
+                        <span class="theme-preview-pane theme-preview-pane-body"></span>
+                      </span>
+                      <span class="shell-theme-menu-meta">
+                        <strong>{{ option.fullLabel }}</strong>
+                        <small>{{ option.label }}</small>
+                      </span>
+                      <span v-if="preferencesStore.theme === option.value" class="shell-menu-check" aria-hidden="true">✓</span>
+                    </button>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+            <div ref="languageMenuRef" class="shell-preference-menu" :class="{ open: languageMenuOpen }">
+              <button
+                type="button"
+                class="shell-preference-trigger shell-preference-trigger--language"
+                :title="t('appHeader.language')"
+                aria-haspopup="menu"
+                :aria-expanded="languageMenuOpen ? 'true' : 'false'"
+                @click="toggleLanguageMenu"
               >
-                <option v-for="value in preferencesStore.supportedLanguages" :key="value" :value="value">{{ t(`preferences.languages.${value}`) }}</option>
-              </select>
-            </label>
+                <span class="language-flag language-flag--current" aria-hidden="true">{{ currentLanguageOption.flag }}</span>
+                <span class="shell-preference-trigger-copy">
+                  <span class="shell-preference-kicker">{{ t('appHeader.language') }}</span>
+                  <strong>{{ currentLanguageOption.shortLabel }}</strong>
+                </span>
+                <svg class="shell-preference-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <Transition name="shell-menu">
+                <div v-if="languageMenuOpen" class="shell-preference-popover shell-language-popover" role="menu" :aria-label="t('appHeader.language')">
+                  <div class="shell-popover-header shell-popover-header--compact">
+                    <span>{{ t('appHeader.language') }}</span>
+                  </div>
+                  <div class="shell-language-menu-list">
+                    <button
+                      v-for="option in languageOptions"
+                      :key="option.value"
+                      type="button"
+                      class="shell-language-menu-item"
+                      :class="{ active: preferencesStore.language === option.value }"
+                      role="menuitemradio"
+                      :aria-checked="preferencesStore.language === option.value ? 'true' : 'false'"
+                      @click="selectLanguage(option.value)"
+                    >
+                      <span class="language-flag" aria-hidden="true">{{ option.flag }}</span>
+                      <span class="shell-language-menu-copy">
+                        <strong>{{ option.label }}</strong>
+                        <small>{{ option.shortLabel }}</small>
+                      </span>
+                      <span v-if="preferencesStore.language === option.value" class="shell-menu-check" aria-hidden="true">✓</span>
+                    </button>
+                  </div>
+                </div>
+              </Transition>
+            </div>
           </div>
           <button
             v-if="hasMobilePageActions"
@@ -223,7 +280,7 @@
               {{ t('nav.dataSources') }}
             </router-link>
             <router-link to="/market-data-rules" class="action-sheet-item" @click="moreMenuOpen = false">
-              <AppIcon name="settings" class="nav-icon" />
+              <AppIcon name="plug" class="nav-icon" />
               {{ t('nav.marketDataRules') }}
             </router-link>
             <div class="action-sheet-group-label">{{ t('nav.sections.strategy') }}</div>
@@ -311,6 +368,10 @@ const toast = useToast()
 const { t } = useI18n()
 const sidebarOpen = ref(false)
 const moreMenuOpen = ref(false)
+const themeMenuOpen = ref(false)
+const languageMenuOpen = ref(false)
+const themeMenuRef = ref(null)
+const languageMenuRef = ref(null)
 const {
   actions: mobilePageActionItems,
   isOpen: isMobilePageActionsOpen,
@@ -352,6 +413,29 @@ const mobileUnreadBadgeLabel = computed(() => (
   notificationsStore.unreadCount > 99 ? '99+' : String(notificationsStore.unreadCount || 0)
 ))
 const shellOverlayOpen = computed(() => sidebarOpen.value || moreMenuOpen.value || showMobilePageActionsSheet.value)
+const languageFlagMap = { 'zh-CN': '🇨🇳', 'en-US': '🇺🇸' }
+const languageShortLabelMap = { 'zh-CN': '中文', 'en-US': 'EN' }
+const themeOptions = computed(() => preferencesStore.supportedThemes.map((value) => ({
+  value,
+  label: t(`appHeader.themeShort.${value}`),
+  fullLabel: t(`preferences.themes.${value}`),
+})))
+const languageOptions = computed(() => preferencesStore.supportedLanguages.map((value) => ({
+  value,
+  flag: languageFlagMap[value] || '🌐',
+  label: t(`preferences.languages.${value}`),
+  shortLabel: languageShortLabelMap[value] || t(`preferences.languages.${value}`),
+})))
+const currentThemeOption = computed(() => (
+  themeOptions.value.find((option) => option.value === preferencesStore.theme)
+  || themeOptions.value[0]
+  || { value: 'dark', label: t('appHeader.theme'), fullLabel: t('appHeader.theme') }
+))
+const currentLanguageOption = computed(() => (
+  languageOptions.value.find((option) => option.value === preferencesStore.language)
+  || languageOptions.value[0]
+  || { value: 'zh-CN', flag: '🌐', label: t('appHeader.language'), shortLabel: t('appHeader.language') }
+))
 
 useDocumentScrollLock(shellOverlayOpen)
 
@@ -370,13 +454,42 @@ function doLogout() {
 function toggleSidebar() {
   moreMenuOpen.value = false
   closeMobilePageActions()
+  closePreferenceMenus()
   sidebarOpen.value = !sidebarOpen.value
 }
 
 function openMoreMenu() {
   sidebarOpen.value = false
   closeMobilePageActions()
+  closePreferenceMenus()
   moreMenuOpen.value = true
+}
+
+function closePreferenceMenus() {
+  themeMenuOpen.value = false
+  languageMenuOpen.value = false
+}
+
+function toggleThemeMenu() {
+  themeMenuOpen.value = !themeMenuOpen.value
+  languageMenuOpen.value = false
+}
+
+function toggleLanguageMenu() {
+  languageMenuOpen.value = !languageMenuOpen.value
+  themeMenuOpen.value = false
+}
+
+function handlePreferenceOutsideClick(event) {
+  if (!themeMenuOpen.value && !languageMenuOpen.value) return
+  const target = event.target
+  if (themeMenuRef.value?.contains(target) || languageMenuRef.value?.contains(target)) return
+  closePreferenceMenus()
+}
+
+function handlePreferenceEscape(event) {
+  if (event.key !== 'Escape') return
+  closePreferenceMenus()
 }
 
 async function confirmLogout() {
@@ -399,12 +512,22 @@ async function applyTheme(value) {
   }
 }
 
+async function selectTheme(value) {
+  await applyTheme(value)
+  themeMenuOpen.value = false
+}
+
 async function applyLanguage(value) {
   try {
     await preferencesStore.setLanguage(value, { persistServer: true })
   } catch (error) {
     toast.error(error.message || t('common.saveFailed'))
   }
+}
+
+async function selectLanguage(value) {
+  await applyLanguage(value)
+  languageMenuOpen.value = false
 }
 
 async function handleMobilePageAction(action) {
@@ -456,11 +579,14 @@ watch(() => runtimeSettingsStore.values.refresh_interval, (nextValue, prevValue)
 watch(() => route.fullPath, () => {
   sidebarOpen.value = false
   moreMenuOpen.value = false
+  closePreferenceMenus()
   resetMobilePageActions()
 })
 
 onMounted(() => {
   document.addEventListener('contextmenu', preventLongPressContextMenu, { capture: true })
+  document.addEventListener('click', handlePreferenceOutsideClick, { capture: true })
+  document.addEventListener('keydown', handlePreferenceEscape)
   resetMobilePageActions()
   if (authStore.isLoggedIn) {
     syncPreferences()
@@ -470,6 +596,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', preventLongPressContextMenu, { capture: true })
+  document.removeEventListener('click', handlePreferenceOutsideClick, { capture: true })
+  document.removeEventListener('keydown', handlePreferenceEscape)
   stopPolling()
 })
 </script>
@@ -517,26 +645,6 @@ onUnmounted(() => {
   margin-left: auto;
   min-width: 0;
 }
-.shell-preferences-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 84px;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-card);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-.shell-preferences-trigger-label {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-}
 .shell-mobile-title {
   min-width: 0;
   flex: 1 1 auto;
@@ -572,52 +680,244 @@ onUnmounted(() => {
   gap: 8px;
   min-width: 0;
 }
-.shell-toolbar-select {
+.shell-preference-menu {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 0 10px;
-  min-height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-   background: var(--bg-card);
-   color: var(--text-dim);
 }
-.shell-toolbar-icon {
+.shell-preference-trigger {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 18% 0%, color-mix(in srgb, var(--blue) 16%, transparent), transparent 40%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 97%, white 3%), var(--bg-card));
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 28%, transparent);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+.shell-preference-trigger--theme {
+  width: 142px;
+}
+.shell-preference-trigger--language {
+  width: 116px;
+}
+.shell-preference-trigger:hover,
+.shell-preference-menu.open .shell-preference-trigger {
+  border-color: color-mix(in srgb, var(--blue) 44%, var(--border));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--blue) 14%, transparent), 0 12px 28px color-mix(in srgb, var(--shadow-color) 26%, transparent);
+}
+.shell-preference-trigger:active {
+  transform: translateY(1px) scale(0.99);
+}
+.shell-preference-trigger-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1;
+}
+.shell-preference-trigger-copy strong,
+.shell-theme-menu-meta strong,
+.shell-language-menu-copy strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+.shell-preference-kicker,
+.shell-theme-menu-meta small,
+.shell-language-menu-copy small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.shell-preference-caret {
   width: 14px;
   height: 14px;
-  flex-shrink: 0;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.85;
+  color: var(--text-muted);
+  transition: transform 0.18s ease, color 0.18s ease;
 }
-.shell-select-compact {
-  width: auto;
-  min-width: 84px;
-  padding: 6px 18px 6px 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
+.shell-preference-menu.open .shell-preference-caret {
+  transform: rotate(180deg);
+  color: var(--blue);
+}
+.shell-preference-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 260;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 96%, var(--bg) 4%), var(--bg-card));
+  box-shadow: 0 22px 60px color-mix(in srgb, var(--shadow-color) 48%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.shell-preference-popover::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 24px;
+  width: 10px;
+  height: 10px;
+  transform: rotate(45deg);
+  border-top: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 98%, var(--bg) 2%);
+}
+.shell-language-popover {
+  width: min(248px, calc(100vw - 32px));
+}
+.shell-popover-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 4px 12px;
+}
+.shell-popover-header--compact {
+  padding-bottom: 8px;
+}
+.shell-popover-header span {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text);
-  font-size: 12px;
 }
-.shell-select-compact:focus {
-  border: none;
-  outline: none;
+.shell-popover-header small {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.shell-theme-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.shell-theme-menu-item,
+.shell-language-menu-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-hover) 52%, transparent);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.shell-theme-menu-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  padding: 9px;
+  border-radius: 16px;
+  text-align: left;
+}
+.shell-language-menu-list {
+  display: flex;
+  max-height: min(46vh, 360px);
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+.shell-language-menu-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 14px;
+  text-align: left;
+}
+.shell-theme-menu-item:hover,
+.shell-language-menu-item:hover {
+  background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
+  transform: translateY(-1px);
+}
+.shell-theme-menu-item.active,
+.shell-language-menu-item.active {
+  border-color: color-mix(in srgb, var(--blue) 38%, var(--border));
+  background: color-mix(in srgb, var(--blue) 14%, var(--bg-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 14%, transparent), 0 6px 16px color-mix(in srgb, var(--blue) 12%, transparent);
+}
+.shell-theme-menu-meta,
+.shell-language-menu-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.shell-menu-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--blue) 18%, transparent);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+.language-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+}
+.language-flag--current {
+  width: 20px;
+  height: 20px;
+}
+.shell-menu-enter-active,
+.shell-menu-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.shell-menu-enter-from,
+.shell-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
 }
 @media (min-width: 769px) {
   .app-shell-header {
-    position: static;
-    margin-bottom: 12px;
-    padding: 0 0 8px;
-    background: transparent;
-    border-bottom: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    position: sticky;
+    top: 0;
+    z-index: 220;
+    margin: -24px -24px 18px;
+    padding: 24px 24px 12px;
+    background:
+      linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 94%, transparent) 72%, transparent 100%);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
 }
 .menu-toggle-inline {
@@ -673,6 +973,8 @@ onUnmounted(() => {
   width: 18px;
   height: 14px;
   flex-shrink: 0;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 76%, transparent);
 }
 .theme-option-preview {
   width: 100%;
@@ -728,94 +1030,6 @@ onUnmounted(() => {
 }
 .theme-preview--purple .theme-preview-pane-body {
   background: #2e1065;
-}
-.theme-sheet {
-  padding-top: 10px;
-}
-.theme-sheet-current {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 calc(24px + var(--safe-right)) 16px calc(24px + var(--safe-left));
-}
-.theme-sheet-current-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-.theme-sheet-eyebrow {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.theme-sheet-current-name {
-  font-size: 18px;
-  line-height: 1.2;
-  color: var(--text);
-}
-.theme-sheet-current-hint {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--text-dim);
-}
-.theme-sheet-settings-link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue);
-  text-decoration: none;
-  white-space: nowrap;
-}
-.theme-option-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  padding: 0 calc(24px + var(--safe-right)) 16px calc(24px + var(--safe-left));
-}
-.theme-option-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--bg-card);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-.theme-option-card.active {
-  border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
-  background: color-mix(in srgb, var(--blue) 10%, var(--bg-card));
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--blue) 12%, transparent);
-}
-.theme-option-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-}
-.theme-option-label {
-  font-size: 14px;
-  font-weight: 600;
-}
-.theme-option-check {
-  color: var(--blue);
-  font-size: 14px;
-  line-height: 1;
-}
-.theme-sheet-note {
-  padding: 0 calc(24px + var(--safe-right)) 12px calc(24px + var(--safe-left));
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-muted);
 }
 .sidebar-logout {
   background: none;
@@ -928,12 +1142,6 @@ button.mobile-nav-item {
   }
   .header-toolbar {
     display: none;
-  }
-  .theme-sheet-current {
-    flex-direction: column;
-  }
-  .theme-sheet-settings-link {
-    align-self: flex-start;
   }
 }
 </style>

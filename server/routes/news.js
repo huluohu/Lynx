@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
-import { refreshNews, cacheNewsContent, cachePendingNews, getNewsAutoCacheSettings } from '../services/news.js';
+import { NEWS_CATEGORIES, normalizeNewsCategory, refreshNews, cacheNewsContent, cachePendingNews, getNewsAutoCacheSettings } from '../services/news.js';
 
 const router = Router();
 
@@ -107,13 +107,35 @@ function writeNdjson(res, event, data = {}) {
   res.write(`${JSON.stringify({ event, ...data })}\n`);
 }
 
+function getNewsCategoryCounts(db) {
+  const counts = Object.fromEntries(NEWS_CATEGORIES.map(category => [category, 0]));
+  const rows = db.prepare(`SELECT COALESCE(NULLIF(category, ''), 'other') AS category, COUNT(*) AS count
+    FROM news
+    GROUP BY COALESCE(NULLIF(category, ''), 'other')`).all();
+  for (const row of rows) {
+    const category = normalizeNewsCategory(row.category) || 'other';
+    counts[category] = (counts[category] || 0) + Number(row.count || 0);
+  }
+  return counts;
+}
+
 // GET 新闻列表
 router.get('/', (req, res) => {
   const db = getDb();
   const { limit = 20, offset = 0 } = req.query;
-  const rows = db.prepare('SELECT id, title, summary, url, source, published_at, read, cache_status, created_at FROM news ORDER BY published_at DESC LIMIT ? OFFSET ?').all(Number(limit), Number(offset));
-  const total = db.prepare('SELECT COUNT(*) as count FROM news').get().count;
-  res.json({ success: true, data: rows, total });
+  const category = normalizeNewsCategory(req.query.category);
+  const pageLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+  const pageOffset = Math.max(0, Number(offset) || 0);
+  const where = category ? 'WHERE category = ?' : '';
+  const params = category ? [category] : [];
+  const rows = db.prepare(`SELECT id, title, summary, url, source, published_at, read, cache_status, created_at,
+      COALESCE(NULLIF(category, ''), 'other') AS category
+    FROM news
+    ${where}
+    ORDER BY published_at DESC
+    LIMIT ? OFFSET ?`).all(...params, pageLimit, pageOffset);
+  const total = db.prepare(`SELECT COUNT(*) as count FROM news ${where}`).get(...params).count;
+  res.json({ success: true, data: rows, total, category: category || 'all', categories: getNewsCategoryCounts(db) });
 });
 
 // POST 手动刷新新闻
@@ -335,7 +357,7 @@ router.post('/:id/translate/stream', async (req, res) => {
 // GET 单条新闻详情（含缓存内容）
 router.get('/:id/content', async (req, res) => {
   const db = getDb();
-  const row = db.prepare('SELECT id, title, url, content, cache_status FROM news WHERE id = ?').get(req.params.id);
+  const row = db.prepare("SELECT id, title, url, content, cache_status, COALESCE(NULLIF(category, ''), 'other') AS category FROM news WHERE id = ?").get(req.params.id);
   if (!row) return res.status(404).json({ success: false, error: 'Not found' });
 
   if (row.cache_status === 'cached' && row.content) {
@@ -344,7 +366,7 @@ router.get('/:id/content', async (req, res) => {
 
   // Try to cache now
   const result = await cacheNewsContent(row.id);
-  const updated = db.prepare('SELECT id, title, url, content, cache_status FROM news WHERE id = ?').get(row.id);
+  const updated = db.prepare("SELECT id, title, url, content, cache_status, COALESCE(NULLIF(category, ''), 'other') AS category FROM news WHERE id = ?").get(row.id);
   res.json({ success: true, data: updated });
 });
 

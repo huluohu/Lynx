@@ -24,6 +24,21 @@
       </div>
     </div>
 
+    <div v-if="categoryOptions.length > 1" class="news-category-bar" :aria-label="t('newsList.categoryFilter')">
+      <button
+        v-for="option in categoryOptions"
+        :key="option.value"
+        type="button"
+        class="news-category-chip"
+        :class="{ active: activeCategory === option.value }"
+        @click="selectCategory(option.value)"
+      >
+        <span class="news-category-icon" aria-hidden="true">{{ option.icon }}</span>
+        <span class="news-category-name">{{ option.label }}</span>
+        <span class="news-category-count">{{ option.count }}</span>
+      </button>
+    </div>
+
     <div v-if="loading" class="card">
       <div v-for="i in 4" :key="i" style="padding:14px 0;border-bottom:1px solid var(--border)">
         <div class="skeleton skeleton-text long"></div>
@@ -39,6 +54,7 @@
         </div>
         <div v-if="n.summary" class="news-summary">{{ n.summary }}</div>
         <div class="news-meta">
+          <span class="news-category-badge">{{ categoryIcon(n.category) }} {{ categoryLabel(n.category) }}</span>
           <span v-if="n.source" class="news-source">{{ n.source }}</span>
           <span>{{ formatTime(n.published_at) }}</span>
           <span class="cache-badge" :class="'cache-' + (n.cache_status || 'pending')">{{ cacheLabel(n.cache_status) }}</span>
@@ -53,7 +69,7 @@
     <div v-else class="card empty">
       <div class="empty-icon"><AppIcon name="news" size="34" /></div>
       <p>{{ t('newsList.empty') }}</p>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:8px">{{ t('newsList.emptyHint') }}</p>
+      <p style="font-size:12px;color:var(--text-dim);margin-top:8px">{{ activeCategory === 'all' ? t('newsList.emptyHint') : t('newsList.emptyCategoryHint') }}</p>
     </div>
 
     <AppDrawer v-model="detailDrawerOpen" :title="displayNewsTitle || t('newsList.detailTitle')" mobileHeight="fixed">
@@ -64,6 +80,7 @@
       </div>
       <div v-else-if="selectedNews" class="news-detail">
         <div class="news-detail-meta">
+          <span class="news-category-badge">{{ categoryIcon(selectedNews.category) }} {{ categoryLabel(selectedNews.category) }}</span>
           <span v-if="selectedNews.source" class="news-source">{{ selectedNews.source }}</span>
           <span>{{ formatClockTime(selectedNews.published_at, { second: '2-digit' }) }}</span>
           <span class="cache-badge cache-cached">{{ cacheLabel(selectedNews.cache_status) }}</span>
@@ -132,6 +149,21 @@ const translateTarget = ref('auto')
 const translatedChunkCount = ref(0)
 const translatedTotalChunks = ref(0)
 const translationInfo = ref('')
+const activeCategory = ref('all')
+const categoryCounts = ref({})
+
+const NEWS_CATEGORIES = [
+  { value: 'markets', icon: '📈' },
+  { value: 'macro', icon: '🌐' },
+  { value: 'equity', icon: '🏢' },
+  { value: 'crypto', icon: '₿' },
+  { value: 'precious_metals', icon: '🥇' },
+  { value: 'forex', icon: '💱' },
+  { value: 'commodities', icon: '🛢️' },
+  { value: 'strategy', icon: '🧭' },
+  { value: 'risk', icon: '⚠️' },
+  { value: 'other', icon: '🗞️' },
+]
 
 const pendingCacheCount = computed(() => news.value.filter(n => n.cache_status === 'pending' && n.url).length)
 const displayNewsTitle = computed(() => translatedNews.value?.title || selectedNews.value?.title || '')
@@ -141,13 +173,31 @@ const translationProgressPct = computed(() => translatedTotalChunks.value ? Math
 const translationProgressText = computed(() => translatedTotalChunks.value
   ? t('newsList.translationProgress', { done: translatedChunkCount.value, total: translatedTotalChunks.value })
   : t('newsList.translationPreparing'))
+const totalCategoryCount = computed(() => NEWS_CATEGORIES.reduce((sum, item) => sum + categoryCount(item.value), 0))
+const categoryOptions = computed(() => {
+  const options = [{ value: 'all', icon: '✨', label: t('newsList.categories.all'), count: totalCategoryCount.value || total.value }]
+  for (const item of NEWS_CATEGORIES) {
+    const count = categoryCount(item.value)
+    if (count > 0 || activeCategory.value === item.value) {
+      options.push({ ...item, label: categoryLabel(item.value), count })
+    }
+  }
+  return options
+})
+
+function buildNewsUrl(offset = 0) {
+  const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) })
+  if (activeCategory.value !== 'all') params.set('category', activeCategory.value)
+  return `/api/news?${params.toString()}`
+}
 
 async function loadData() {
   try {
-    const res = await api(`/api/news?limit=${PAGE_SIZE}&offset=0`)
+    const res = await api(buildNewsUrl(0))
     const json = await res.json()
     news.value = json.data || []
     total.value = json.total || 0
+    categoryCounts.value = json.categories || {}
     page.value = 1
     lastUpdated.value = new Date()
   } finally {
@@ -157,12 +207,20 @@ async function loadData() {
 
 async function loadMore() {
   const offset = page.value * PAGE_SIZE
-  const res = await api(`/api/news?limit=${PAGE_SIZE}&offset=${offset}`)
+  const res = await api(buildNewsUrl(offset))
   const json = await res.json()
   if (json.data?.length) {
     news.value.push(...json.data)
+    categoryCounts.value = json.categories || categoryCounts.value
     page.value++
   }
+}
+
+async function selectCategory(category) {
+  if (activeCategory.value === category) return
+  activeCategory.value = category
+  loading.value = true
+  await loadData()
 }
 
 async function refresh() {
@@ -329,6 +387,19 @@ function cacheLabel(status) {
   }[status || 'pending'] || t('newsList.cacheStatus.pending')
 }
 
+function categoryCount(category) {
+  return Number(categoryCounts.value?.[category] || 0)
+}
+
+function categoryLabel(category) {
+  const key = NEWS_CATEGORIES.some(item => item.value === category) ? category : 'other'
+  return t(`newsList.categories.${key}`)
+}
+
+function categoryIcon(category) {
+  return NEWS_CATEGORIES.find(item => item.value === category)?.icon || '🗞️'
+}
+
 function formatArticleBlocks(content) {
   const lines = String(content || '')
     .replace(/\r\n/g, '\n')
@@ -386,6 +457,64 @@ onUnmounted(() => {
 <style scoped>
 .btn-inline-icon { display: inline-flex; align-items: center; gap: 6px; }
 .btn-inline-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
+.news-category-bar {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 4px 2px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.news-category-bar::-webkit-scrollbar { display: none; }
+.news-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.news-category-chip:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+.news-category-chip.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--primary) 44%, var(--border));
+  background: color-mix(in srgb, var(--primary) 14%, var(--bg-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent), 0 10px 22px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+.news-category-icon { line-height: 1; }
+.news-category-name { white-space: nowrap; }
+.news-category-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-hover) 82%, transparent);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+}
+.news-category-chip.active .news-category-count {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
 .news-item {
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
@@ -398,6 +527,7 @@ onUnmounted(() => {
 .news-title.read { color: var(--text-dim); font-weight: 400; }
 .news-summary { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .news-meta { font-size: 11px; color: var(--text-muted); display: flex; gap: 12px; align-items: center; }
+.news-category-badge { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--primary); padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
 .news-source { background: var(--bg-dim, #f0f0f0); padding: 1px 6px; border-radius: 3px; }
 .news-link { color: var(--primary); text-decoration: none; }
 .news-link:hover { text-decoration: underline; }
@@ -428,6 +558,16 @@ onUnmounted(() => {
 .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @media (max-width: 768px) {
+  .news-category-bar {
+    margin-left: -2px;
+    margin-right: -2px;
+    padding-bottom: 10px;
+  }
+  .news-category-chip {
+    min-height: 36px;
+    padding: 0 11px;
+    font-size: 13px;
+  }
   .news-meta { flex-wrap: wrap; gap: 6px; font-size: 12px; }
   .news-title { font-size: 15px; }
   .news-item { padding: 16px 0; }

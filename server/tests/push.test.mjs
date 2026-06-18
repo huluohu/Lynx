@@ -10,7 +10,7 @@ let dbPath;
 let dbApi;
 let pushApi;
 
-async function startWebhook({ failFirst = 0 } = {}) {
+async function startWebhook({ failFirst = 0, responseBody = { ok: true } } = {}) {
   const received = [];
   let attempts = 0;
   const server = http.createServer((req, res) => {
@@ -25,7 +25,7 @@ async function startWebhook({ failFirst = 0 } = {}) {
         return;
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify(responseBody));
     });
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -68,6 +68,42 @@ test('sendTestPush posts configured webhook payload', async () => {
     assert.equal(webhook.received.length, 1);
     assert.equal(webhook.received[0].method, 'POST');
     assert.equal(webhook.received[0].body.title.includes('测试通知'), true);
+  } finally {
+    await webhook.close();
+  }
+});
+
+test('sendTestPush sends WeCom-compatible text payload instead of markdown', async () => {
+  const webhook = await startWebhook({ responseBody: { errcode: 0, errmsg: 'ok' } });
+  const db = dbApi.getDb();
+  setSetting(db, 'push_enabled', 'true');
+  setSetting(db, 'push_webhook_type', 'wecom');
+  setSetting(db, 'push_webhook_url', webhook.url);
+
+  try {
+    const result = await pushApi.sendTestPush();
+    assert.equal(result.success, true);
+    assert.equal(webhook.received.length, 1);
+    assert.equal(webhook.received[0].body.msgtype, 'text');
+    assert.ok(webhook.received[0].body.text.content.includes('L¥NX 测试通知'));
+    assert.equal('markdown' in webhook.received[0].body, false);
+  } finally {
+    await webhook.close();
+  }
+});
+
+test('sendTestPush treats WeCom errcode response as failure', async () => {
+  const webhook = await startWebhook({ responseBody: { errcode: 40008, errmsg: 'unsupported msgtype' } });
+  const db = dbApi.getDb();
+  setSetting(db, 'push_enabled', 'true');
+  setSetting(db, 'push_webhook_type', 'wecom');
+  setSetting(db, 'push_webhook_url', webhook.url);
+
+  try {
+    const result = await pushApi.sendTestPush();
+    assert.equal(result.success, false);
+    assert.match(result.error, /WeCom 40008/);
+    assert.equal(webhook.received.length, 1);
   } finally {
     await webhook.close();
   }

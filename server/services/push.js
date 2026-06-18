@@ -7,6 +7,14 @@ const log = createLogger('push');
 const PUSH_MAX_ATTEMPTS = Math.max(1, Number(process.env.PUSH_MAX_ATTEMPTS || 3));
 const PUSH_RETRY_DELAYS_MS = [800, 2000];
 
+class PushDeliveryError extends Error {
+  constructor(message, { retryable = true } = {}) {
+    super(message);
+    this.name = 'PushDeliveryError';
+    this.retryable = retryable;
+  }
+}
+
 /**
  * Supported push channels:
  * - wecom: 企业微信机器人 Webhook
@@ -28,8 +36,8 @@ function buildPayload(type, title, content) {
   switch (type) {
     case 'wecom':
       return JSON.stringify({
-        msgtype: 'markdown',
-        markdown: { content: `## ${title}\n${content}` },
+        msgtype: 'text',
+        text: { content: `${title}\n${content}`.slice(0, 2048) },
       });
     case 'serverchan':
       return JSON.stringify({ title, desp: content });
@@ -43,7 +51,23 @@ function buildPayload(type, title, content) {
   }
 }
 
-function postWebhook(url, payload) {
+function validateWebhookResponse(type, statusCode, body) {
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new PushDeliveryError(`HTTP ${statusCode}: ${body.slice(0, 200)}`, { retryable: statusCode === 429 || statusCode >= 500 });
+  }
+  if (type !== 'wecom') return;
+  try {
+    const json = JSON.parse(body || '{}');
+    if (json.errcode != null && Number(json.errcode) !== 0) {
+      const code = Number(json.errcode);
+      throw new PushDeliveryError(`WeCom ${json.errcode}: ${json.errmsg || body.slice(0, 200)}`, { retryable: code === -1 || code === 45009 });
+    }
+  } catch (error) {
+    if (error instanceof PushDeliveryError) throw error;
+  }
+}
+
+function postWebhook(url, payload, type = 'custom') {
   return new Promise((resolve, reject) => {
     try {
       const parsed = new URL(url);
@@ -62,10 +86,11 @@ function postWebhook(url, payload) {
         let body = '';
         res.on('data', c => body += c);
         res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            validateWebhookResponse(type, res.statusCode, body);
             resolve({ success: true, status: res.statusCode, body });
-          } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${body.slice(0, 200)}`));
+          } catch (error) {
+            reject(error);
           }
         });
       });
@@ -83,14 +108,15 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function postWebhookWithRetry(url, payload) {
+async function postWebhookWithRetry(url, payload, type = 'custom') {
   let lastError;
   for (let attempt = 1; attempt <= PUSH_MAX_ATTEMPTS; attempt++) {
     try {
-      const result = await postWebhook(url, payload);
+      const result = await postWebhook(url, payload, type);
       return { ...result, attempts: attempt };
     } catch (error) {
       lastError = error;
+      if (error.retryable === false) break;
       if (attempt >= PUSH_MAX_ATTEMPTS) break;
       const delayMs = PUSH_RETRY_DELAYS_MS[Math.min(attempt - 1, PUSH_RETRY_DELAYS_MS.length - 1)] || 2000;
       log.warn('Push attempt failed, retrying', { attempt, nextAttempt: attempt + 1, delayMs, error: error.message });
@@ -114,7 +140,7 @@ export async function sendPush(title, content) {
 
   try {
     const payload = buildPayload(config.type, title, content);
-    const result = await postWebhookWithRetry(config.url, payload);
+    const result = await postWebhookWithRetry(config.url, payload, config.type);
     log.info('Push sent', { type: config.type, title, attempts: result.attempts });
     return { success: true, attempts: result.attempts };
   } catch (e) {
@@ -137,7 +163,7 @@ export async function sendTestPush() {
 
   try {
     const payload = buildPayload(config.type, title, content);
-    const result = await postWebhookWithRetry(config.url, payload);
+    const result = await postWebhookWithRetry(config.url, payload, config.type);
     return { success: true, attempts: result.attempts };
   } catch (e) {
     return { success: false, error: e.message };

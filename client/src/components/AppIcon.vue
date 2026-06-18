@@ -142,6 +142,13 @@
     <template v-else-if="name === 'tool'">
       <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.8 2.8-3-3 2.8-2.8z" />
     </template>
+    <template v-else-if="name === 'plug'">
+      <path d="M9 7V3" />
+      <path d="M15 7V3" />
+      <path d="M7 7h10v4a5 5 0 0 1-10 0V7z" />
+      <path d="M12 16v2a3 3 0 0 1-3 3H7" />
+      <path d="M5 21h2" />
+    </template>
     <template v-else-if="name === 'chevron-down'">
       <path d="M6 9l6 6 6-6" />
     </template>

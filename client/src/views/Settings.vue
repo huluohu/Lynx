@@ -13,23 +13,57 @@
           </button>
         </div>
         <div class="settings-card">
-          <div class="setting-item">
+          <div class="setting-item setting-item-vertical setting-item-preference">
             <div class="setting-info">
               <span class="setting-label">{{ t('settings.appearance.theme') }}</span>
               <span class="setting-desc">{{ t('settings.appearance.themeDesc') }}</span>
             </div>
-            <select class="form-select inline-select" v-model="form.theme" @change="dirty.appearance = true">
-              <option v-for="value in preferencesStore.supportedThemes" :key="value" :value="value">{{ t(`preferences.themes.${value}`) }}</option>
-            </select>
+            <div class="preference-choice-grid theme-choice-grid" role="radiogroup" :aria-label="t('settings.appearance.theme')">
+              <button
+                v-for="option in themeOptions"
+                :key="option.value"
+                type="button"
+                class="preference-choice theme-choice"
+                :class="{ active: form.theme === option.value }"
+                role="radio"
+                :aria-checked="form.theme === option.value ? 'true' : 'false'"
+                @click="setAppearanceValue('theme', option.value)"
+              >
+                <span class="settings-theme-preview" :class="`settings-theme-preview--${option.value}`" aria-hidden="true">
+                  <span class="settings-theme-preview-pane settings-theme-preview-pane-sidebar"></span>
+                  <span class="settings-theme-preview-pane settings-theme-preview-pane-header"></span>
+                  <span class="settings-theme-preview-pane settings-theme-preview-pane-body"></span>
+                </span>
+                <span class="preference-choice-meta">
+                  <span class="preference-choice-label">{{ option.label }}</span>
+                  <span class="preference-choice-check">{{ form.theme === option.value ? '✓' : '' }}</span>
+                </span>
+              </button>
+            </div>
           </div>
-          <div class="setting-item">
+          <div class="setting-item setting-item-vertical setting-item-preference">
             <div class="setting-info">
               <span class="setting-label">{{ t('settings.appearance.language') }}</span>
               <span class="setting-desc">{{ t('settings.appearance.languageDesc') }}</span>
             </div>
-            <select class="form-select inline-select" v-model="form.language" @change="dirty.appearance = true">
-              <option v-for="value in preferencesStore.supportedLanguages" :key="value" :value="value">{{ t(`preferences.languages.${value}`) }}</option>
-            </select>
+            <div class="preference-choice-grid language-choice-grid" role="radiogroup" :aria-label="t('settings.appearance.language')">
+              <button
+                v-for="option in languageOptions"
+                :key="option.value"
+                type="button"
+                class="preference-choice language-choice"
+                :class="{ active: form.language === option.value }"
+                role="radio"
+                :aria-checked="form.language === option.value ? 'true' : 'false'"
+                @click="setAppearanceValue('language', option.value)"
+              >
+                <span class="language-choice-flag" aria-hidden="true">{{ option.flag }}</span>
+                <span class="preference-choice-meta">
+                  <span class="preference-choice-label">{{ option.label }}</span>
+                  <span class="preference-choice-check">{{ form.language === option.value ? '✓' : '' }}</span>
+                </span>
+              </button>
+            </div>
           </div>
           <div class="setting-item">
             <div class="setting-info">
@@ -369,7 +403,7 @@ const form = reactive({
   strategy_monitor_interval: '5',
   signal_valid_hours: '24',
   news_refresh_interval: '30',
-  news_sources_enabled: 'coindesk,cointelegraph,decrypt,panews,coingecko',
+  news_sources_enabled: 'coindesk,cointelegraph,decrypt,panews,coingecko,kitco,fxstreet,bbc_business,bbc_world,cnbc_economy,cnbc_world,china_daily_business,china_daily_china,china_daily_world',
   news_auto_cache: 'true',
   news_cache_batch_size: '5',
   price_alert_threshold: '2',
@@ -429,6 +463,13 @@ const builtinNewsSources = computed(() => [
   { key: 'bitcoin_magazine', label: t('settings.news.builtinSourceLabels.bitcoin_magazine') },
   { key: 'kitco', label: t('settings.news.builtinSourceLabels.kitco') },
   { key: 'fxstreet', label: t('settings.news.builtinSourceLabels.fxstreet') },
+  { key: 'bbc_business', label: t('settings.news.builtinSourceLabels.bbc_business') },
+  { key: 'bbc_world', label: t('settings.news.builtinSourceLabels.bbc_world') },
+  { key: 'cnbc_economy', label: t('settings.news.builtinSourceLabels.cnbc_economy') },
+  { key: 'cnbc_world', label: t('settings.news.builtinSourceLabels.cnbc_world') },
+  { key: 'china_daily_business', label: t('settings.news.builtinSourceLabels.china_daily_business') },
+  { key: 'china_daily_china', label: t('settings.news.builtinSourceLabels.china_daily_china') },
+  { key: 'china_daily_world', label: t('settings.news.builtinSourceLabels.china_daily_world') },
 ])
 
 const btcMarketSources = computed(() => [
@@ -455,6 +496,16 @@ const enabledNewsSourceOptions = computed(() => {
 
 const enabledBtcSourceOptions = computed(() => enabledMarketSourceOptions('crypto', btcMarketSources.value))
 const enabledGoldSourceOptions = computed(() => enabledMarketSourceOptions('precious_metal', goldMarketSources.value))
+const languageFlagMap = { 'zh-CN': '🇨🇳', 'en-US': '🇺🇸' }
+const themeOptions = computed(() => preferencesStore.supportedThemes.map((value) => ({
+  value,
+  label: t(`preferences.themes.${value}`),
+})))
+const languageOptions = computed(() => preferencesStore.supportedLanguages.map((value) => ({
+  value,
+  flag: languageFlagMap[value] || '🌐',
+  label: t(`preferences.languages.${value}`),
+})))
 
 const marketColorOptions = computed(() => preferencesStore.supportedMarketColorSchemes.map((value) => ({
   value,
@@ -492,6 +543,14 @@ function enabledMarketSourceOptions(assetClass, definitions) {
 function filterSelection(values, options) {
   const allowed = new Set(options.map(option => option.key))
   return values.filter(value => allowed.has(value))
+}
+
+function setAppearanceValue(key, value) {
+  if (!(key in form) || form[key] === value) return
+  form[key] = value
+  dirty.appearance = true
+  if (key === 'theme') preferencesStore.setTheme(value).catch(() => {})
+  if (key === 'language') preferencesStore.setLanguage(value).catch(() => {})
 }
 
 function syncSelectedSources() {
@@ -735,6 +794,10 @@ onMounted(load)
   gap: 8px;
 }
 
+.setting-item-preference {
+  gap: 12px;
+}
+
 .setting-info {
   display: flex;
   flex-direction: column;
@@ -796,6 +859,117 @@ onMounted(load)
   width: auto;
 }
 
+.preference-choice-grid {
+  display: grid;
+  gap: 10px;
+}
+.theme-choice-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.language-choice-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.preference-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 94%, white 6%), var(--bg-card));
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.preference-choice:hover {
+  border-color: color-mix(in srgb, var(--blue) 34%, var(--border));
+  background: color-mix(in srgb, var(--blue) 7%, var(--bg-card));
+}
+.preference-choice:active {
+  transform: scale(0.985);
+}
+.preference-choice.active {
+  border-color: color-mix(in srgb, var(--blue) 58%, var(--border));
+  background: color-mix(in srgb, var(--blue) 13%, var(--bg-card));
+  box-shadow: 0 12px 26px color-mix(in srgb, var(--blue) 11%, transparent);
+}
+.preference-choice-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.preference-choice-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 650;
+}
+.preference-choice-check {
+  width: 16px;
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+.settings-theme-preview {
+  display: grid;
+  grid-template-columns: 0.9fr 1.2fr;
+  grid-template-rows: 0.8fr 1.2fr;
+  gap: 2px;
+  width: 34px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-hover) 72%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 86%, transparent);
+}
+.settings-theme-preview-pane {
+  display: block;
+  border-radius: 4px;
+}
+.settings-theme-preview-pane-sidebar {
+  grid-row: 1 / span 2;
+}
+.settings-theme-preview-pane-header,
+.settings-theme-preview-pane-body {
+  grid-column: 2;
+}
+.settings-theme-preview--dark .settings-theme-preview-pane-sidebar { background: #0f172a; }
+.settings-theme-preview--dark .settings-theme-preview-pane-header { background: #1e293b; }
+.settings-theme-preview--dark .settings-theme-preview-pane-body { background: #111827; }
+.settings-theme-preview--light .settings-theme-preview-pane-sidebar { background: #e2e8f0; }
+.settings-theme-preview--light .settings-theme-preview-pane-header { background: #fff; }
+.settings-theme-preview--light .settings-theme-preview-pane-body { background: #f8fafc; }
+.settings-theme-preview--transparent .settings-theme-preview-pane-sidebar { background: linear-gradient(180deg, rgba(59, 130, 246, 0.48), rgba(15, 23, 42, 0.56)); }
+.settings-theme-preview--transparent .settings-theme-preview-pane-header { background: rgba(255, 255, 255, 0.52); }
+.settings-theme-preview--transparent .settings-theme-preview-pane-body { background: rgba(15, 23, 42, 0.2); }
+.settings-theme-preview--purple .settings-theme-preview-pane-sidebar { background: #4c1d95; }
+.settings-theme-preview--purple .settings-theme-preview-pane-header { background: #6d28d9; }
+.settings-theme-preview--purple .settings-theme-preview-pane-body { background: #2e1065; }
+.language-choice-flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+  font-size: 21px;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 78%, transparent);
+}
+
 .setting-unit {
   font-size: 13px;
   color: var(--text-dim);
@@ -840,6 +1014,14 @@ onMounted(load)
   .setting-item { padding: 16px; flex-wrap: wrap; gap: 10px; }
   .setting-item .form-select,
   .inline-select { max-width: 100%; width: 100%; }
+  .theme-choice-grid,
+  .language-choice-grid { grid-template-columns: 1fr 1fr; }
+  .preference-choice { min-height: 56px; padding: 10px; }
   .save-btn { min-height: 36px; padding: 8px 16px; }
+}
+
+@media (max-width: 480px) {
+  .theme-choice-grid,
+  .language-choice-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -320,6 +320,13 @@ const builtinNewsSources = computed(() => [
   { key: 'bitcoin_magazine', logo: 'BM', label: t('settings.news.builtinSourceLabels.bitcoin_magazine'), desc: t('dataSources.newsSourceDesc.bitcoin_magazine') },
   { key: 'kitco', logo: 'KT', label: t('settings.news.builtinSourceLabels.kitco'), desc: t('dataSources.newsSourceDesc.kitco') },
   { key: 'fxstreet', logo: 'FX', label: t('settings.news.builtinSourceLabels.fxstreet'), desc: t('dataSources.newsSourceDesc.fxstreet') },
+  { key: 'bbc_business', logo: 'BB', label: t('settings.news.builtinSourceLabels.bbc_business'), desc: t('dataSources.newsSourceDesc.bbc_business') },
+  { key: 'bbc_world', logo: 'BW', label: t('settings.news.builtinSourceLabels.bbc_world'), desc: t('dataSources.newsSourceDesc.bbc_world') },
+  { key: 'cnbc_economy', logo: 'CE', label: t('settings.news.builtinSourceLabels.cnbc_economy'), desc: t('dataSources.newsSourceDesc.cnbc_economy') },
+  { key: 'cnbc_world', logo: 'CW', label: t('settings.news.builtinSourceLabels.cnbc_world'), desc: t('dataSources.newsSourceDesc.cnbc_world') },
+  { key: 'china_daily_business', logo: 'CB', label: t('settings.news.builtinSourceLabels.china_daily_business'), desc: t('dataSources.newsSourceDesc.china_daily_business') },
+  { key: 'china_daily_china', logo: 'CC', label: t('settings.news.builtinSourceLabels.china_daily_china'), desc: t('dataSources.newsSourceDesc.china_daily_china') },
+  { key: 'china_daily_world', logo: 'DW', label: t('settings.news.builtinSourceLabels.china_daily_world'), desc: t('dataSources.newsSourceDesc.china_daily_world') },
 ])
 
 const btcMarketSources = computed(() => [

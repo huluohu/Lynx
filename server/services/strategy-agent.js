@@ -33,6 +33,25 @@ const AGENT_VERSION = '2026-06-agent-v2';
 const ANALYST_PROMPT_VERSION = 'analyst-2026-06-v2';
 const STRATEGIST_PROMPT_VERSION = 'strategist-2026-06-v2';
 
+function cleanSettingValue(value) {
+  const text = String(value ?? '').trim();
+  if (!text || text.startsWith('****')) return '';
+  return text;
+}
+
+function resolveConfigValue(settings, key, envKey, fallback = '') {
+  return cleanSettingValue(settings[key]) || cleanSettingValue(process.env[envKey]) || fallback;
+}
+
+function safeUrlHost(value) {
+  try {
+    const url = new URL(value);
+    return url.host;
+  } catch {
+    return '';
+  }
+}
+
 // ============================================================
 // Circuit Breaker
 // ============================================================
@@ -72,12 +91,15 @@ export function getAgentConfig(db) {
   const retryCount = parseInt(settings.agent_llm_retries || process.env.AGENT_LLM_RETRIES || '3', 10);
 
   return {
-    apiUrl: settings.ai_api_url || process.env.AI_API_URL || '',
-    apiKey: settings.ai_api_key || process.env.AI_API_KEY || '',
-    model: settings.ai_model || process.env.AI_MODEL || 'gpt-4o-mini',
-    analysisModel: settings.agent_analysis_model || settings.ai_model || process.env.AI_MODEL || 'gpt-4o-mini',
-    searchApiUrl: settings.agent_search_api_url || process.env.AGENT_SEARCH_API_URL || '',
-    searchApiKey: settings.agent_search_api_key || process.env.AGENT_SEARCH_API_KEY || '',
+    apiUrl: resolveConfigValue(settings, 'ai_api_url', 'AI_API_URL'),
+    apiKey: resolveConfigValue(settings, 'ai_api_key', 'AI_API_KEY'),
+    model: resolveConfigValue(settings, 'ai_model', 'AI_MODEL', 'gpt-4o-mini'),
+    analysisModel: cleanSettingValue(settings.agent_analysis_model)
+      || cleanSettingValue(settings.ai_model)
+      || cleanSettingValue(process.env.AI_MODEL)
+      || 'gpt-4o-mini',
+    searchApiUrl: resolveConfigValue(settings, 'agent_search_api_url', 'AGENT_SEARCH_API_URL'),
+    searchApiKey: resolveConfigValue(settings, 'agent_search_api_key', 'AGENT_SEARCH_API_KEY'),
     llmRetries: Number.isFinite(retryCount) ? Math.max(1, Math.min(5, retryCount)) : 3,
   };
 }
@@ -227,7 +249,7 @@ function preCheck(db, config, assetIds) {
 // Step 1: Data Collection (enhanced)
 // ============================================================
 
-async function collectData(db, assetIds, config) {
+async function collectData(db, assetIds, config, tracer = null) {
   log.info('Step 1: Collecting data', { assetIds });
 
   const result = {
@@ -235,6 +257,12 @@ async function collectData(db, assetIds, config) {
     recentNews: [],
     macroIndicators: {},
     triggeredPlans: [],
+    externalSearch: {
+      configured: !!config.searchApiUrl,
+      host: safeUrlHost(config.searchApiUrl),
+      attempted: 0,
+      returned: 0,
+    },
   };
 
   for (const id of assetIds) {
@@ -329,9 +357,16 @@ async function collectData(db, assetIds, config) {
   }
 
   if (config.searchApiUrl) {
+    log.info('External search enabled for Agent data collection', {
+      host: result.externalSearch.host,
+      assets: result.assets.length,
+      hasApiKey: !!config.searchApiKey,
+    });
     for (const a of result.assets) {
+      result.externalSearch.attempted++;
       externalPromises.push(
         searchNews(config, a.asset.name).then(news => {
+          result.externalSearch.returned += news.length;
           result.recentNews.push(...news);
         })
       );
@@ -346,6 +381,12 @@ async function collectData(db, assetIds, config) {
     newsItems: result.recentNews.length,
     triggeredPlans: result.triggeredPlans.length,
     macroKeys: Object.keys(result.macroIndicators),
+    externalSearch: result.externalSearch,
+  });
+
+  tracer?.saveArtifact('collect', 'external_search', result.externalSearch, {
+    configured: result.externalSearch.configured,
+    host: result.externalSearch.host,
   });
 
   return result;
@@ -394,16 +435,42 @@ async function fetchGoldMacro() {
   return indicators;
 }
 
-async function searchNews(config, assetName) {
+function buildSearchUrl(config, query, limit = 5) {
+  const template = String(config.searchApiUrl || '').trim();
+  const hasQueryPlaceholder = /\{(?:query|q)}/i.test(template);
+  const rendered = template
+    .replace(/\{query}/gi, encodeURIComponent(query))
+    .replace(/\{q}/gi, encodeURIComponent(query))
+    .replace(/\{limit}/gi, encodeURIComponent(String(limit)));
+  const url = new URL(rendered);
+
+  if (!hasQueryPlaceholder && !url.searchParams.has('q') && !url.searchParams.has('query')) {
+    url.searchParams.set('q', query);
+  }
+  if (!url.searchParams.has('limit') && !url.searchParams.has('count')) {
+    url.searchParams.set('limit', String(limit));
+  }
+  if (!url.searchParams.has('format')) url.searchParams.set('format', 'json');
+  if (config.searchApiKey && !url.searchParams.has('key') && !url.searchParams.has('api_key')) {
+    url.searchParams.set('key', config.searchApiKey);
+  }
+  return url;
+}
+
+function buildSearchHeaders(config) {
+  if (!config.searchApiKey) return undefined;
+  return {
+    Authorization: `Bearer ${config.searchApiKey}`,
+    'X-API-Key': config.searchApiKey,
+  };
+}
+
+export async function searchNews(config, assetName) {
   try {
     const query = `${assetName} 投资 行情分析`;
-    const url = new URL(config.searchApiUrl);
-    url.searchParams.set('q', query);
-    url.searchParams.set('limit', '5');
-    if (!url.searchParams.has('format')) url.searchParams.set('format', 'json');
-    if (config.searchApiKey) url.searchParams.set('key', config.searchApiKey);
+    const url = buildSearchUrl(config, query, 5);
 
-    const data = await httpGet(url.toString(), { timeout: 6000 });
+    const data = await httpGet(url.toString(), { timeout: 6000, headers: buildSearchHeaders(config) });
     const items = Array.isArray(data?.results)
       ? data.results
       : Array.isArray(data?.items)
@@ -957,7 +1024,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     notify('collecting', '正在收集持仓、行情和市场数据...');
 
     try {
-      collectedData = await collectData(db, assetIds, config);
+      collectedData = await collectData(db, assetIds, config, tracer);
     } catch (e) {
       tracer.failStep('collect', e.message);
       tracer.fail(e.message);
@@ -981,6 +1048,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     price_points: collectedData.assets.reduce((s, a) => s + a.priceHistory.length, 0),
     news_count: collectedData.recentNews.length,
     has_macro: Object.keys(collectedData.macroIndicators).length > 0,
+      external_search: collectedData.externalSearch || null,
     resumed: !!resumeState.checkpoints.collect?.collectedData,
   });
 

@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:agent-search": "node --test tests/strategy-agent-search.test.mjs",
     "test:market-data": "node --test tests/market-data-resolver.test.mjs"
   },
   "dependencies": {
