@@ -2,6 +2,8 @@
 
 > 面向个人投资组合的本地化 Web 控制台，聚合资产、持仓、交易、策略 Agent、操盘计划、行情信号、资讯与提醒，帮助把“看盘、记账、生成计划、执行、复盘”放到一个系统里。
 
+**项目地址**：<https://github.com/huluohu/lynx>
+
 **L¥NX** 读作 **Lynx**，中文名：**灵猞**，Lynx 取自猞猁，强调对市场变化的敏捷、警觉与连续观察能力；中间的 **`¥`** 指向资金、收益、成本与仓位管理场景。整体定位是：**一个为投资决策服务的、敏锐而克制的个人资产驾驶舱**。
 
 
@@ -11,25 +13,25 @@
 
 | 登录页 | 仪表盘 |
 | --- | --- |
-| ![Lynx 登录页](docs/screenshots/login.png) | ![Lynx 仪表盘](docs/screenshots/dashboard.png) |
+| ![Lynx 登录页](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/login.png) | ![Lynx 仪表盘](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/dashboard.png) |
 
 | 行情中心 | 操盘计划 |
 | --- | --- |
-| ![Lynx 行情中心](docs/screenshots/market.png) | ![Lynx 操盘计划](docs/screenshots/plans.png) |
+| ![Lynx 行情中心](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/market.png) | ![Lynx 操盘计划](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/plans.png) |
 
 | 策略管理 | 策略 Agent 流式进度 |
 | --- | --- |
-| ![Lynx 策略管理](docs/screenshots/strategies.png) | ![Lynx 策略 Agent 流式进度](docs/screenshots/strategy-agent.png) |
+| ![Lynx 策略管理](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/strategies.png) | ![Lynx 策略 Agent 流式进度](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/strategy-agent.png) |
 
 | 操盘历史 | 系统设置 |
 | --- | --- |
-| ![Lynx 操盘历史](docs/screenshots/history.png) | ![Lynx 系统设置](docs/screenshots/settings.png) |
+| ![Lynx 操盘历史](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/history.png) | ![Lynx 系统设置](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/settings.png) |
 
 ### 移动端
 
 | 仪表盘 | 行情中心 | 操盘计划 | 策略 Agent |
 | --- | --- | --- | --- |
-| ![Lynx 移动端仪表盘](docs/screenshots/mobile-dashboard.png) | ![Lynx 移动端行情中心](docs/screenshots/mobile-market.png) | ![Lynx 移动端操盘计划](docs/screenshots/mobile-plans.png) | ![Lynx 移动端策略 Agent](docs/screenshots/mobile-strategy-agent.png) |
+| ![Lynx 移动端仪表盘](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/mobile-dashboard.png) | ![Lynx 移动端行情中心](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/mobile-market.png) | ![Lynx 移动端操盘计划](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/mobile-plans.png) | ![Lynx 移动端策略 Agent](https://cdn.jsdelivr.net/gh/huluohu/lynx@main/docs/screenshots/mobile-strategy-agent.png) |
 
 ## 核心能力
 
