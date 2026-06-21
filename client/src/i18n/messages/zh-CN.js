@@ -440,6 +440,7 @@ export default {
       heroEyebrow: '个人投资驾驶舱',
       heroSubtitle: 'Lynx 把资产、计划、行情、资讯与提醒收在一个本地优先的操作界面里。',
       version: '当前版本',
+      repository: '开源地址',
       serverVersion: '服务端版本',
       dataDirectory: '数据目录',
       databasePath: '数据库路径',

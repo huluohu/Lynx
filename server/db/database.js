@@ -28,6 +28,22 @@ export function getDataDirectory() {
   return dirname(DB_PATH);
 }
 
+function tableHasColumn(database, tableName, columnName) {
+  try {
+    return database.prepare(`PRAGMA table_info(${tableName})`).all()
+      .some((column) => column.name === columnName);
+  } catch {
+    return false;
+  }
+}
+
+function normalizeMigrationSql(database, fileName, sql) {
+  if (fileName === '028_news_categories.sql' && tableHasColumn(database, 'news', 'category')) {
+    return sql.replace(/ALTER\s+TABLE\s+news\s+ADD\s+COLUMN\s+category\s+TEXT\s+DEFAULT\s+'other'\s*;\s*/i, '');
+  }
+  return sql;
+}
+
 export function runMigrations() {
   const d = getDb();
   const migDir = join(__dirname, '..', '..', 'migrations');
@@ -41,7 +57,7 @@ export function runMigrations() {
     const exists = d.prepare('SELECT 1 FROM _migrations WHERE name = ?').get(f);
     if (exists) continue;
 
-    const sql = readFileSync(join(migDir, f), 'utf8');
+    const sql = normalizeMigrationSql(d, f, readFileSync(join(migDir, f), 'utf8'));
     // Apply migration and record it atomically
     const applyMigration = d.transaction(() => {
       d.exec(sql);

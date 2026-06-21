@@ -33,6 +33,13 @@
         <div class="about-hero-eyebrow">{{ t('settings.about.heroEyebrow') }}</div>
         <div class="about-hero-title">L¥NX <span class="about-hero-title-muted">/ Lynx</span></div>
         <p class="about-hero-subtitle">{{ t('settings.about.heroSubtitle') }}</p>
+        <a class="about-repository-link" :href="repositoryUrl" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 19c-4 1.5-4-2-5-2.5" />
+            <path d="M15 22v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6A4.6 4.6 0 0 0 18.7 7a4.2 4.2 0 0 0-.1-3.3s-1-.3-3.4 1.3a11.7 11.7 0 0 0-6.2 0C6.6 3.4 5.6 3.7 5.6 3.7A4.2 4.2 0 0 0 5.5 7 4.6 4.6 0 0 0 4 10.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V22" />
+          </svg>
+          <span>{{ t('settings.about.repository') }}</span>
+        </a>
       </div>
     </div>
 
@@ -40,7 +47,8 @@
       <div v-if="error" class="alert">{{ error }}</div>
       <div v-for="item in aboutItems" :key="item.key" class="about-row">
         <span class="about-label">{{ item.label }}</span>
-        <span class="about-value">{{ item.value }}</span>
+        <a v-if="item.href" class="about-value about-link" :href="item.href" target="_blank" rel="noopener noreferrer">{{ item.value }}</a>
+        <span v-else class="about-value">{{ item.value }}</span>
       </div>
     </div>
   </div>
@@ -60,6 +68,7 @@ const loading = ref(false)
 const error = ref('')
 const systemInfo = ref(null)
 const mobilePageActions = useMobilePageActions()
+const repositoryUrl = 'https://github.com/huluohu/lynx'
 
 const aboutItems = computed(() => [
   { key: 'version', label: t('settings.about.version'), value: appVersion || t('settings.about.unavailable') },
@@ -166,6 +175,35 @@ onUnmounted(() => {
   color: var(--text-dim);
 }
 
+.about-repository-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.about-repository-link:hover {
+  border-color: color-mix(in srgb, var(--primary) 46%, var(--border));
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  transform: translateY(-1px);
+}
+
+.about-repository-link svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .about-row {
   display: flex;
   flex-direction: column;
@@ -200,6 +238,16 @@ onUnmounted(() => {
   font-size: 14px;
   color: var(--text);
   word-break: break-all;
+}
+
+.about-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.about-link:hover {
+  text-decoration: underline;
 }
 
 @media (max-width: 768px) {
