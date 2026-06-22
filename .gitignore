@@ -8,3 +8,4 @@ data/*.db
 /.idea/vcs.xml
 /data/
 docker/.env.local
+docs/promo/*
