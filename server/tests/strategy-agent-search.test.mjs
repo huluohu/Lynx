@@ -53,6 +53,218 @@ test('getAgentConfig ignores masked secret values and falls back to environment'
   }
 });
 
+function createTraceDb() {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE agent_traces (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT UNIQUE NOT NULL,
+      trigger TEXT NOT NULL DEFAULT 'generate',
+      asset_ids TEXT NOT NULL,
+      params TEXT,
+      status TEXT NOT NULL DEFAULT 'running',
+      generation_log_id INTEGER,
+      model TEXT,
+      elapsed_ms INTEGER
+    );
+    CREATE TABLE agent_resume_checkpoints (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trace_id INTEGER NOT NULL,
+      step_name TEXT NOT NULL,
+      payload TEXT NOT NULL
+    );
+    CREATE TABLE ai_generation_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_ids TEXT NOT NULL,
+      budget REAL,
+      goal TEXT,
+      risk_level TEXT,
+      analysis TEXT,
+      strategy TEXT,
+      plans TEXT,
+      reasoning TEXT,
+      risk_management TEXT,
+      execution_notes TEXT,
+      model TEXT,
+      elapsed_ms INTEGER,
+      status TEXT DEFAULT 'draft',
+      user_feedback TEXT,
+      parent_id INTEGER,
+      strategy_id INTEGER,
+      agent_version TEXT,
+      prompt_versions TEXT
+    );
+  `);
+  return db;
+}
+
+test('loadResumeState allows failed traces without checkpoints to restart from collect', () => {
+  const db = createTraceDb();
+  const result = db.prepare(`
+    INSERT INTO agent_traces (run_id, trigger, asset_ids, params, status)
+    VALUES (?, 'generate', ?, ?, 'failed')
+  `).run('failed-before-collect', JSON.stringify([1, 3]), JSON.stringify({
+    budget: 20000,
+    goal: 'recovery',
+    riskLevel: 'medium',
+  }));
+
+  try {
+    const state = agentApi.loadResumeState(db, result.lastInsertRowid, {
+      assetIds: [1, 3],
+      budget: 20000,
+      goal: 'recovery',
+      riskLevel: 'medium',
+    });
+    assert.equal(state.capability.resumable, true);
+    assert.equal(state.capability.mode, 'restart-step');
+    assert.equal(state.capability.from_step, 'collect');
+  } finally {
+    db.close();
+  }
+});
+
+test('done traces with linked generation logs recover completed results', () => {
+  const db = createTraceDb();
+  const logResult = db.prepare(`
+    INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')
+  `).run(
+    JSON.stringify([1, 3]),
+    20000,
+    'recovery',
+    'medium',
+    JSON.stringify({ summary: 'analysis' }),
+    JSON.stringify({ name: 'Recovered strategy' }),
+    JSON.stringify([{ seq: 1, action: 'buy', asset_id: 1, amount: 1000 }]),
+    'because',
+    JSON.stringify({ max_loss: 0.1 }),
+    'notes',
+    'test-model',
+    1234,
+  );
+  const result = db.prepare(`
+    INSERT INTO agent_traces (run_id, trigger, asset_ids, params, status, generation_log_id)
+    VALUES (?, 'generate', ?, ?, 'done', ?)
+  `).run('completed-run', JSON.stringify([1, 3]), JSON.stringify({
+    budget: 20000,
+    goal: 'recovery',
+    riskLevel: 'medium',
+  }), logResult.lastInsertRowid);
+
+  try {
+    const params = {
+      assetIds: [1, 3],
+      budget: 20000,
+      goal: 'recovery',
+      riskLevel: 'medium',
+    };
+    const capability = agentApi.getStrategyAgentResumeCapability(db, result.lastInsertRowid, params);
+    assert.equal(capability.resumable, true);
+    assert.equal(capability.mode, 'recover-result');
+    assert.equal(capability.source, 'generation_log');
+
+    const recovered = agentApi.recoverStrategyAgentResult(db, result.lastInsertRowid, params);
+    assert.equal(recovered.generationId, logResult.lastInsertRowid);
+    assert.equal(recovered.result.strategy.name, 'Recovered strategy');
+    assert.deepEqual(recovered.result.plans, [{ seq: 1, action: 'buy', asset_id: 1, amount: 1000 }]);
+    assert.equal(recovered.result._meta.recovered, true);
+  } finally {
+    db.close();
+  }
+});
+
+test('done traces without result data are not resumable', () => {
+  const db = createTraceDb();
+  const result = db.prepare(`
+    INSERT INTO agent_traces (run_id, trigger, asset_ids, params, status)
+    VALUES (?, 'generate', ?, ?, 'done')
+  `).run('done-without-result', JSON.stringify([1, 3]), JSON.stringify({
+    budget: 20000,
+    goal: 'recovery',
+    riskLevel: 'medium',
+  }));
+
+  try {
+    const capability = agentApi.getStrategyAgentResumeCapability(db, result.lastInsertRowid, {
+      assetIds: [1, 3],
+      budget: 20000,
+      goal: 'recovery',
+      riskLevel: 'medium',
+    });
+    assert.equal(capability.resumable, false);
+    assert.equal(capability.code, 'RESUME_DONE_RESULT_MISSING');
+  } finally {
+    db.close();
+  }
+});
+
+test('done traces recover from final checkpoints when no draft was linked', () => {
+  const db = createTraceDb();
+  const result = db.prepare(`
+    INSERT INTO agent_traces (run_id, trigger, asset_ids, params, status)
+    VALUES (?, 'generate', ?, ?, 'done')
+  `).run('done-with-final-checkpoint', JSON.stringify([1, 3]), JSON.stringify({
+    budget: 20000,
+    goal: 'recovery',
+    riskLevel: 'medium',
+  }));
+  db.prepare(`
+    INSERT INTO agent_resume_checkpoints (trace_id, step_name, payload)
+    VALUES (?, 'final', ?)
+  `).run(result.lastInsertRowid, JSON.stringify({
+    result: {
+      strategy: { name: 'Final checkpoint strategy' },
+      plans: [{ seq: 1, action: 'hold', asset_id: 3 }],
+      _meta: { trace_id: result.lastInsertRowid },
+    },
+  }));
+
+  try {
+    const params = {
+      assetIds: [1, 3],
+      budget: 20000,
+      goal: 'recovery',
+      riskLevel: 'medium',
+    };
+    const capability = agentApi.getStrategyAgentResumeCapability(db, result.lastInsertRowid, params);
+    assert.equal(capability.resumable, true);
+    assert.equal(capability.source, 'final_checkpoint');
+
+    const recovered = agentApi.recoverStrategyAgentResult(db, result.lastInsertRowid, params);
+    assert.equal(recovered.generationId, null);
+    assert.equal(recovered.result.strategy.name, 'Final checkpoint strategy');
+    assert.equal(recovered.result._meta.recovery_source, 'final_checkpoint');
+  } finally {
+    db.close();
+  }
+});
+
+test('resume capability rejects asset mismatches', () => {
+  const db = createTraceDb();
+  const result = db.prepare(`
+    INSERT INTO agent_traces (run_id, trigger, asset_ids, params, status)
+    VALUES (?, 'generate', ?, ?, 'failed')
+  `).run('asset-mismatch', JSON.stringify([1, 3]), JSON.stringify({
+    budget: 20000,
+    goal: 'recovery',
+    riskLevel: 'medium',
+  }));
+
+  try {
+    const capability = agentApi.getStrategyAgentResumeCapability(db, result.lastInsertRowid, {
+      assetIds: [1],
+      budget: 20000,
+      goal: 'recovery',
+      riskLevel: 'medium',
+    });
+    assert.equal(capability.resumable, false);
+    assert.equal(capability.code, 'RESUME_ASSET_MISMATCH');
+  } finally {
+    db.close();
+  }
+});
+
 test('searchNews calls the configured search API with query and API key', async () => {
   const received = [];
   const server = http.createServer((req, res) => {
@@ -101,4 +313,3 @@ test('searchNews calls the configured search API with query and API key', async 
     await new Promise(resolve => server.close(resolve));
   }
 });
-

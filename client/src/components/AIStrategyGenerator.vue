@@ -296,7 +296,7 @@
       :data-quality-score="dataQualityScore"
       :eval-score="evalResult?.score ?? null"
       :grade="evalResult?.grade ?? null"
-      :can-resume="!!currentTraceId"
+      :can-resume="canResumeCurrentTrace"
       :result-ready="step === 'preview' && !!result"
       @close="closeProgressOverlay"
       @cancel="cancelGenerate"
@@ -367,6 +367,7 @@ const dataQualityScore = ref(null)
 const evalResult = ref(null)
 const traceInfo = ref(null)
 const currentTraceId = ref(null)
+const canResumeCurrentTrace = ref(false)
 const progressDetail = reactive({})
 const showQualityDetails = ref(false)
 const showTraceInfo = ref(false)
@@ -533,6 +534,7 @@ async function cancelGenerate() {
   _abortController.abort()
   _abortController = null
   generating.value = false
+  canResumeCurrentTrace.value = false
   showProgressOverlay.value = false
   agentSteps.value.forEach((s) => {
     if (s.status !== 'done') s.status = 'pending'
@@ -581,6 +583,7 @@ async function generate() {
   evalResult.value = null
   traceInfo.value = null
   currentTraceId.value = null
+  canResumeCurrentTrace.value = false
   agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = '' })
   showProgressOverlay.value = true
 
@@ -593,6 +596,7 @@ async function generate() {
     })
   } catch (e) {
     error.value = e.message
+    canResumeCurrentTrace.value = !!currentTraceId.value && !result.value
   }
   generating.value = false
 }
@@ -605,6 +609,7 @@ async function regenerate() {
   evalResult.value = null
   traceInfo.value = null
   currentTraceId.value = null
+  canResumeCurrentTrace.value = false
   agentSteps.value.forEach(s => { s.status = 'pending'; s.detail = '' })
   showProgressOverlay.value = true
   step.value = 'config'
@@ -623,13 +628,15 @@ async function regenerate() {
     showRegenerate.value = false
   } catch (e) {
     error.value = e.message
+    canResumeCurrentTrace.value = !!currentTraceId.value && !result.value
   }
   generating.value = false
 }
 
 async function resumeGenerate() {
-  if (!currentTraceId.value || generating.value) return
+  if (!currentTraceId.value || !canResumeCurrentTrace.value || generating.value) return
   error.value = ''
+  canResumeCurrentTrace.value = false
   generating.value = true
   showProgressOverlay.value = true
   try {
@@ -642,6 +649,7 @@ async function resumeGenerate() {
     })
   } catch (e) {
     error.value = e.message
+    canResumeCurrentTrace.value = !!currentTraceId.value && !result.value
   }
   generating.value = false
 }
@@ -782,6 +790,7 @@ function handleSSEEvent(event, data) {
   } else if (event === 'result') {
     if (data.success && data.data) {
       result.value = data.data
+      canResumeCurrentTrace.value = false
       editablePlans.value = JSON.parse(JSON.stringify(data.data.plans || []))
       generationId.value = data.data.generation_id || null
       agentSteps.value.forEach(s => { s.status = 'done' })
@@ -797,9 +806,13 @@ function handleSSEEvent(event, data) {
       emit('generated', generationId.value)
     } else {
       error.value = data.error || t('aiStrategyGenerator.generateFailed')
+      if (data.trace_id) currentTraceId.value = data.trace_id
+      canResumeCurrentTrace.value = data.resumable === true
     }
   } else if (event === 'error') {
     error.value = data.error || t('aiStrategyGenerator.generateFailed')
+    if (data.trace_id) currentTraceId.value = data.trace_id
+    canResumeCurrentTrace.value = data.resumable === true
   }
 }
 

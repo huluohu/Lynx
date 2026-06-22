@@ -142,28 +142,292 @@ function sameNumberArray(a = [], b = []) {
   return left.every((value, index) => value === right[index]);
 }
 
-function loadResumeState(db, resumeTraceId, currentParams) {
-  if (!resumeTraceId) return { trace: null, checkpoints: {} };
+function makeResumeError(message, {
+  code = 'RESUME_UNAVAILABLE',
+  resumable = false,
+  mode = 'none',
+  fromStep = null,
+  traceId = null,
+} = {}) {
+  return Object.assign(new Error(message), {
+    code,
+    resumable,
+    resumeMode: mode,
+    fromStep,
+    traceId,
+  });
+}
 
-  const trace = getTraceForResume(db, Number(resumeTraceId));
-  if (!trace) throw new Error('未找到可继续的 Agent 运行记录');
-  if (!['failed', 'partial', 'running'].includes(trace.status)) {
-    throw new Error('该 Agent 运行记录不需要继续执行');
-  }
+function paramsMatch(trace, currentParams) {
   if (!sameNumberArray(trace.asset_ids || [], currentParams.assetIds || [])) {
-    throw new Error('继续执行失败：资产选择与原运行不一致');
+    return { ok: false, code: 'RESUME_ASSET_MISMATCH', reason: '继续执行失败：资产选择与原运行不一致' };
   }
 
   const original = trace.params || {};
   if (Number(original.budget) !== Number(currentParams.budget)
     || String(original.goal || '') !== String(currentParams.goal || '')
     || String(original.riskLevel || '') !== String(currentParams.riskLevel || '')) {
-    throw new Error('继续执行失败：预算、目标或风险偏好与原运行不一致');
+    return { ok: false, code: 'RESUME_PARAMS_MISMATCH', reason: '继续执行失败：预算、目标或风险偏好与原运行不一致' };
+  }
+
+  return { ok: true };
+}
+
+function firstMissingResumeStep(checkpoints = {}) {
+  if (!checkpoints.collect?.collectedData) return 'collect';
+  if (!checkpoints.analysis?.analysisReport) return 'analysis';
+  if (!checkpoints.strategy?.strategyResult) return 'strategy';
+  return 'postvalidate';
+}
+
+function safeParseJSON(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value;
+  } catch {
+    return fallback;
+  }
+}
+
+function generationLogToResult(trace, row) {
+  const promptVersions = safeParseJSON(row.prompt_versions, null);
+  return {
+    analysis: safeParseJSON(row.analysis, null),
+    strategy: safeParseJSON(row.strategy, null),
+    plans: safeParseJSON(row.plans, []),
+    reasoning: row.reasoning || '',
+    risk_management: safeParseJSON(row.risk_management, null),
+    execution_notes: row.execution_notes || '',
+    _meta: {
+      model: row.model || trace.model || '',
+      agent_version: row.agent_version || AGENT_VERSION,
+      prompt_versions: promptVersions || { analyst: ANALYST_PROMPT_VERSION, strategist: STRATEGIST_PROMPT_VERSION },
+      elapsed_ms: row.elapsed_ms || trace.elapsed_ms || 0,
+      trace_id: trace.id,
+      run_id: trace.run_id,
+      recovered: true,
+      recovered_from_trace_id: trace.id,
+      recovery_source: 'generation_log',
+    },
+  };
+}
+
+export function getStrategyAgentResumeCapability(db, resumeTraceId, currentParams) {
+  if (!resumeTraceId) {
+    return { resumable: false, mode: 'none', code: 'NO_RESUME_TRACE', reason: '未指定可继续的 Agent 运行记录' };
+  }
+
+  const trace = getTraceForResume(db, Number(resumeTraceId));
+  if (!trace) {
+    return { resumable: false, mode: 'none', code: 'RESUME_TRACE_NOT_FOUND', reason: '未找到可继续的 Agent 运行记录' };
+  }
+
+  const paramCheck = paramsMatch(trace, currentParams || {});
+  if (!paramCheck.ok) {
+    return {
+      trace,
+      trace_id: trace.id,
+      resumable: false,
+      mode: 'none',
+      code: paramCheck.code,
+      reason: paramCheck.reason,
+    };
   }
 
   const checkpoints = getResumeCheckpoints(db, trace.id);
-  if (!checkpoints.collect) throw new Error('该运行尚无可继续的检查点，请重新生成');
-  return { trace, checkpoints };
+
+  if (trace.status === 'done') {
+    if (trace.generation_log_id) {
+      return {
+        trace,
+        checkpoints,
+        trace_id: trace.id,
+        resumable: true,
+        mode: 'recover-result',
+        code: 'RESUME_RECOVER_GENERATION_LOG',
+        reason: '已找到完成结果，正在恢复策略草稿',
+        source: 'generation_log',
+        generation_log_id: trace.generation_log_id,
+      };
+    }
+    if (checkpoints.final?.result) {
+      return {
+        trace,
+        checkpoints,
+        trace_id: trace.id,
+        resumable: true,
+        mode: 'recover-result',
+        code: 'RESUME_RECOVER_FINAL_CHECKPOINT',
+        reason: '已找到完成检查点，正在恢复策略结果',
+        source: 'final_checkpoint',
+      };
+    }
+    if (checkpoints.collect?.collectedData && checkpoints.analysis?.analysisReport && checkpoints.strategy?.strategyResult) {
+      return {
+        trace,
+        checkpoints,
+        trace_id: trace.id,
+        resumable: true,
+        mode: 'recover-result',
+        code: 'RESUME_RECONSTRUCT_DONE_TRACE',
+        reason: '已找到完整中间结果，正在重建策略结果',
+        source: 'checkpoints',
+      };
+    }
+    return {
+      trace,
+      checkpoints,
+      trace_id: trace.id,
+      resumable: false,
+      mode: 'none',
+      code: 'RESUME_DONE_RESULT_MISSING',
+      reason: '该 Agent 已完成，但缺少可恢复的结果数据，请重新生成',
+    };
+  }
+
+  if (!['failed', 'partial', 'running'].includes(trace.status)) {
+    return {
+      trace,
+      checkpoints,
+      trace_id: trace.id,
+      resumable: false,
+      mode: 'none',
+      code: 'RESUME_STATUS_UNSUPPORTED',
+      reason: `该 Agent 运行记录状态为 ${trace.status || '未知'}，不能继续执行`,
+    };
+  }
+
+  const fromStep = firstMissingResumeStep(checkpoints);
+  return {
+    trace,
+    checkpoints,
+    trace_id: trace.id,
+    resumable: true,
+    mode: fromStep === 'collect' ? 'restart-step' : 'continue',
+    from_step: fromStep,
+    code: fromStep === 'collect' ? 'RESUME_RESTART_FROM_COLLECT' : 'RESUME_CONTINUE_FROM_CHECKPOINT',
+    reason: fromStep === 'collect' ? '将从数据收集步骤重新尝试' : `将从 ${fromStep} 步骤继续执行`,
+  };
+}
+
+export function recoverStrategyAgentResult(db, resumeTraceId, currentParams) {
+  const capability = getStrategyAgentResumeCapability(db, resumeTraceId, currentParams);
+  if (!capability.resumable || capability.mode !== 'recover-result') {
+    throw makeResumeError(capability.reason || '该 Agent 运行记录无法恢复结果', {
+      code: capability.code,
+      resumable: capability.resumable,
+      mode: capability.mode,
+      fromStep: capability.from_step,
+      traceId: capability.trace_id,
+    });
+  }
+
+  const { trace, checkpoints } = capability;
+  if (capability.source === 'generation_log') {
+    const row = db.prepare('SELECT * FROM ai_generation_logs WHERE id = ?').get(capability.generation_log_id);
+    if (!row) {
+      throw makeResumeError('已完成的 Agent 记录缺少对应策略草稿，请重新生成', {
+        code: 'RESUME_GENERATION_LOG_MISSING',
+        resumable: false,
+        mode: 'none',
+        traceId: trace.id,
+      });
+    }
+    return { result: generationLogToResult(trace, row), generationId: Number(row.id), source: 'generation_log' };
+  }
+
+  if (capability.source === 'final_checkpoint') {
+    const result = {
+      ...checkpoints.final.result,
+      _meta: {
+        ...(checkpoints.final.result._meta || {}),
+        trace_id: trace.id,
+        run_id: trace.run_id,
+        recovered: true,
+        recovered_from_trace_id: trace.id,
+        recovery_source: 'final_checkpoint',
+      },
+    };
+    return { result, generationId: null, source: 'final_checkpoint' };
+  }
+
+  const collectedData = checkpoints.collect?.collectedData;
+  const analysisReport = checkpoints.analysis?.analysisReport;
+  const strategyResult = checkpoints.strategy?.strategyResult;
+  if (!collectedData || !analysisReport || !strategyResult) {
+    throw makeResumeError('该 Agent 已完成，但检查点不足，无法恢复策略结果', {
+      code: 'RESUME_CHECKPOINTS_INCOMPLETE',
+      resumable: false,
+      mode: 'none',
+      traceId: trace.id,
+    });
+  }
+
+  const budget = Number(currentParams.budget) || 20000;
+  const goal = currentParams.goal || 'recovery';
+  const dataQuality = checkpoints.collect.dataQuality ?? scoreDataQuality(collectedData);
+  const validation = validatePlans(strategyResult.plans, collectedData.assets, budget);
+  const { plans: fixedPlans, fixLog } = autoFixPlans(strategyResult.plans, collectedData.assets, budget);
+  const simulation = simulatePlanExecution(fixedPlans, collectedData.assets, budget);
+  const finalConsistency = selfCheckConsistency(
+    { plans: fixedPlans, analysis: analysisReport, strategy: strategyResult.strategy },
+    collectedData,
+    goal,
+  );
+  const evalResult = evaluateOutput(
+    { ...strategyResult, plans: fixedPlans },
+    collectedData,
+    budget,
+  );
+
+  return {
+    result: {
+      analysis: analysisReport,
+      strategy: strategyResult.strategy,
+      plans: fixedPlans,
+      reasoning: strategyResult.reasoning || '',
+      risk_management: strategyResult.risk_management || null,
+      execution_notes: strategyResult.execution_notes || '',
+      consistency_warnings: finalConsistency.warnings,
+      validation_issues: validation.issues,
+      simulation_issues: simulation.issues,
+      execution_simulation: simulation,
+      fix_log: fixLog,
+      eval: evalResult,
+      data_quality_score: dataQuality,
+      used_fallback_analysis: !!checkpoints.analysis?.usedFallback,
+      used_fallback_strategy: !!strategyResult._fallback_strategy,
+      _meta: {
+        model: trace.model || '',
+        agent_version: AGENT_VERSION,
+        prompt_versions: { analyst: ANALYST_PROMPT_VERSION, strategist: STRATEGIST_PROMPT_VERSION },
+        elapsed_ms: trace.elapsed_ms || 0,
+        trace_id: trace.id,
+        run_id: trace.run_id,
+        recovered: true,
+        recovered_from_trace_id: trace.id,
+        recovery_source: 'checkpoints',
+      },
+    },
+    generationId: null,
+    source: 'checkpoints',
+  };
+}
+
+export function loadResumeState(db, resumeTraceId, currentParams) {
+  if (!resumeTraceId) return { trace: null, checkpoints: {} };
+
+  const capability = getStrategyAgentResumeCapability(db, resumeTraceId, currentParams);
+  if (!capability.resumable || capability.mode === 'recover-result') {
+    throw makeResumeError(capability.reason || '该 Agent 运行记录无法继续执行', {
+      code: capability.code,
+      resumable: capability.resumable,
+      mode: capability.mode,
+      fromStep: capability.from_step,
+      traceId: capability.trace_id,
+    });
+  }
+  return { trace: capability.trace, checkpoints: capability.checkpoints || {}, capability };
 }
 
 function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout }) {
@@ -1007,7 +1271,12 @@ export async function runStrategyAgent(db, params, onProgress) {
   if (!preCheckResult.ok) {
     tracer.failStep('precheck', preCheckResult.issues.join('; '));
     tracer.fail(preCheckResult.issues[0]);
-    throw new Error(preCheckResult.issues.join('；'));
+    throw Object.assign(new Error(preCheckResult.issues.join('；')), {
+      traceId: tracer.traceId,
+      code: 'AGENT_PRECHECK_FAILED',
+      resumable: false,
+      resumeMode: 'none',
+    });
   }
   tracer.completeStep('precheck', { ok: true });
   notify('precheck_done', '配置检查通过');
@@ -1028,7 +1297,13 @@ export async function runStrategyAgent(db, params, onProgress) {
     } catch (e) {
       tracer.failStep('collect', e.message);
       tracer.fail(e.message);
-      throw new Error(`数据收集失败: ${e.message}`);
+      throw Object.assign(new Error(`数据收集失败: ${e.message}`), {
+        traceId: tracer.traceId,
+        code: 'AGENT_COLLECT_FAILED',
+        resumable: true,
+        resumeMode: 'restart-step',
+        fromStep: 'collect',
+      });
     }
 
     dataQuality = scoreDataQuality(collectedData);
@@ -1102,6 +1377,13 @@ export async function runStrategyAgent(db, params, onProgress) {
     } catch (e) {
       tracer.failStep('generate', e.message);
       tracer.fail(e.message);
+      Object.assign(e, {
+        traceId: tracer.traceId,
+        code: e.code || 'AGENT_GENERATE_FAILED',
+        resumable: true,
+        resumeMode: 'continue',
+        fromStep: 'strategy',
+      });
       throw e;
     }
   }
@@ -1110,48 +1392,82 @@ export async function runStrategyAgent(db, params, onProgress) {
   tracer.startStep('postvalidate');
   notify('postvalidating', '正在验证和修正策略约束...');
 
-  const validation = validatePlans(strategyResult.plans, collectedData.assets, budget);
-  const { plans: fixedPlans, fixLog } = autoFixPlans(strategyResult.plans, collectedData.assets, budget);
-  const simulation = simulatePlanExecution(fixedPlans, collectedData.assets, budget);
-  tracer.saveArtifact('postvalidate', 'validation_report', { validation, simulation, fixLog }, { agent_version: AGENT_VERSION });
+  let validation;
+  let fixedPlans;
+  let fixLog;
+  let simulation;
+  let finalConsistency;
+  try {
+    validation = validatePlans(strategyResult.plans, collectedData.assets, budget);
+    const fixed = autoFixPlans(strategyResult.plans, collectedData.assets, budget);
+    fixedPlans = fixed.plans;
+    fixLog = fixed.fixLog;
+    simulation = simulatePlanExecution(fixedPlans, collectedData.assets, budget);
+    tracer.saveArtifact('postvalidate', 'validation_report', { validation, simulation, fixLog }, { agent_version: AGENT_VERSION });
 
-  tracer.completeStep('postvalidate', {
-    issueCount: validation.issues.length + simulation.issues.length,
-    fixCount: fixLog.length,
-    budgetUsage: Math.round(validation.budgetUsage * 100),
-    simulationValid: simulation.valid,
-  });
+    tracer.completeStep('postvalidate', {
+      issueCount: validation.issues.length + simulation.issues.length,
+      fixCount: fixLog.length,
+      budgetUsage: Math.round(validation.budgetUsage * 100),
+      simulationValid: simulation.valid,
+    });
 
-  if (fixLog.length > 0) {
-    log.info('Auto-fixed plans', { fixes: fixLog });
+    if (fixLog.length > 0) {
+      log.info('Auto-fixed plans', { fixes: fixLog });
+    }
+
+    // Re-run consistency check with final plans
+    finalConsistency = selfCheckConsistency(
+      { plans: fixedPlans, analysis: analysisReport, strategy: strategyResult.strategy },
+      collectedData,
+      goal,
+    );
+
+    notify('postvalidating_done', `约束验证完成：${validation.issues.filter(i => i.severity === 'error').length}个错误, ${fixLog.length}项自动修正`);
+  } catch (e) {
+    tracer.failStep('postvalidate', e.message);
+    tracer.fail(e.message);
+    Object.assign(e, {
+      traceId: tracer.traceId,
+      code: e.code || 'AGENT_POSTVALIDATE_FAILED',
+      resumable: true,
+      resumeMode: 'continue',
+      fromStep: 'postvalidate',
+    });
+    throw e;
   }
-
-  // Re-run consistency check with final plans
-  const finalConsistency = selfCheckConsistency(
-    { plans: fixedPlans, analysis: analysisReport, strategy: strategyResult.strategy },
-    collectedData,
-    goal,
-  );
-
-  notify('postvalidating_done', `约束验证完成：${validation.issues.filter(i => i.severity === 'error').length}个错误, ${fixLog.length}项自动修正`);
 
   // ── Step 6: Evaluate Output Quality ───────────────────────
   tracer.startStep('evaluate');
   notify('evaluating', '正在评估策略质量...');
 
-  const evalResult = evaluateOutput(
-    { ...strategyResult, plans: fixedPlans },
-    collectedData,
-    budget,
-  );
-  tracer.saveArtifact('evaluate', 'validation_report', evalResult, { agent_version: AGENT_VERSION });
+  let evalResult;
+  try {
+    evalResult = evaluateOutput(
+      { ...strategyResult, plans: fixedPlans },
+      collectedData,
+      budget,
+    );
+    tracer.saveArtifact('evaluate', 'validation_report', evalResult, { agent_version: AGENT_VERSION });
 
-  tracer.completeStep('evaluate', { score: evalResult.score, grade: evalResult.grade, passed: evalResult.passed });
-  notify('done', `策略生成完成 — 质量评分 ${Math.round(evalResult.score * 100)}分 (${evalResult.grade})`, {
-    eval_score: evalResult.score,
-    grade: evalResult.grade,
-    budget_usage: evalResult.budget_usage,
-  });
+    tracer.completeStep('evaluate', { score: evalResult.score, grade: evalResult.grade, passed: evalResult.passed });
+    notify('done', `策略生成完成 — 质量评分 ${Math.round(evalResult.score * 100)}分 (${evalResult.grade})`, {
+      eval_score: evalResult.score,
+      grade: evalResult.grade,
+      budget_usage: evalResult.budget_usage,
+    });
+  } catch (e) {
+    tracer.failStep('evaluate', e.message);
+    tracer.fail(e.message);
+    Object.assign(e, {
+      traceId: tracer.traceId,
+      code: e.code || 'AGENT_EVALUATE_FAILED',
+      resumable: true,
+      resumeMode: 'continue',
+      fromStep: 'evaluate',
+    });
+    throw e;
+  }
 
   const elapsed = Date.now() - startTime;
 
@@ -1171,7 +1487,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     usedFallbackStrategy: !!strategyResult._fallback_strategy,
   });
 
-  return {
+  const resultPayload = {
     analysis: analysisReport,
     strategy: strategyResult.strategy,
     plans: fixedPlans,
@@ -1196,4 +1512,6 @@ export async function runStrategyAgent(db, params, onProgress) {
       run_id: tracer.runId,
     },
   };
+  tracer.saveCheckpoint('final', { result: resultPayload });
+  return resultPayload;
 }

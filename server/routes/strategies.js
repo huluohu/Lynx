@@ -52,6 +52,48 @@ function getActivePlanSetId(db, strategyId) {
     .get(strategyId)?.id || null;
 }
 
+function saveAgentGenerationDraft(db, {
+  ids,
+  budget,
+  goal,
+  riskLevel,
+  result,
+  userFeedback = null,
+  parentId = null,
+  strategyId = null,
+}) {
+  const logResult = db.prepare(`
+    INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id, strategy_id, agent_version, prompt_versions)
+    VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id, @strategy_id, @agent_version, @prompt_versions)
+  `).run({
+    asset_ids: JSON.stringify(ids),
+    budget,
+    goal,
+    risk_level: riskLevel,
+    analysis: JSON.stringify(result.analysis || null),
+    strategy: JSON.stringify(result.strategy || null),
+    plans: JSON.stringify(result.plans || []),
+    reasoning: result.reasoning || '',
+    risk_management: JSON.stringify(result.risk_management || null),
+    execution_notes: result.execution_notes || '',
+    model: result._meta?.model || '',
+    elapsed_ms: result._meta?.elapsed_ms || 0,
+    user_feedback: userFeedback || null,
+    parent_id: parentId || null,
+    strategy_id: strategyId ? Number(strategyId) : null,
+    agent_version: result._meta?.agent_version || null,
+    prompt_versions: result._meta?.prompt_versions ? JSON.stringify(result._meta.prompt_versions) : null,
+  });
+
+  const generationId = Number(logResult.lastInsertRowid);
+  if (result._meta?.trace_id) {
+    try {
+      db.prepare('UPDATE agent_traces SET generation_log_id = ? WHERE id = ?').run(generationId, result._meta.trace_id);
+    } catch {}
+  }
+  return generationId;
+}
+
 // GET 策略列表
 router.get('/', (req, res) => {
   const db = getDb();
@@ -463,7 +505,11 @@ router.post('/ai-agent-generate', async (req, res) => {
   log.info('Agent generate request (SSE)', { asset_ids: ids, budget, goal, risk_level, parent_id, resume_trace_id });
 
   try {
-    const { runStrategyAgent } = await import('../services/strategy-agent.js');
+    const {
+      runStrategyAgent,
+      getStrategyAgentResumeCapability,
+      recoverStrategyAgentResult,
+    } = await import('../services/strategy-agent.js');
     const db = getDb();
 
     // If regenerating, inject parent context
@@ -488,48 +534,122 @@ router.post('/ai-agent-generate', async (req, res) => {
       }
     }
 
+    if (agentOpts.resumeTraceId) {
+      const capability = getStrategyAgentResumeCapability(db, agentOpts.resumeTraceId, {
+        assetIds: agentOpts.assetIds,
+        budget: agentOpts.budget,
+        goal: agentOpts.goal,
+        riskLevel: agentOpts.riskLevel,
+      });
+      if (!capability.resumable) {
+        throw Object.assign(new Error(capability.reason || '该 Agent 运行记录无法继续执行'), {
+          code: capability.code,
+          traceId: capability.trace_id || agentOpts.resumeTraceId,
+          resumable: false,
+          resumeMode: capability.mode,
+          fromStep: capability.from_step || null,
+        });
+      }
+      if (capability.mode === 'recover-result') {
+        sendEvent('progress', {
+          step: 'started',
+          message: capability.reason || '正在恢复已完成的 Agent 结果...',
+          detail: {
+            trace_id: capability.trace_id,
+            resume_trace_id: agentOpts.resumeTraceId,
+            mode: capability.mode,
+            source: capability.source || null,
+          },
+        });
+        const recovered = recoverStrategyAgentResult(db, agentOpts.resumeTraceId, {
+          assetIds: agentOpts.assetIds,
+          budget: agentOpts.budget,
+          goal: agentOpts.goal,
+          riskLevel: agentOpts.riskLevel,
+        });
+        let generationId = recovered.generationId;
+        if (!generationId) {
+          try {
+            generationId = saveAgentGenerationDraft(db, {
+              ids,
+              budget: agentOpts.budget,
+              goal: agentOpts.goal,
+              riskLevel: agentOpts.riskLevel,
+              result: recovered.result,
+              userFeedback: user_feedback,
+              parentId: parent_id,
+              strategyId: existing_strategy_id,
+            });
+          } catch (e) {
+            e.traceId = recovered.result._meta?.trace_id || agentOpts.resumeTraceId;
+            throw e;
+          }
+        }
+        sendEvent('result', {
+          success: true,
+          data: { ...recovered.result, generation_id: generationId },
+          recovered: true,
+          source: recovered.source,
+        });
+        log.info('Agent generate recovered completed trace', {
+          asset_ids: ids,
+          generation_id: generationId,
+          trace_id: recovered.result._meta?.trace_id,
+          source: recovered.source,
+        });
+        res.end();
+        return;
+      }
+    }
+
     const result = await runStrategyAgent(db, agentOpts, (step, message, detail) => {
       sendEvent('progress', { step, message, detail: detail || null });
     });
 
     // Auto-save to ai_generation_logs
-    const logResult = db.prepare(`
-      INSERT INTO ai_generation_logs (asset_ids, budget, goal, risk_level, analysis, strategy, plans, reasoning, risk_management, execution_notes, model, elapsed_ms, status, user_feedback, parent_id, strategy_id, agent_version, prompt_versions)
-      VALUES (@asset_ids, @budget, @goal, @risk_level, @analysis, @strategy, @plans, @reasoning, @risk_management, @execution_notes, @model, @elapsed_ms, 'draft', @user_feedback, @parent_id, @strategy_id, @agent_version, @prompt_versions)
-    `).run({
-      asset_ids: JSON.stringify(ids),
-      budget: Number(budget) || 20000,
-      goal: goal || 'recovery',
-      risk_level: risk_level || 'medium',
-      analysis: JSON.stringify(result.analysis || null),
-      strategy: JSON.stringify(result.strategy || null),
-      plans: JSON.stringify(result.plans || []),
-      reasoning: result.reasoning || '',
-      risk_management: JSON.stringify(result.risk_management || null),
-      execution_notes: result.execution_notes || '',
-      model: result._meta?.model || '',
-      elapsed_ms: result._meta?.elapsed_ms || 0,
-      user_feedback: user_feedback || null,
-      parent_id: parent_id || null,
-      strategy_id: existing_strategy_id ? Number(existing_strategy_id) : null,
-      agent_version: result._meta?.agent_version || null,
-      prompt_versions: result._meta?.prompt_versions ? JSON.stringify(result._meta.prompt_versions) : null,
-    });
-
-    const generationId = Number(logResult.lastInsertRowid);
-
-    // Link trace to generation log
-    if (result._meta?.trace_id) {
-      try {
-        db.prepare('UPDATE agent_traces SET generation_log_id = ? WHERE id = ?').run(generationId, result._meta.trace_id);
-      } catch {}
+    let generationId;
+    try {
+      generationId = saveAgentGenerationDraft(db, {
+        ids,
+        budget: agentOpts.budget,
+        goal: agentOpts.goal,
+        riskLevel: agentOpts.riskLevel,
+        result,
+        userFeedback: user_feedback,
+        parentId: parent_id,
+        strategyId: existing_strategy_id,
+      });
+    } catch (e) {
+      e.traceId = result._meta?.trace_id || null;
+      throw e;
     }
 
     sendEvent('result', { success: true, data: { ...result, generation_id: generationId } });
     log.info('Agent generate success', { asset_ids: ids, strategy: result.strategy?.name, generation_id: generationId, trace_id: result._meta?.trace_id });
   } catch (e) {
     log.error('Agent generate failed', { asset_ids: ids, error: e.message, stack: e.stack?.split('\n').slice(0, 4).join(' | ') });
-    sendEvent('error', { success: false, error: e.message });
+    const traceId = e.traceId || (resume_trace_id ? Number(resume_trace_id) : null);
+    let capability = null;
+    if (traceId) {
+      try {
+        const { getStrategyAgentResumeCapability } = await import('../services/strategy-agent.js');
+        capability = getStrategyAgentResumeCapability(getDb(), traceId, {
+          assetIds: ids,
+          budget: Number(budget) || 20000,
+          goal: goal || 'recovery',
+          riskLevel: risk_level || 'medium',
+        });
+      } catch {}
+    }
+    sendEvent('error', {
+      success: false,
+      error: e.message,
+      code: e.code || capability?.code || null,
+      trace_id: traceId,
+      resumable: typeof e.resumable === 'boolean' ? e.resumable : capability?.resumable === true,
+      mode: e.resumeMode || capability?.mode || null,
+      from_step: e.fromStep || capability?.from_step || null,
+    });
   }
 
   res.end();
