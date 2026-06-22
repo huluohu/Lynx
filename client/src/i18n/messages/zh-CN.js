@@ -441,7 +441,6 @@ export default {
       heroSubtitle: 'Lynx 把资产、计划、行情、资讯与提醒收在一个本地优先的操作界面里。',
       version: '当前版本',
       repository: '开源地址',
-      serverVersion: '服务端版本',
       dataDirectory: '数据目录',
       databasePath: '数据库路径',
       timezone: '时区',
@@ -1075,6 +1074,7 @@ export default {
     planStatuses: {
       pending: '等待',
       triggered: '触发',
+      partial: '部分执行',
       executed: '已执行',
       cancelled: '取消',
     },

@@ -441,7 +441,6 @@ export default {
       heroSubtitle: 'Lynx brings assets, plans, market data, news, and alerts into one local-first workspace.',
       version: 'Current version',
       repository: 'Repository',
-      serverVersion: 'Server version',
       dataDirectory: 'Data directory',
       databasePath: 'Database path',
       timezone: 'Timezone',
@@ -1075,6 +1074,7 @@ export default {
     planStatuses: {
       pending: 'Pending',
       triggered: 'Triggered',
+      partial: 'Partial',
       executed: 'Executed',
       cancelled: 'Cancelled',
     },

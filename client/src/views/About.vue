@@ -72,7 +72,6 @@ const repositoryUrl = 'https://github.com/huluohu/Lynx'
 
 const aboutItems = computed(() => [
   { key: 'version', label: t('settings.about.version'), value: appVersion || t('settings.about.unavailable') },
-  { key: 'serverVersion', label: t('settings.about.serverVersion'), value: systemInfo.value?.serverVersion || t('settings.about.unavailable') },
   { key: 'dataDirectory', label: t('settings.about.dataDirectory'), value: systemInfo.value?.dataDirectory || t('settings.about.unavailable') },
   { key: 'databasePath', label: t('settings.about.databasePath'), value: systemInfo.value?.databasePath || t('settings.about.unavailable') },
   { key: 'timezone', label: t('settings.about.timezone'), value: systemInfo.value?.timezone || t('settings.about.unavailable') },

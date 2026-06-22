@@ -213,6 +213,13 @@ bash docker/build.sh
 4. 可选同步 `latest`
 5. 回写 `docker/.env` 中的 `APP_VERSION`
 
+如需同步 Docker Hub 仓库介绍，可在 `docker/.env` 设置 `DOCKERHUB_DESCRIPTION_SYNC=true`，并将本机凭据写入不会提交到 Git 的 `docker/.env.local`：
+
+```zsh
+DOCKERHUB_USERNAME=your-dockerhub-username
+DOCKERHUB_TOKEN=your-dockerhub-access-token
+```
+
 ## 关键运行配置
 
 部分配置可通过环境变量设置，部分也可以在系统设置页保存到 `settings` 表。
