@@ -68,7 +68,7 @@ const loading = ref(false)
 const error = ref('')
 const systemInfo = ref(null)
 const mobilePageActions = useMobilePageActions()
-const repositoryUrl = 'https://github.com/huluohu/lynx'
+const repositoryUrl = 'https://github.com/huluohu/Lynx'
 
 const aboutItems = computed(() => [
   { key: 'version', label: t('settings.about.version'), value: appVersion || t('settings.about.unavailable') },
