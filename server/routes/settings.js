@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { cachePendingNews, getNewsAutoCacheSettings } from '../services/news.js';
 import { startMonitor } from '../services/strategy-monitor.js';
+import { startMarketRefreshScheduler } from '../services/market-refresh.js';
 import { createLogger } from '../utils/logger.js';
 
 const router = Router();
@@ -25,6 +26,11 @@ async function applySettingsSideEffects(changedKeys) {
   if (keySet.has('strategy_monitor_interval')) {
     startMonitor();
     log.info('Strategy monitor restarted after settings change');
+  }
+
+  if (keySet.has('market_refresh_interval')) {
+    startMarketRefreshScheduler({ runImmediately: true });
+    log.info('Market refresh scheduler restarted after settings change');
   }
 
   if ([...NEWS_EFFECT_KEYS].some((key) => keySet.has(key))) {

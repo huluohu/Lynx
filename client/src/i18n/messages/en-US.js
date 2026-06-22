@@ -332,7 +332,7 @@ export default {
       dashboardRefreshInterval: 'Page refresh interval',
       dashboardRefreshIntervalDesc: 'Refresh dashboard alerts and unread badges (0 = manual)',
       refreshInterval: 'Market refresh interval',
-      refreshIntervalDesc: 'How often the client refreshes market data automatically (0 = manual only)',
+      refreshIntervalDesc: 'How often the server fetches fresh market data automatically (0 = manual only)',
       btcSources: 'Crypto price sources',
       goldSources: 'Precious metal price sources',
       priceSourcesDesc: 'Tried in the selected order. Independent from news sources.',

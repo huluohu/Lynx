@@ -332,7 +332,7 @@ export default {
       dashboardRefreshInterval: '页面刷新间隔',
       dashboardRefreshIntervalDesc: '刷新仪表盘提醒和未读角标（0=手动）',
       refreshInterval: '行情自动刷新间隔',
-      refreshIntervalDesc: '前端自动请求最新行情（0=手动刷新）',
+      refreshIntervalDesc: '后端定时抓取最新行情（0=手动刷新）',
       btcSources: '加密货币行情源',
       goldSources: '贵金属行情源',
       priceSourcesDesc: '按选择顺序依次尝试，与资讯源独立配置',

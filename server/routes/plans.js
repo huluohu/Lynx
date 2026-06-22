@@ -38,6 +38,41 @@ function toPositiveNumber(value) {
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
+export function resolveExecutionQuantityAndAmount(plan, body = {}, executionPrice) {
+  const plannedQuantity = toPositiveNumber(plan.quantity);
+  const plannedAmount = toPositiveNumber(plan.amount);
+  const executedQuantity = Number(plan.executed_quantity || 0);
+  const executedAmount = Number(plan.executed_amount || 0);
+  const remainingQuantity = plannedQuantity ? Math.max(plannedQuantity - executedQuantity, 0) : null;
+  const remainingAmount = plannedAmount ? Math.max(plannedAmount - executedAmount, 0) : null;
+  const requestedAmount = toPositiveNumber(body.amount);
+
+  const actualQuantity = toPositiveNumber(body.quantity)
+    ?? remainingQuantity
+    ?? plannedQuantity
+    ?? (requestedAmount ? requestedAmount / executionPrice : null)
+    ?? (remainingAmount ? remainingAmount / executionPrice : null);
+
+  if (!actualQuantity) {
+    throw Object.assign(new Error('无法确定成交数量，请提供有效的 quantity'), { statusCode: 400 });
+  }
+
+  if (remainingQuantity !== null && actualQuantity - remainingQuantity > 1e-8) {
+    throw Object.assign(new Error('成交数量超过计划剩余数量'), { statusCode: 400 });
+  }
+
+  return {
+    plannedQuantity,
+    plannedAmount,
+    executedQuantity,
+    executedAmount,
+    remainingQuantity,
+    remainingAmount,
+    actualQuantity,
+    actualAmount: actualQuantity * executionPrice,
+  };
+}
+
 function getActiveHolding(db, assetId) {
   return db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(assetId);
 }
@@ -172,30 +207,13 @@ router.post('/:id/execute', (req, res) => {
         throw Object.assign(new Error('当前计划状态不允许执行'), { statusCode: 400 });
       }
 
-      const plannedQuantity = toPositiveNumber(plan.quantity);
-      const plannedAmount = toPositiveNumber(plan.amount);
-      const executedQuantity = Number(plan.executed_quantity || 0);
-      const executedAmount = Number(plan.executed_amount || 0);
-      const remainingQuantity = plannedQuantity ? Math.max(plannedQuantity - executedQuantity, 0) : null;
-      const remainingAmount = plannedAmount ? Math.max(plannedAmount - executedAmount, 0) : null;
-
-      const actualQuantity = toPositiveNumber(req.body.quantity)
-        ?? remainingQuantity
-        ?? plannedQuantity
-        ?? (toPositiveNumber(req.body.amount) ? Number(req.body.amount) / executionPrice : null)
-        ?? (remainingAmount ? remainingAmount / executionPrice : null);
-
-      if (!actualQuantity) {
-        throw Object.assign(new Error('无法确定成交数量，请提供有效的 quantity'), { statusCode: 400 });
-      }
-
-      if (remainingQuantity !== null && actualQuantity - remainingQuantity > 1e-8) {
-        throw Object.assign(new Error('成交数量超过计划剩余数量'), { statusCode: 400 });
-      }
-
-      const actualAmount = toPositiveNumber(req.body.amount)
-        ?? (remainingAmount && actualQuantity >= remainingQuantity - 1e-8 ? remainingAmount : null)
-        ?? actualQuantity * executionPrice;
+      const {
+        plannedQuantity,
+        executedQuantity,
+        executedAmount,
+        actualQuantity,
+        actualAmount,
+      } = resolveExecutionQuantityAndAmount(plan, req.body, executionPrice);
 
       applyTradeToHoldings(db, {
         assetId: plan.asset_id,

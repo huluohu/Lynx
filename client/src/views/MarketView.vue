@@ -277,7 +277,7 @@ function startAutoRefresh() {
   const minutes = Math.max(0, runtimeSettingsStore.getNumber('market_refresh_interval', 5))
   if (minutes > 0) {
     refreshTimer = setInterval(() => {
-      refresh(true).catch(() => {})
+      refresh(false).catch(() => {})
     }, minutes * 60 * 1000)
   }
 }

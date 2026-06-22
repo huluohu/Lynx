@@ -234,7 +234,7 @@ bash docker/build.sh
 常用设置项会写入 `settings` 表，包括：
 
 - `market_btc_sources_enabled`、`market_gold_sources_enabled`
-- `market_refresh_interval`、`refresh_interval`、`rate_cache_duration`
+- `market_refresh_interval`（后端行情抓取间隔）、`refresh_interval`、`rate_cache_duration`
 - `strategy_monitor_interval`、`signal_valid_hours`、`plan_approaching_pct`
 - `news_refresh_interval`、`news_sources_enabled`、`news_auto_cache`、`news_cache_batch_size`
 - `push_enabled`、`push_webhook_type`、`push_webhook_url`
