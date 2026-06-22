@@ -61,7 +61,7 @@ export async function getMarketSnapshot(db, asset, { forceRefresh = false } = {}
     return getCachedMarketSnapshot(db, asset);
   }
 
-  const realtime = await fetchPrice(asset);
+  const realtime = await fetchPrice(asset, { allowCooldownProbe: true });
   if (realtime) {
     db.prepare('INSERT INTO price_cache (asset_id, price, currency, source) VALUES (?, ?, ?, ?)')
       .run(asset.id, realtime.price, realtime.currency, realtime.source);

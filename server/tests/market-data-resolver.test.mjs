@@ -125,6 +125,115 @@ test('BTC provider symbols come from DB mappings', () => {
   assert.equal(api.resolveProviderSymbol(asset, profile, 'binance'), 'BTCUSDT');
 });
 
+test('fetchCrypto records cooldown-only candidates as skipped, not failed', async () => {
+  const cooldownSources = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'];
+  const placeholders = cooldownSources.map(() => '?').join(',');
+
+  let db = new Database(dbPath);
+  db.prepare(`UPDATE market_sources
+    SET cooldown_until = datetime('now', '+5 minutes'), fail_count = 3
+    WHERE key IN (${placeholders})`).run(...cooldownSources);
+  db.prepare('DELETE FROM market_source_attempts').run();
+  db.close();
+
+  try {
+    const { fetchCrypto } = await import('../services/price.js');
+    const quote = await fetchCrypto({ id: 3, symbol: 'BTC', type: 'crypto', currency: 'USD', unit: 'coin' });
+    assert.equal(quote, null);
+
+    db = new Database(dbPath);
+    const attempts = db.prepare(`SELECT source_key, status, reason
+      FROM market_source_attempts
+      WHERE symbol = 'BTC'
+      ORDER BY id`).all();
+    const failCounts = db.prepare(`SELECT key, fail_count
+      FROM market_sources
+      WHERE key IN (${placeholders})
+      ORDER BY key`).all(...cooldownSources);
+    db.close();
+
+    assert.equal(attempts.some(row => row.status === 'failed'), false);
+    for (const sourceKey of cooldownSources) {
+      const attempt = attempts.find(row => row.source_key === sourceKey);
+      assert.equal(attempt?.status, 'skipped');
+      assert.equal(attempt?.reason, 'Source in cooldown');
+    }
+    assert.deepEqual([...new Set(failCounts.map(row => row.fail_count))], [3]);
+  } finally {
+    db = new Database(dbPath);
+    db.prepare(`UPDATE market_sources
+      SET cooldown_until = NULL, fail_count = 0, last_error = NULL, last_error_at = NULL
+      WHERE key IN (${placeholders})`).run(...cooldownSources);
+    db.prepare('DELETE FROM market_source_attempts').run();
+    db.close();
+  }
+});
+
+test('fetchCrypto can recover a quote by probing a cooled-down source when explicitly allowed', async () => {
+  const sourceKey = 'test_recovery_json';
+  const server = http.createServer((req, res) => {
+    assert.equal(req.url, '/price/BTC-USD');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ data: { price: 67890.12, currency: 'USD' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  let db = new Database(dbPath);
+  const previousSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('market_crypto_sources_enabled')?.value || null;
+  db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run('market_crypto_sources_enabled', sourceKey);
+  db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(sourceKey, 'market_crypto_sources_enabled');
+  db.prepare(`INSERT INTO market_sources (key, name, asset_class, source_type, enabled, priority, cooldown_until, fail_count)
+    VALUES (?, 'Test Recovery JSON', 'crypto', 'builtin', 1, 1, datetime('now', '+5 minutes'), 3)`).run(sourceKey);
+  db.prepare(`INSERT INTO market_source_capabilities
+    (source_key, asset_class, instrument_type, markets_json, regions_json, quote_currencies_json, units_json, identifiers_required_json, priority)
+    VALUES (?, 'crypto', 'spot', '["crypto_spot"]', '["global"]', '["USD"]', '["coin"]', ?, 1)`)
+    .run(sourceKey, JSON.stringify([sourceKey]));
+  db.prepare(`UPDATE asset_symbol_mappings
+    SET identifiers_json = json_set(identifiers_json, ?, 'BTC-USD')
+    WHERE asset_class = 'crypto' AND input_symbol = 'BTC'`).run(`$.${sourceKey}`);
+  db.prepare(`INSERT INTO market_source_adapters
+    (source_key, adapter_type, endpoint_template, parser_type, parser_config_json, timeout_ms)
+    VALUES (?, 'json_http', ?, 'json_path', '{"price_path":"data.price","currency_path":"data.currency","unit":"coin"}', 1000)`)
+    .run(sourceKey, `http://127.0.0.1:${port}/price/{provider_symbol}`);
+  db.prepare('DELETE FROM market_source_attempts').run();
+  db.close();
+
+  try {
+    const { fetchCrypto } = await import('../services/price.js');
+    const quote = await fetchCrypto({ id: 3, symbol: 'BTC', type: 'crypto', currency: 'USD', unit: 'coin' }, { allowCooldownProbe: true });
+    assert.equal(quote.source, sourceKey);
+    assert.equal(quote.price, 67890.12);
+
+    db = new Database(dbPath);
+    const sourceState = db.prepare('SELECT fail_count, cooldown_until FROM market_sources WHERE key = ?').get(sourceKey);
+    const attempts = db.prepare(`SELECT status, reason, quote_price
+      FROM market_source_attempts
+      WHERE source_key = ?
+      ORDER BY id`).all(sourceKey);
+    db.close();
+
+    assert.equal(sourceState.fail_count, 0);
+    assert.equal(sourceState.cooldown_until, null);
+    assert.equal(attempts[0]?.status, 'skipped');
+    assert.equal(attempts[0]?.reason, 'Source in cooldown');
+    assert.equal(attempts.some(row => row.status === 'success' && row.quote_price === 67890.12), true);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    db = new Database(dbPath);
+    if (previousSetting == null) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run('market_crypto_sources_enabled');
+    } else {
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(previousSetting, 'market_crypto_sources_enabled');
+    }
+    db.prepare('DELETE FROM market_source_adapters WHERE source_key = ?').run(sourceKey);
+    db.prepare('DELETE FROM market_source_capabilities WHERE source_key = ?').run(sourceKey);
+    db.prepare('DELETE FROM market_sources WHERE key = ?').run(sourceKey);
+    db.prepare('DELETE FROM market_source_attempts').run();
+    db.close();
+  }
+});
+
 test('resolve explain reports matched and skipped candidates for rule maintenance entrypoint', () => {
   const result = api.explainMarketResolution({ symbol: 'AU9999', type: 'gold', currency: 'CNY', unit: 'g' });
 
@@ -231,5 +340,3 @@ test('unknown asset classes fall back to inferred profiles without throwing', ()
   assert.deepEqual(plan.selected, []);
   assert.equal(plan.skipped[0].reason, 'no enabled capability configured');
 });
-
-

@@ -72,6 +72,30 @@ function recordSourceFailure(sourceKey, errorMessage = 'No data') {
   } catch {}
 }
 
+function logSourceExhausted(label, { symbol, profile, enabledSources, failures }) {
+  const actualFailures = failures.filter(item => !item.skipped);
+  const skipped = failures.filter(item => item.skipped);
+  const cooldownSources = skipped
+    .filter(item => String(item.reason || '').toLowerCase().includes('cooldown'))
+    .map(item => item.source);
+  const payload = {
+    symbol,
+    profile,
+    enabledSources,
+    failures,
+    failedCount: actualFailures.length,
+    skippedCount: skipped.length,
+    cooldownSources,
+  };
+
+  if (actualFailures.length === 0) {
+    log.info(`No ${label} source attempted; all candidates were skipped`, payload);
+    return;
+  }
+
+  log.warn(`No ${label} source produced a price`, payload);
+}
+
 function getCustomMarketSources(assetClass) {
   try {
     return getDb().prepare(`SELECT * FROM market_sources
@@ -526,7 +550,7 @@ async function fetchConfiguredAssetPrice(asset) {
     const source = sourceEntry.key;
     if (isSourceInCooldown(source)) {
       const reason = 'Source in cooldown';
-      failures.push({ source, reason });
+      failures.push({ source, reason, skipped: true });
       recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
       log.debug('Configured source skipped during cooldown', { source, symbol: asset?.symbol, assetClass: profile.assetClass });
       continue;
@@ -599,7 +623,7 @@ export async function fetchPreciousMetal(asset) {
     const source = sourceEntry.key;
     if (isSourceInCooldown(source)) {
       const reason = 'Source in cooldown';
-      failures.push({ source, reason });
+      failures.push({ source, reason, skipped: true });
       recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
       log.debug('Precious metal source skipped during cooldown', { source, symbol });
       continue;
@@ -631,7 +655,7 @@ export async function fetchPreciousMetal(asset) {
     }
   }
 
-  log.warn('All precious metal sources failed', { symbol, profile, enabledSources, failures });
+  logSourceExhausted('precious metal', { symbol, profile, enabledSources, failures });
   return null;
 }
 
@@ -741,8 +765,14 @@ async function fetchCryptoGemini(asset) {
   return null;
 }
 
+async function fetchCryptoFromSource(runtimeAsset, profile, sourceEntry, fetcher) {
+  return sourceEntry.source_type === 'custom_http'
+    ? await fetchCustomHttpSource(runtimeAsset, sourceEntry)
+    : await fetchConfiguredMarketSource(runtimeAsset, profile, sourceEntry) || (fetcher ? await fetcher(runtimeAsset) : null);
+}
+
 // ===== 加密货币查询（兼容旧 BTC） =====
-export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', currency: 'USD' }) {
+export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', currency: 'USD' }, { allowCooldownProbe = false } = {}) {
   const profile = loadMarketProfile(asset);
   const runtimeAsset = withMarketProfile(asset, profile);
   const symbol = normalizeAssetSymbol(runtimeAsset);
@@ -767,29 +797,31 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
     gemini: fetchCryptoGemini,
   };
   const failures = skipped.map(item => ({ source: item.source, reason: item.reason, skipped: true }));
+  const cooldownCandidates = [];
   for (const item of skipped) {
     recordMarketSourceAttempt({ sourceKey: item.source, asset, status: 'skipped', reason: item.reason, metadata: { profile } });
   }
 
   for (const sourceEntry of enabledSources) {
     const source = sourceEntry.key;
+    const fetcher = sourceEntry.source_type === 'custom_http' ? null : fetchers[source];
+    const hasConfiguredAdapter = sourceEntry.source_type !== 'custom_http' && Boolean(loadSourceAdapter(source));
+    if (!fetcher && !hasConfiguredAdapter && sourceEntry.source_type !== 'custom_http') {
+      const reason = 'No fetcher registered';
+      failures.push({ source, reason, skipped: true });
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
+      continue;
+    }
     if (isSourceInCooldown(source)) {
       const reason = 'Source in cooldown';
-      failures.push({ source, reason });
+      failures.push({ source, reason, skipped: true });
+      cooldownCandidates.push({ sourceEntry, fetcher });
       recordMarketSourceAttempt({ sourceKey: source, asset, status: 'skipped', reason, metadata: { profile } });
       log.debug('Crypto source skipped during cooldown', { source, symbol });
       continue;
     }
-    const fetcher = sourceEntry.source_type === 'custom_http' ? null : fetchers[source];
-    const hasConfiguredAdapter = sourceEntry.source_type !== 'custom_http' && Boolean(loadSourceAdapter(source));
-    if (!fetcher && !hasConfiguredAdapter && sourceEntry.source_type !== 'custom_http') {
-      failures.push({ source, reason: 'No fetcher registered' });
-      continue;
-    }
     try {
-      const result = sourceEntry.source_type === 'custom_http'
-        ? await fetchCustomHttpSource(runtimeAsset, sourceEntry)
-        : await fetchConfiguredMarketSource(runtimeAsset, profile, sourceEntry) || (fetcher ? await fetcher(runtimeAsset) : null);
+      const result = await fetchCryptoFromSource(runtimeAsset, profile, sourceEntry, fetcher);
       if (result) {
         recordSourceSuccess(source);
         return result;
@@ -808,16 +840,40 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
     }
   }
 
-  log.warn('All crypto sources failed', { symbol, profile, enabledSources, failures });
+  const actualFailures = failures.filter(item => !item.skipped);
+  if (allowCooldownProbe && actualFailures.length === 0 && cooldownCandidates.length > 0) {
+    const { sourceEntry, fetcher } = cooldownCandidates[0];
+    const source = sourceEntry.key;
+    log.info('Crypto source cooldown recovery probe', { source, symbol, cooldownCandidates: cooldownCandidates.map(item => item.sourceEntry.key) });
+    try {
+      const result = await fetchCryptoFromSource(runtimeAsset, profile, sourceEntry, fetcher);
+      if (result) {
+        recordSourceSuccess(source);
+        return result;
+      }
+      const reason = 'No valid price returned during cooldown recovery probe';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile, cooldown_recovery: true } });
+    } catch (e) {
+      const reason = e?.message || 'Source failed during cooldown recovery probe';
+      failures.push({ source, reason });
+      recordSourceFailure(source, reason);
+      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile, cooldown_recovery: true } });
+      log.warn('Crypto source cooldown recovery probe failed', { source, symbol, error: reason });
+    }
+  }
+
+  logSourceExhausted('crypto', { symbol, profile, enabledSources, failures });
   return null;
 }
 
 export async function fetchBTC() {
-  return fetchCrypto({ symbol: 'BTC', type: 'crypto', currency: 'USD', subtype: 'bitcoin', unit: 'coin' });
+  return fetchCrypto({ symbol: 'BTC', type: 'crypto', currency: 'USD', subtype: 'bitcoin', unit: 'coin' }, { allowCooldownProbe: true });
 }
 
 // ===== 统一调度入口 =====
-export async function fetchPrice(asset) {
+export async function fetchPrice(asset, { allowCooldownProbe = false } = {}) {
   try {
     if (asset.data_source === 'manual') {
       log.debug('Manual price source, skipping remote fetch', { assetId: asset.id });
@@ -827,7 +883,7 @@ export async function fetchPrice(asset) {
       return await fetchPreciousMetal(asset);
     }
     if (isCryptoAsset(asset)) {
-      const data = await fetchCrypto(asset);
+      const data = await fetchCrypto(asset, { allowCooldownProbe });
       if (!data) return null;
       const currency = asset.currency || 'USD';
       const price = currency === 'CNY' ? data.cny : data.usd;
