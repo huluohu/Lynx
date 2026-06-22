@@ -144,19 +144,93 @@ export function analyzeTransactionPatterns(transactions) {
 // 2. Plan Validation
 // ============================================================
 
+function assetDisplayName(item) {
+  const asset = item?.asset || item || {};
+  return asset.name || asset.symbol || (asset.id != null ? `资产 ${asset.id}` : '未知资产');
+}
+
+function buildAssetContext(assets = []) {
+  const byId = new Map();
+  const byKey = new Map();
+  for (const item of assets || []) {
+    const asset = item?.asset || item;
+    if (!asset) continue;
+    const id = Number(asset.id);
+    if (Number.isFinite(id)) byId.set(id, item);
+    for (const value of [asset.symbol, asset.name]) {
+      const key = String(value || '').trim().toLowerCase();
+      if (key && !byKey.has(key)) byKey.set(key, item);
+    }
+  }
+  return { byId, byKey };
+}
+
+function resolvePlanAsset(plan, context) {
+  const id = Number(plan?.asset_id);
+  if (Number.isFinite(id) && context.byId.has(id)) {
+    const item = context.byId.get(id);
+    return {
+      key: `id:${id}`,
+      id,
+      item,
+      label: assetDisplayName(item),
+    };
+  }
+
+  for (const value of [plan?.asset_symbol, plan?.symbol, plan?.asset_name, plan?.name]) {
+    const key = String(value || '').trim().toLowerCase();
+    if (key && context.byKey.has(key)) {
+      const item = context.byKey.get(key);
+      const asset = item?.asset || item || {};
+      return {
+        key: Number.isFinite(Number(asset.id)) ? `id:${Number(asset.id)}` : `key:${key}`,
+        id: Number.isFinite(Number(asset.id)) ? Number(asset.id) : null,
+        item,
+        label: assetDisplayName(item),
+      };
+    }
+  }
+
+  return null;
+}
+
+function isPriceTrigger(plan) {
+  return ['price_below', 'price_above'].includes(plan?.trigger_type);
+}
+
+function numericPrice(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function estimateCashAmount(plan) {
+  const amount = Number(plan?.amount || 0);
+  if (amount > 0) return amount;
+  const quantity = Number(plan?.quantity || 0);
+  const trigger = numericPrice(plan?.trigger_value);
+  return quantity > 0 && trigger ? quantity * trigger : 0;
+}
+
+function estimateSellQuantity(plan) {
+  const quantity = Number(plan?.quantity || 0);
+  if (quantity > 0) return quantity;
+  const amount = Number(plan?.amount || 0);
+  const trigger = numericPrice(plan?.trigger_value);
+  return amount > 0 && trigger ? amount / trigger : 0;
+}
+
 /**
  * Validate plans against budget and price constraints.
  * Returns { valid, issues, totalBuy, budgetUsage }
  */
 export function validatePlans(plans, assets, budget) {
   const issues = [];
-  const assetMap = {};
-  for (const a of assets) assetMap[a.asset.id] = a;
+  const assetContext = buildAssetContext(assets);
 
   // Budget check
   const totalBuy = plans
-    .filter(p => p.action === 'buy' && p.amount)
-    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    .filter(p => p.action === 'buy')
+    .reduce((sum, p) => sum + estimateCashAmount(p), 0);
   if (totalBuy > budget * 1.05) {
     issues.push({
       type: 'budget_exceeded',
@@ -166,10 +240,18 @@ export function validatePlans(plans, assets, budget) {
   }
 
   for (const plan of plans) {
-    const a = assetMap[plan.asset_id];
+    const resolved = resolvePlanAsset(plan, assetContext);
+    const a = resolved?.item;
     const currentPrice = a?.latestPrice;
     const avgCost = a?.holding?.avg_cost;
     const seq = plan.seq || '?';
+    const label = resolved?.label || `资产 ${plan.asset_id || '?'}`;
+
+    if (!plan.asset_id && !plan.asset_symbol && !plan.symbol && !plan.asset_name) {
+      issues.push({ type: 'missing_plan_asset', severity: 'error', message: `第${seq}步：缺少资产引用` });
+    } else if (!resolved) {
+      issues.push({ type: 'unknown_plan_asset', severity: 'error', message: `第${seq}步：计划引用未知资产 ${plan.asset_id || plan.asset_symbol || plan.symbol || plan.asset_name}` });
+    }
 
     // Missing amount/quantity
     if (!plan.amount && !plan.quantity) {
@@ -182,26 +264,37 @@ export function validatePlans(plans, assets, budget) {
       continue;
     }
 
-    const tv = Number(plan.trigger_value);
-    if (!Number.isFinite(tv) || tv <= 0) {
+    const tv = numericPrice(plan.trigger_value);
+    if (isPriceTrigger(plan) && tv == null) {
       issues.push({ type: 'invalid_trigger', severity: 'error', message: `第${seq}步：触发价格无效 (${plan.trigger_value})` });
       continue;
     }
 
     // Buy price warnings
-    if (plan.action === 'buy' && currentPrice && plan.trigger_type === 'price_below') {
+    if (plan.action === 'buy' && currentPrice && plan.trigger_type === 'price_below' && tv != null) {
       if (tv > currentPrice * 1.02) {
-        issues.push({ type: 'buy_above_market', severity: 'warning', message: `第${seq}步：买入触发价 ¥${tv} 高于当前价 ¥${currentPrice.toFixed(2)}，可能立即成交` });
+        issues.push({ type: 'buy_above_market', severity: 'warning', message: `第${seq}步（${label}）：买入触发价 ¥${tv} 高于当前价 ¥${Number(currentPrice).toFixed(2)}，可能立即成交` });
       }
     }
 
     // Sell price warnings
-    if (plan.action === 'sell' && avgCost && tv < avgCost * 0.95) {
-      issues.push({ type: 'sell_below_cost', severity: 'warning', message: `第${seq}步：卖出触发价 ¥${tv} 明显低于成本价 ¥${avgCost.toFixed(2)}（可能亏损）` });
+    if (plan.action === 'sell' && avgCost && tv != null && tv < avgCost * 0.95) {
+      issues.push({ type: 'sell_below_cost', severity: 'warning', message: `第${seq}步（${label}）：卖出触发价 ¥${tv} 明显低于成本价 ¥${Number(avgCost).toFixed(2)}（可能亏损）` });
+    }
+
+    // Sell position availability
+    if (plan.action === 'sell' && resolved) {
+      const holdingQty = Number(a?.holding?.quantity || 0);
+      const sellQty = estimateSellQuantity(plan);
+      if (holdingQty > 0 && sellQty > holdingQty * 1.000001) {
+        issues.push({ type: 'sell_exceeds_holding', severity: 'error', message: `第${seq}步（${label}）：计划卖出数量 ${sellQty.toFixed(6)} 超过当前持仓 ${holdingQty.toFixed(6)}` });
+      } else if (!a?.holding && sellQty > 0) {
+        issues.push({ type: 'sell_without_holding', severity: 'warning', message: `第${seq}步（${label}）：缺少持仓数据，无法确认卖出数量是否可用` });
+      }
     }
 
     // Zero or negative trigger value
-    if (tv <= 0) {
+    if (isPriceTrigger(plan) && tv != null && tv <= 0) {
       issues.push({ type: 'zero_trigger', severity: 'error', message: `第${seq}步：触发价格必须大于0` });
     }
   }
@@ -281,36 +374,40 @@ export function simulatePlanExecution(plans, assets, budget) {
     const assetId = Number(plan.asset_id);
     const state = simulated[assetId];
     const asset = assetMap[assetId];
-    if (!state || !asset) continue;
+    if (!state || !asset) {
+      issues.push({ type: 'unknown_plan_asset', severity: 'error', message: `第${seq}步引用未知资产 ${plan.asset_id}` });
+      continue;
+    }
 
-    const trigger = Number(plan.trigger_value);
-    const amount = Number(plan.amount || 0);
-    const quantity = Number(plan.quantity || 0);
+    const trigger = numericPrice(plan.trigger_value);
     const currentPrice = state.currentPrice;
 
     if (plan.action === 'buy') {
-      const buyAmount = amount > 0 ? amount : quantity > 0 && trigger > 0 ? quantity * trigger : 0;
+      const buyAmount = estimateCashAmount(plan);
       committedBuy += buyAmount;
       state.buyAmount += buyAmount;
-      if (currentPrice > 0 && plan.trigger_type === 'price_below' && trigger >= currentPrice) {
-        issues.push({ type: 'immediate_buy_trigger', severity: 'warning', message: `第${seq}步买入触发价不低于当前价，可能立即触发` });
+      if (currentPrice > 0 && plan.trigger_type === 'price_below' && trigger != null && trigger >= currentPrice) {
+        issues.push({ type: 'immediate_buy_trigger', severity: 'warning', message: `第${seq}步（${assetDisplayName(asset)}）买入触发价不低于当前价，可能立即触发` });
       }
-      if (currentPrice > 0 && trigger > currentPrice * 1.05) {
-        issues.push({ type: 'buy_far_above_market', severity: 'warning', message: `第${seq}步买入价明显高于当前价` });
+      if (currentPrice > 0 && trigger != null && trigger > currentPrice * 1.05) {
+        issues.push({ type: 'buy_far_above_market', severity: 'warning', message: `第${seq}步（${assetDisplayName(asset)}）买入价明显高于当前价` });
       }
     }
 
     if (plan.action === 'sell') {
-      const sellQty = quantity > 0 ? quantity : amount > 0 && trigger > 0 ? amount / trigger : 0;
+      const sellQty = estimateSellQuantity(plan);
       state.sellQuantity += sellQty;
       if (state.sellQuantity - state.quantity > 1e-8) {
-        issues.push({ type: 'sell_exceeds_holding', severity: 'error', message: `第${seq}步累计卖出数量超过当前持仓` });
+        issues.push({ type: 'sell_exceeds_holding', severity: 'error', message: `第${seq}步（${assetDisplayName(asset)}）累计卖出数量超过当前持仓` });
       }
-      if (currentPrice > 0 && plan.trigger_type === 'price_above' && trigger <= currentPrice) {
-        issues.push({ type: 'immediate_sell_trigger', severity: 'warning', message: `第${seq}步卖出触发价不高于当前价，可能立即触发` });
+      if (Number(plan.amount || 0) > 0 && Number(plan.quantity || 0) <= 0 && isPriceTrigger(plan) && trigger == null) {
+        issues.push({ type: 'sell_quantity_unknown', severity: 'warning', message: `第${seq}步（${assetDisplayName(asset)}）缺少有效价格，无法按金额估算卖出数量` });
       }
-      if (state.avgCost > 0 && trigger < state.avgCost * 0.98) {
-        issues.push({ type: 'sell_below_avg_cost', severity: 'warning', message: `第${seq}步卖出价低于成本价，需确认是否为止损` });
+      if (currentPrice > 0 && plan.trigger_type === 'price_above' && trigger != null && trigger <= currentPrice) {
+        issues.push({ type: 'immediate_sell_trigger', severity: 'warning', message: `第${seq}步（${assetDisplayName(asset)}）卖出触发价不高于当前价，可能立即触发` });
+      }
+      if (state.avgCost > 0 && trigger != null && trigger < state.avgCost * 0.98) {
+        issues.push({ type: 'sell_below_avg_cost', severity: 'warning', message: `第${seq}步（${assetDisplayName(asset)}）卖出价低于成本价，需确认是否为止损` });
       }
     }
   }
@@ -474,25 +571,40 @@ export function evaluateOutput(result, collectedData, budget) {
 export function selfCheckConsistency(result, collectedData, goal) {
   const { plans = [], analysis } = result;
   const { assets } = collectedData;
-  const assetIds = new Set(assets.map(a => a.asset.id));
+  const assetContext = buildAssetContext(assets);
+  const assetIds = new Set(assets.map(a => Number(a.asset.id)));
   const warnings = [];
 
   // Check 1: All plan asset_ids exist
   for (const p of plans) {
-    if (p.asset_id && !assetIds.has(Number(p.asset_id))) {
+    if (!p.asset_id && !p.asset_symbol && !p.symbol && !p.asset_name) {
+      warnings.push(`计划第${p.seq}步缺少资产引用`);
+    } else if (p.asset_id && !assetIds.has(Number(p.asset_id))) {
       warnings.push(`计划第${p.seq}步引用了不存在的资产 ID ${p.asset_id}`);
     }
   }
 
-  // Check 2: For recovery/grid, buy lines should be descending
+  // Check 2: For recovery/grid, buy lines should be descending per asset.
   if (goal === 'recovery' || goal === 'balanced') {
-    const buyLines = plans
-      .filter(p => p.action === 'buy' && p.trigger_type === 'price_below')
-      .map(p => Number(p.trigger_value));
-    for (let i = 1; i < buyLines.length; i++) {
-      if (buyLines[i] > buyLines[i - 1] * 1.01) {
-        warnings.push(`买入计划第${i + 1}条触发价 ¥${buyLines[i]} 高于上一条 ¥${buyLines[i - 1]}，建议价格递减`);
-        break;
+    const byAsset = new Map();
+    for (const p of plans) {
+      if (p.action !== 'buy' || p.trigger_type !== 'price_below') continue;
+      const price = numericPrice(p.trigger_value);
+      if (price == null) continue;
+      const resolved = resolvePlanAsset(p, assetContext);
+      if (!resolved) continue;
+      if (!byAsset.has(resolved.key)) byAsset.set(resolved.key, { label: resolved.label, lines: [] });
+      byAsset.get(resolved.key).lines.push({ seq: p.seq || '?', price });
+    }
+
+    for (const group of byAsset.values()) {
+      for (let i = 1; i < group.lines.length; i++) {
+        const current = group.lines[i];
+        const prev = group.lines[i - 1];
+        if (current.price > prev.price * 1.01) {
+          warnings.push(`买入计划第${current.seq}步（${group.label}）触发价 ¥${current.price} 高于上一条同资产买入价 ¥${prev.price}，建议价格递减`);
+          break;
+        }
       }
     }
   }
@@ -509,7 +621,9 @@ export function selfCheckConsistency(result, collectedData, goal) {
   // Check 4: No duplicate trigger values for same asset+action
   const seen = new Set();
   for (const p of plans) {
-    const key = `${p.asset_id}_${p.action}_${p.trigger_value}`;
+    const resolved = resolvePlanAsset(p, assetContext);
+    const assetKey = resolved?.key || `unknown:${p.asset_id || p.asset_symbol || p.symbol || p.asset_name || '?'}`;
+    const key = `${assetKey}_${p.action}_${p.trigger_value}`;
     if (seen.has(key)) {
       warnings.push(`第${p.seq}步与其他计划重复（相同资产/操作/触发价）`);
     }
