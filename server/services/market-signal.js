@@ -1,5 +1,5 @@
 import { getDb } from '../db/database.js';
-import { getAgentConfig, callLLM } from './strategy-agent.js';
+import { getAgentConfig, callLLM, fetchFearGreedIndex } from './strategy-agent.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('market-signal');
@@ -86,7 +86,11 @@ function supportResistance(prices, window = 20) {
   };
 }
 
-function buildIndicators(history) {
+function isCryptoAsset(asset) {
+  return asset?.type === 'crypto';
+}
+
+function buildIndicators(history, macroIndicators = {}) {
   const prices = history.map(item => Number(item.price)).filter(Number.isFinite);
   const returns = [];
   for (let i = 1; i < prices.length; i++) {
@@ -95,7 +99,7 @@ function buildIndicators(history) {
     returns.push(((prices[i] - prev) / prev) * 100);
   }
   const levels = supportResistance(prices);
-  return {
+  const indicators = {
     latest_price: round(prices[prices.length - 1]),
     ma5: movingAverage(prices, 5),
     ma20: movingAverage(prices, 20),
@@ -108,6 +112,15 @@ function buildIndicators(history) {
     resistance: levels.resistance,
     data_points: history.length,
   };
+
+  const fearGreed = macroIndicators.fearGreed?.current;
+  if (Number.isFinite(Number(fearGreed?.value))) {
+    indicators.fear_greed_index = Number(fearGreed.value);
+    indicators.fear_greed_label = fearGreed.label || null;
+    indicators.fear_greed_date = fearGreed.date || null;
+  }
+
+  return indicators;
 }
 
 function clampStrength(value, fallback = 5) {
@@ -170,7 +183,7 @@ function normalizeSavedSignal(row) {
   };
 }
 
-export async function analyzeMarketSignals(assetId) {
+export async function analyzeMarketSignals(assetId, macroIndicators = null) {
   const db = getDb();
   const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
   if (!asset) throw new Error('资产不存在');
@@ -183,7 +196,10 @@ export async function analyzeMarketSignals(assetId) {
     LIMIT 120
   ) ORDER BY fetched_at ASC`).all(assetId);
 
-  const indicators = buildIndicators(history);
+  const resolvedMacroIndicators = isCryptoAsset(asset)
+    ? (macroIndicators || { fearGreed: await fetchFearGreedIndex() })
+    : {};
+  const indicators = buildIndicators(history, resolvedMacroIndicators);
   const fallback = fallbackSignal(db, asset, indicators);
   let signal = fallback;
 
@@ -201,6 +217,8 @@ export async function analyzeMarketSignals(assetId) {
         moving_averages: { ma5: indicators.ma5, ma20: indicators.ma20 },
         volatility_pct: indicators.volatility_pct,
         rsi14: indicators.rsi14,
+        fear_greed_index: indicators.fear_greed_index,
+        fear_greed_label: indicators.fear_greed_label,
       };
       const prompt = `你是一个市场信号分析师。请基于以下资产行情与技术指标，输出严格 JSON。\n\n资产：${asset.name} (${asset.symbol})\n技术指标：${JSON.stringify(historySummary, null, 2)}\n最近价格样本：${history.slice(-10).map(item => `${item.fetched_at}:${item.price}`).join(' | ')}\n\n请返回：\n1. signal_type: bullish / bearish / neutral\n2. strength: 1-10\n3. summary: 一句话总结\n4. ai_analysis: 可执行的判断和提示\n5. valid_until: ISO 时间字符串\n\n返回严格 JSON，不要 markdown 代码块。\nresponse_format: {\"type\":\"json_object\"}`;
       try {
@@ -248,11 +266,13 @@ export async function analyzeMarketSignals(assetId) {
 
 export async function analyzeAllAssets() {
   const db = getDb();
-  const assets = db.prepare('SELECT id FROM assets ORDER BY id ASC').all();
+  const assets = db.prepare('SELECT id, type FROM assets ORDER BY id ASC').all();
+  const hasCrypto = assets.some(asset => isCryptoAsset(asset));
+  const macroIndicators = hasCrypto ? { fearGreed: await fetchFearGreedIndex() } : {};
   const signals = [];
   for (const asset of assets) {
     try {
-      signals.push(await analyzeMarketSignals(asset.id));
+      signals.push(await analyzeMarketSignals(asset.id, macroIndicators));
     } catch (error) {
       log.warn('Analyze asset failed', { assetId: asset.id, error: error.message });
     }

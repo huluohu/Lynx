@@ -656,12 +656,16 @@ async function collectData(db, assetIds, config, tracer = null) {
   return result;
 }
 
-async function fetchFearGreedIndex() {
+export async function fetchFearGreedIndex() {
   try {
     const data = await httpGet('https://api.alternative.me/fng/?limit=7', { timeout: 5000 });
     if (data?.data) {
       return {
-        current: { value: Number(data.data[0].value), label: data.data[0].value_classification },
+        current: {
+          value: Number(data.data[0].value),
+          label: data.data[0].value_classification,
+          date: new Date(data.data[0].timestamp * 1000).toISOString().slice(0, 10),
+        },
         history: data.data.map(d => ({ value: Number(d.value), label: d.value_classification, date: new Date(d.timestamp * 1000).toISOString().slice(0, 10) })),
       };
     }

@@ -57,6 +57,7 @@
             <div class="indicator-item"><span>{{ t('signals.volatility') }}</span><b>{{ fmtIndicator(signal.indicators?.volatility_pct, '%') }}</b></div>
             <div class="indicator-item"><span>{{ t('signals.change1d') }}</span><b>{{ fmtIndicator(signal.indicators?.change_1d_pct, '%') }}</b></div>
             <div class="indicator-item"><span>{{ t('signals.change7d') }}</span><b>{{ fmtIndicator(signal.indicators?.change_7d_pct, '%') }}</b></div>
+            <div v-if="hasPanicIndex(signal)" class="indicator-item"><span>{{ t('signals.panicIndex') }}</span><b>{{ fmtPanicIndex(signal.indicators) }}</b></div>
           </div>
         </details>
 
@@ -148,6 +149,25 @@ async function refreshSignals() {
 function signalLabel(type) { return { bullish: t('signals.bullish'), bearish: t('signals.bearish'), neutral: t('signals.neutral') }[type] || t('signals.neutral') }
 function signalBadgeClass(type) {
   return { bullish: 'badge-market-up', bearish: 'badge-market-down', neutral: 'badge-pending' }[type] || 'badge-pending'
+}
+function hasPanicIndex(signal) {
+  return Number.isFinite(Number(signal?.indicators?.fear_greed_index))
+}
+function panicIndexLabel(label) {
+  const key = {
+    'Extreme Fear': 'extremeFear',
+    Fear: 'fear',
+    Neutral: 'neutral',
+    Greed: 'greed',
+    'Extreme Greed': 'extremeGreed',
+  }[String(label || '')]
+  return key ? t(`signals.panicIndexClass.${key}`) : (label || '')
+}
+function fmtPanicIndex(indicators) {
+  const value = Number(indicators?.fear_greed_index)
+  if (!Number.isFinite(value)) return '-'
+  const label = panicIndexLabel(indicators?.fear_greed_label)
+  return label ? `${value.toFixed(0)} (${label})` : value.toFixed(0)
 }
 function fmtIndicator(value, suffix = '') {
   return Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}${suffix}` : '-'
