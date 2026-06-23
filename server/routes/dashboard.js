@@ -81,9 +81,10 @@ function buildSummary(db, usdCny) {
   `).get().count;
 
   // 最近交易
-  const recentTrades = db.prepare(`SELECT t.*, a.name, a.symbol, a.currency
-    FROM transactions t JOIN assets a ON t.asset_id = a.id
-    ORDER BY t.executed_at DESC LIMIT 5`).all();
+  const recentTrades = db.prepare(`SELECT h.*, a.name, a.symbol, COALESCE(h.currency, a.currency, 'CNY') AS currency
+    FROM trade_history h JOIN assets a ON h.asset_id = a.id
+    WHERE COALESCE(h.reverted, 0) = 0
+    ORDER BY h.executed_at DESC, h.id DESC LIMIT 5`).all();
 
   return {
     summary: {
