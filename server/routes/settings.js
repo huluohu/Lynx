@@ -3,6 +3,7 @@ import { getDb } from '../db/database.js';
 import { cachePendingNews, getNewsAutoCacheSettings } from '../services/news.js';
 import { startMonitor } from '../services/strategy-monitor.js';
 import { startMarketRefreshScheduler } from '../services/market-refresh.js';
+import { startMarketSignalRefreshScheduler } from '../services/market-signal-refresh.js';
 import { createLogger } from '../utils/logger.js';
 
 const router = Router();
@@ -31,6 +32,11 @@ async function applySettingsSideEffects(changedKeys) {
   if (keySet.has('market_refresh_interval')) {
     startMarketRefreshScheduler({ runImmediately: true });
     log.info('Market refresh scheduler restarted after settings change');
+  }
+
+  if (keySet.has('market_signal_refresh_interval')) {
+    startMarketSignalRefreshScheduler({ runImmediately: true });
+    log.info('Market signal refresh scheduler restarted after settings change');
   }
 
   if ([...NEWS_EFFECT_KEYS].some((key) => keySet.has(key))) {

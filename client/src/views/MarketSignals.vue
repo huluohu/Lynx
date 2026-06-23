@@ -83,21 +83,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useToast } from '../utils/toast.js'
 import { formatDateTime, parseDateTime } from '../utils/formatters.js'
 import { useMobilePageActions } from '../composables/useMobilePageActions.js'
+import { useRuntimeSettingsStore } from '../stores/runtime-settings.js'
 import PullRefreshView from '../components/PullRefreshView.vue'
 import AppIcon from '../components/AppIcon.vue'
 
 const toast = useToast()
 const { t } = useI18n()
+const runtimeSettingsStore = useRuntimeSettingsStore()
 const signals = ref([])
 const loading = ref(false)
 const initialized = ref(false)
 const mobilePageActions = useMobilePageActions()
+let signalRefreshTimer = null
 const latestGeneratedAt = computed(() => {
   const dates = signals.value
     .map((signal) => signal.created_at)
@@ -108,14 +111,14 @@ const latestGeneratedAt = computed(() => {
   return dates[0] || null
 })
 
-async function loadSignals() {
+async function loadSignals({ showError = true } = {}) {
   loading.value = true
   try {
     const res = await api('/api/signals/latest')
     const json = await res.json()
     signals.value = json.data || []
   } catch (e) {
-    toast.error(e.message || t('signals.refreshFailed'))
+    if (showError) toast.error(e.message || t('signals.refreshFailed'))
   }
   loading.value = false
   initialized.value = true
@@ -162,6 +165,35 @@ function isExpired(value) {
   return d.getTime() < Date.now()
 }
 
+async function ensureRuntimeSettings() {
+  if (Object.keys(runtimeSettingsStore.values || {}).length > 0) return
+  try {
+    await runtimeSettingsStore.syncFromServer()
+  } catch {}
+}
+
+function stopAutoRefresh() {
+  if (signalRefreshTimer) {
+    clearInterval(signalRefreshTimer)
+    signalRefreshTimer = null
+  }
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  const minutes = Math.max(0, runtimeSettingsStore.getNumber('market_signal_refresh_interval', 30))
+  if (minutes > 0) {
+    signalRefreshTimer = setInterval(() => {
+      loadSignals({ showError: false }).catch(() => {})
+    }, minutes * 60 * 1000)
+  }
+}
+
+watch(() => runtimeSettingsStore.values.market_signal_refresh_interval, (nextValue, prevValue) => {
+  if (!initialized.value || nextValue === prevValue) return
+  startAutoRefresh()
+})
+
 watchEffect(() => {
   mobilePageActions.setActions([
     {
@@ -173,9 +205,14 @@ watchEffect(() => {
   ])
 })
 
-onMounted(loadSignals)
+onMounted(async () => {
+  await ensureRuntimeSettings()
+  await loadSignals()
+  startAutoRefresh()
+})
 
 onUnmounted(() => {
+  stopAutoRefresh()
   mobilePageActions.clearActions()
 })
 </script>

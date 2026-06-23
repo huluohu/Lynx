@@ -208,6 +208,16 @@
           </div>
           <div class="setting-item">
             <div class="setting-info">
+              <span class="setting-label">{{ t('settings.market.signalRefreshInterval') }}</span>
+              <span class="setting-desc">{{ t('settings.market.signalRefreshIntervalDesc') }}</span>
+            </div>
+            <div class="setting-control">
+              <input class="setting-input" type="number" inputmode="numeric" min="0" v-model="form.market_signal_refresh_interval" @input="dirty.market = true" />
+              <span class="setting-unit">{{ t('common.minuteUnit') }}</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
               <span class="setting-label">{{ t('settings.market.priceAlertThreshold') }}</span>
             </div>
             <div class="setting-control">
@@ -402,6 +412,7 @@ const form = reactive({
   rate_cache_duration: '60',
   strategy_monitor_interval: '5',
   signal_valid_hours: '24',
+  market_signal_refresh_interval: '30',
   news_refresh_interval: '30',
   news_sources_enabled: 'coindesk,cointelegraph,decrypt,panews,coingecko,kitco,fxstreet,bbc_business,bbc_world,cnbc_economy,cnbc_world,china_daily_business,china_daily_china,china_daily_world',
   news_auto_cache: 'true',
@@ -528,7 +539,7 @@ const notifyEvents = computed(() => [
 
 const groupKeys = {
   appearance: ['market_color_scheme'],
-  market: ['refresh_interval', 'market_refresh_interval', 'market_crypto_sources_enabled', 'market_precious_metal_sources_enabled', 'market_btc_sources_enabled', 'market_gold_sources_enabled', 'rate_cache_duration', 'strategy_monitor_interval', 'signal_valid_hours', 'price_alert_threshold', 'plan_approaching_pct'],
+  market: ['refresh_interval', 'market_refresh_interval', 'market_crypto_sources_enabled', 'market_precious_metal_sources_enabled', 'market_btc_sources_enabled', 'market_gold_sources_enabled', 'rate_cache_duration', 'strategy_monitor_interval', 'signal_valid_hours', 'market_signal_refresh_interval', 'price_alert_threshold', 'plan_approaching_pct'],
   ai: ['ai_api_url', 'ai_api_key', 'ai_model', 'agent_analysis_model', 'agent_llm_retries', 'agent_search_api_url', 'agent_search_api_key'],
   news: ['news_refresh_interval', 'news_sources_enabled', 'news_auto_cache', 'news_cache_batch_size'],
   push: ['push_enabled', 'push_webhook_type', 'push_webhook_url'],

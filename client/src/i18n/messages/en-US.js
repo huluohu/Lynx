@@ -375,6 +375,8 @@ export default {
       strategyMonitorIntervalDesc: 'How often strategy conditions are checked',
       signalValidHours: 'Signal validity period',
       signalValidHoursDesc: 'Default lifetime for AI market signals',
+      signalRefreshInterval: 'Signal auto-update interval',
+      signalRefreshIntervalDesc: 'How often the server regenerates market signals automatically (0 = manual only)',
       priceAlertThreshold: 'Price swing threshold',
       planApproachingPct: 'Plan approaching threshold',
       planApproachingPctDesc: 'Notify when price is within this range of the trigger line',

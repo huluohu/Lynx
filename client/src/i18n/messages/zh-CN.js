@@ -375,6 +375,8 @@ export default {
       strategyMonitorIntervalDesc: '定时检查策略触发条件',
       signalValidHours: '市场信号有效期',
       signalValidHoursDesc: 'AI 生成的市场信号默认有效时长',
+      signalRefreshInterval: '市场信号自动更新间隔',
+      signalRefreshIntervalDesc: '后端定时重新生成市场信号（0=手动刷新）',
       priceAlertThreshold: '价格异动阈值',
       planApproachingPct: '计划接近提醒阈值',
       planApproachingPctDesc: '价格距触发线在此范围内时提醒',

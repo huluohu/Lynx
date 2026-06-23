@@ -206,9 +206,39 @@ function loadStrategyContext(db, strategyId) {
   return { strategy, plans, planSet };
 }
 
-function buildChatPrompt(strategy, plans, userMessage) {
+export function buildChatPrompt(strategy, plans, userMessage) {
   const parsedParameters = safeParse(strategy.parameters, {});
-  return `你是投资策略助手。用户会用自然语言描述对策略的调整。\n\n当前策略：\n- 名称：${strategy.name}\n- 类型：${strategy.type}\n- 参数：${JSON.stringify(parsedParameters, null, 2)}\n\n当前操盘计划：\n${formatPlansTable(plans)}\n\n用户输入：${userMessage}\n\n请分析用户意图，返回严格JSON格式的修改指令：\n{\n  "understood": true/false,\n  "interpretation": "你理解的用户意图（一句话）",\n  "changes": {\n    "strategy_updates": {\n      "name": "新名称",\n      "parameters": { }\n    },\n    "plans_add": [\n      { "seq": 4, "trigger_type": "price_below", "trigger_value": 900, "action": "buy", "amount": 3000 }\n    ],\n    "plans_update": [\n      { "seq": 2, "amount": 6000 }\n    ],\n    "plans_delete": [3]\n  },\n  "summary": "即将执行的修改概要（中文）"\n}\n\n要求：\n1. 只能输出 JSON，不要输出 markdown 代码块或额外解释。\n2. 如果只改 strategy.parameters 的部分字段，必须返回合并后的完整 parameters 对象。\n3. plans_update 用 seq 或 id 定位；plans_delete 优先返回 seq。\n4. 新增计划如未指定 seq，请放在合适位置并给出 seq。\n5. 如果无法理解用户意图，返回 {"understood": false, "interpretation": "无法理解", "changes": null, "summary": "请更具体地描述您想做的调整"}。`;
+  return `你是投资策略编辑助手。用户会用自然语言描述对策略的调整，你要把意图转换成可执行的策略/计划修改。\n\n当前策略：\n- 名称：${strategy.name}\n- 类型：${strategy.type}\n- 参数：${JSON.stringify(parsedParameters, null, 2)}\n\n当前操盘计划：\n${formatPlansTable(plans)}\n\n用户输入：${userMessage}\n\n请返回严格 JSON：\n{\n  "understood": true/false,\n  "interpretation": "你理解的用户意图（一句话）",\n  "changes": {\n    "strategy_updates": {\n      "name": "新名称",\n      "parameters": { }\n    },\n    "plans_add": [\n      { "seq": 4, "trigger_type": "price_below", "trigger_value": 900, "action": "buy", "amount": 3000 }\n    ],\n    "plans_update": [\n      { "seq": 2, "amount": 6000 }\n    ],\n    "plans_delete": [3]\n  },\n  "summary": "即将执行的修改概要（中文）"\n}\n\n理解原则：\n1. 不要做关键词硬匹配，要结合策略类型、现有参数、现有计划和金融常识推断用户真实意图。\n2. 用户输入可能很短、口语化或省略主语；如果能从上下文映射为策略修改，就必须给出保守、可执行的 changes。\n3. 可映射的修改类型包括但不限于：风险水平、执行频率、仓位/金额、价格触发线、买卖方向、止盈止损、计划增删改、策略名称/描述/状态、参数调大调小。\n4. 模糊程度类表达要转成相对修改：更激进通常增加买入金额/触发密度/风险参数；更保守通常减少金额、拉开触发间距或降低风险参数；更高/更低/提前/延后要按当前数值做合理调整。\n5. 如果只改 strategy.parameters 的部分字段，必须返回合并后的完整 parameters 对象。\n6. plans_update 用 seq 或 id 定位；plans_delete 优先返回 seq；新增计划如未指定 seq，请按当前计划放在合理位置。\n7. 不要编造不存在的资产；新增计划缺少金额/数量时，优先沿用相邻同类计划的金额或数量。\n8. 只有完全无法映射为策略、参数或计划修改时，才返回 understood=false。`;
+}
+
+export function buildChatRepairPrompt(strategy, plans, userMessage, firstResult, rawContent) {
+  const parsedParameters = safeParse(strategy.parameters, {});
+  return `上一次策略调整理解失败或没有生成可执行修改。请重新理解用户意图，输出一个可执行的 JSON 修改方案。\n\n当前策略：\n- 名称：${strategy.name}\n- 类型：${strategy.type}\n- 参数：${JSON.stringify(parsedParameters, null, 2)}\n\n当前操盘计划：\n${formatPlansTable(plans)}\n\n用户输入：${userMessage}\n\n上一次标准化结果：\n${JSON.stringify(firstResult, null, 2)}\n\n上一次原始输出：\n${rawContent || '（无）'}\n\n请按同一 JSON schema 重新输出。要求：\n1. 这不是关键词适配任务，不要只针对某几个固定说法；请基于上下文做语义理解。\n2. 如果用户表达的是方向性调整（更激进/更保守/更频繁/少买点/多卖点/提前/延后/放宽/收紧/加仓/减仓/止盈/止损等），把它转换为参数或计划的相对变更。\n3. 如果缺少精确数值，用当前参数/相邻计划推导一个保守默认值，并在 summary 说明。\n4. 如果确实不能产生安全修改，才返回 understood=false。`;
+}
+
+function buildChatMessages(strategy, plans, message, repairContext = null) {
+  return [
+    { role: 'system', content: '你是一位严谨的投资策略编辑助手。你只能输出严格 JSON，不要输出任何额外文本。' },
+    {
+      role: 'user',
+      content: repairContext
+        ? buildChatRepairPrompt(strategy, plans, message, repairContext.result, repairContext.rawContent)
+        : buildChatPrompt(strategy, plans, message),
+    },
+  ];
+}
+
+async function runChatInference(config, strategy, plans, message, repairContext = null) {
+  const response = await callLLM(
+    config.apiUrl,
+    config.apiKey,
+    config.analysisModel || config.model,
+    buildChatMessages(strategy, plans, message, repairContext),
+    { temperature: repairContext ? 0.2 : 0.1, maxTokens: repairContext ? 2400 : 1800, timeout: 60000, retries: 1 }
+  );
+  const content = response?.choices?.[0]?.message?.content;
+  const parsed = content ? extractJSON(content) : null;
+  return { result: normalizeChatResult(parsed), parsed, content, response };
 }
 
 function findPlanIndex(plans, locator) {
@@ -355,24 +385,23 @@ export async function processStrategyChat(strategyId, userMessage) {
   const config = getAgentConfig(db);
   if (!config.apiUrl || !config.apiKey) throw new Error('AI 服务未配置');
 
-  const response = await callLLM(
-    config.apiUrl,
-    config.apiKey,
-    config.analysisModel || config.model,
-    [
-      { role: 'system', content: '你是一位严谨的投资策略编辑助手。你只能输出严格 JSON，不要输出任何额外文本。' },
-      { role: 'user', content: buildChatPrompt(strategy, plans, message) },
-    ],
-    { temperature: 0.1, maxTokens: 1800, timeout: 60000, retries: 1 }
-  );
-
-  const content = response?.choices?.[0]?.message?.content;
-  const parsed = content ? extractJSON(content) : null;
-  if (!parsed) {
-    log.warn('Strategy chat parse failed', { strategyId, preview: content?.slice?.(0, 200) || response?.error?.message || '' });
+  const first = await runChatInference(config, strategy, plans, message);
+  if (!first.parsed) {
+    log.warn('Strategy chat parse failed', { strategyId, preview: first.content?.slice?.(0, 200) || first.response?.error?.message || '' });
   }
 
-  const result = normalizeChatResult(parsed);
+  let result = first.result;
+  if (!result.understood || !hasEffectiveChanges(result.changes)) {
+    const repaired = await runChatInference(config, strategy, plans, message, { result, rawContent: first.content });
+    if (!repaired.parsed) {
+      log.warn('Strategy chat repair parse failed', { strategyId, preview: repaired.content?.slice?.(0, 200) || repaired.response?.error?.message || '' });
+    }
+    if (repaired.result.understood && hasEffectiveChanges(repaired.result.changes)) {
+      return repaired.result;
+    }
+    result = repaired.result.understood ? repaired.result : result;
+  }
+
   if (result.understood && !hasEffectiveChanges(result.changes)) {
     return {
       understood: false,

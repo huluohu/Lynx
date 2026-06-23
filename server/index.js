@@ -21,6 +21,7 @@ import signalsRouter from './routes/signals.js';
 import systemRouter from './routes/system.js';
 import { startMonitor } from './services/strategy-monitor.js';
 import { startMarketRefreshScheduler, stopMarketRefreshScheduler } from './services/market-refresh.js';
+import { startMarketSignalRefreshScheduler, stopMarketSignalRefreshScheduler } from './services/market-signal-refresh.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3456;
@@ -121,6 +122,7 @@ const server = app.listen(PORT, () => {
   log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/lynx.db' });
   startMonitor();
   startMarketRefreshScheduler({ runImmediately: true, initialDelayMs: 5000 });
+  startMarketSignalRefreshScheduler({ runImmediately: true, initialDelayMs: 10000 });
   scheduleNewsFetch();
 
   // 启动后延迟30秒拉取新闻（避免阻塞启动）
@@ -148,7 +150,7 @@ server.on('error', (err) => {
 });
 
 // 优雅关闭
-process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); stopMarketRefreshScheduler(); closeDb(); process.exit(0); });
-process.on('SIGTERM', () => { log.info('Shutting down (SIGTERM)'); stopMarketRefreshScheduler(); closeDb(); process.exit(0); });
+process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); stopMarketRefreshScheduler(); stopMarketSignalRefreshScheduler(); closeDb(); process.exit(0); });
+process.on('SIGTERM', () => { log.info('Shutting down (SIGTERM)'); stopMarketRefreshScheduler(); stopMarketSignalRefreshScheduler(); closeDb(); process.exit(0); });
 process.on('uncaughtException', (err) => { log.error('Uncaught exception', { error: err.message, stack: err.stack }); process.exit(1); });
 process.on('unhandledRejection', (reason) => { log.error('Unhandled rejection', { error: String(reason) }); });
