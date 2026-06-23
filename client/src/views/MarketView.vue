@@ -319,7 +319,8 @@ onUnmounted(() => {
 .market-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .market-card:hover { transform: translateY(-1px); }
 .market-card-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.market-card-side { text-align: right; }
+.market-card-main > :first-child { min-width: 0; }
+.market-card-side { display: flex; flex-direction: column; align-items: flex-end; flex-shrink: 0; text-align: right; }
 .market-card-action { margin-top: 10px; padding: 6px 10px; font-size: 12px; }
 .market-asset-name { font-size: 13px; color: var(--text-dim); }
 .market-price { font-size: 32px; font-weight: 800; margin: 4px 0; }

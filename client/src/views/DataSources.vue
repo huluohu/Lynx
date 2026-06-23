@@ -338,11 +338,17 @@ const btcMarketSources = computed(() => [
   { key: 'okx', label: t('settings.market.sourceLabels.okx') },
   { key: 'bitstamp', label: t('settings.market.sourceLabels.bitstamp') },
   { key: 'gemini', label: t('settings.market.sourceLabels.gemini') },
+  { key: 'kucoin', label: t('settings.market.sourceLabels.kucoin') },
+  { key: 'gateio', label: t('settings.market.sourceLabels.gateio') },
+  { key: 'bitget', label: t('settings.market.sourceLabels.bitget') },
+  { key: 'mexc', label: t('settings.market.sourceLabels.mexc') },
+  { key: 'defillama', label: t('settings.market.sourceLabels.defillama') },
 ])
 const goldMarketSources = computed(() => [
   { key: 'sge_sina', label: t('settings.market.sourceLabels.sge_sina') },
   { key: 'neodata', label: t('settings.market.sourceLabels.neodata') },
   { key: 'swissquote', label: t('settings.market.sourceLabels.swissquote') },
+  { key: 'yahoo_metals', label: t('settings.market.sourceLabels.yahoo_metals') },
 ])
 
 const customMarketSources = computed(() => marketSources.value.filter(source => source.source_type === 'custom_http'))
@@ -771,4 +777,3 @@ onUnmounted(() => mobilePageActions.clearActions())
   .state-copy { display: none; }
 }
 </style>
-

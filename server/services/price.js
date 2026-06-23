@@ -842,25 +842,26 @@ export async function fetchCrypto(asset = { symbol: 'BTC', type: 'crypto', curre
 
   const actualFailures = failures.filter(item => !item.skipped);
   if (allowCooldownProbe && actualFailures.length === 0 && cooldownCandidates.length > 0) {
-    const { sourceEntry, fetcher } = cooldownCandidates[0];
-    const source = sourceEntry.key;
-    log.info('Crypto source cooldown recovery probe', { source, symbol, cooldownCandidates: cooldownCandidates.map(item => item.sourceEntry.key) });
-    try {
-      const result = await fetchCryptoFromSource(runtimeAsset, profile, sourceEntry, fetcher);
-      if (result) {
-        recordSourceSuccess(source);
-        return result;
+    log.info('Crypto source cooldown recovery probe', { symbol, cooldownCandidates: cooldownCandidates.map(item => item.sourceEntry.key) });
+    for (const { sourceEntry, fetcher } of cooldownCandidates) {
+      const source = sourceEntry.key;
+      try {
+        const result = await fetchCryptoFromSource(runtimeAsset, profile, sourceEntry, fetcher);
+        if (result) {
+          recordSourceSuccess(source);
+          return result;
+        }
+        const reason = 'No valid price returned during cooldown recovery probe';
+        failures.push({ source, reason });
+        recordSourceFailure(source, reason);
+        recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile, cooldown_recovery: true } });
+      } catch (e) {
+        const reason = e?.message || 'Source failed during cooldown recovery probe';
+        failures.push({ source, reason });
+        recordSourceFailure(source, reason);
+        recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile, cooldown_recovery: true } });
+        log.warn('Crypto source cooldown recovery probe failed', { source, symbol, error: reason });
       }
-      const reason = 'No valid price returned during cooldown recovery probe';
-      failures.push({ source, reason });
-      recordSourceFailure(source, reason);
-      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile, cooldown_recovery: true } });
-    } catch (e) {
-      const reason = e?.message || 'Source failed during cooldown recovery probe';
-      failures.push({ source, reason });
-      recordSourceFailure(source, reason);
-      recordMarketSourceAttempt({ sourceKey: source, asset, status: 'failed', reason, metadata: { profile, cooldown_recovery: true } });
-      log.warn('Crypto source cooldown recovery probe failed', { source, symbol, error: reason });
     }
   }
 

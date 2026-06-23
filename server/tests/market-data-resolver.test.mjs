@@ -45,6 +45,7 @@ test.before(async () => {
     );
   `);
   db.exec(readFileSync(join(repoRoot, 'migrations', '025_market_data_resolver.sql'), 'utf8'));
+  db.exec(readFileSync(join(repoRoot, 'migrations', '030_expand_market_quote_sources.sql'), 'utf8'));
   db.close();
 
   api = await import('../services/market-data/config.js');
@@ -125,11 +126,42 @@ test('BTC provider symbols come from DB mappings', () => {
   assert.equal(api.resolveProviderSymbol(asset, profile, 'binance'), 'BTCUSDT');
 });
 
+test('expanded crypto and metals sources are selected by resolver rules', () => {
+  const btc = { symbol: 'BTC', type: 'crypto', currency: 'USD', unit: 'coin' };
+  const btcProfile = api.loadMarketProfile(btc);
+  const cryptoPlan = api.selectCapableSourceEntries(btcProfile, [
+    source('kucoin', 'crypto'),
+    source('gateio', 'crypto'),
+    source('bitget', 'crypto'),
+    source('mexc', 'crypto'),
+    source('defillama', 'crypto'),
+  ]);
+
+  assert.deepEqual(cryptoPlan.selected.map(item => item.key), ['kucoin', 'gateio', 'bitget', 'mexc', 'defillama']);
+  assert.equal(api.resolveProviderSymbol(btc, btcProfile, 'kucoin'), 'BTC-USDT');
+  assert.equal(api.resolveProviderSymbol(btc, btcProfile, 'gateio'), 'BTC_USDT');
+  assert.equal(api.resolveProviderSymbol(btc, btcProfile, 'defillama'), 'bitcoin');
+
+  const xag = { symbol: 'XAGUSD', type: 'gold', currency: 'USD', unit: 'oz' };
+  const xagProfile = api.loadMarketProfile(xag);
+  const metalsPlan = api.selectCapableSourceEntries(xagProfile, [
+    source('swissquote', 'precious_metal'),
+    source('yahoo_metals', 'precious_metal'),
+  ]);
+
+  assert.equal(xagProfile.baseSymbol, 'XAG');
+  assert.deepEqual(metalsPlan.selected.map(item => item.key), ['swissquote', 'yahoo_metals']);
+  assert.equal(api.resolveProviderSymbol(xag, xagProfile, 'swissquote'), 'XAG/USD');
+  assert.equal(api.resolveProviderSymbol(xag, xagProfile, 'yahoo_metals'), 'SI=F');
+});
+
 test('fetchCrypto records cooldown-only candidates as skipped, not failed', async () => {
   const cooldownSources = ['coingecko', 'binance', 'coinbase', 'kraken', 'okx', 'bitstamp', 'gemini'];
   const placeholders = cooldownSources.map(() => '?').join(',');
 
   let db = new Database(dbPath);
+  const previousSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('market_crypto_sources_enabled')?.value || null;
+  db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(cooldownSources.join(','), 'market_crypto_sources_enabled');
   db.prepare(`UPDATE market_sources
     SET cooldown_until = datetime('now', '+5 minutes'), fail_count = 3
     WHERE key IN (${placeholders})`).run(...cooldownSources);
@@ -161,6 +193,11 @@ test('fetchCrypto records cooldown-only candidates as skipped, not failed', asyn
     assert.deepEqual([...new Set(failCounts.map(row => row.fail_count))], [3]);
   } finally {
     db = new Database(dbPath);
+    if (previousSetting == null) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run('market_crypto_sources_enabled');
+    } else {
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(previousSetting, 'market_crypto_sources_enabled');
+    }
     db.prepare(`UPDATE market_sources
       SET cooldown_until = NULL, fail_count = 0, last_error = NULL, last_error_at = NULL
       WHERE key IN (${placeholders})`).run(...cooldownSources);
@@ -234,6 +271,92 @@ test('fetchCrypto can recover a quote by probing a cooled-down source when expli
   }
 });
 
+test('fetchCrypto continues cooldown recovery probes until a source returns a quote', async () => {
+  const failingSource = 'test_recovery_fail_json';
+  const succeedingSource = 'test_recovery_ok_json';
+  const recoverySources = [failingSource, succeedingSource];
+  const server = http.createServer((req, res) => {
+    if (req.url === '/fail/BTC-USD') {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'temporarily unavailable' }));
+      return;
+    }
+    assert.equal(req.url, '/ok/BTC-USD');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ data: { price: 70123.45, currency: 'USD' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  let db = new Database(dbPath);
+  const previousSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('market_crypto_sources_enabled')?.value || null;
+  db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(recoverySources.join(','), 'market_crypto_sources_enabled');
+  db.prepare(`INSERT INTO market_sources (key, name, asset_class, source_type, enabled, priority, cooldown_until, fail_count)
+    VALUES (?, ?, 'crypto', 'builtin', 1, ?, datetime('now', '+5 minutes'), 3)`)
+    .run(failingSource, 'Test Recovery Failing JSON', 1);
+  db.prepare(`INSERT INTO market_sources (key, name, asset_class, source_type, enabled, priority, cooldown_until, fail_count)
+    VALUES (?, ?, 'crypto', 'builtin', 1, ?, datetime('now', '+5 minutes'), 3)`)
+    .run(succeedingSource, 'Test Recovery Successful JSON', 2);
+  for (const sourceKey of recoverySources) {
+    db.prepare(`INSERT INTO market_source_capabilities
+      (source_key, asset_class, instrument_type, markets_json, regions_json, quote_currencies_json, units_json, identifiers_required_json, priority)
+      VALUES (?, 'crypto', 'spot', '["crypto_spot"]', '["global"]', '["USD"]', '["coin"]', ?, 1)`)
+      .run(sourceKey, JSON.stringify([sourceKey]));
+    db.prepare(`UPDATE asset_symbol_mappings
+      SET identifiers_json = json_set(identifiers_json, ?, 'BTC-USD')
+      WHERE asset_class = 'crypto' AND input_symbol = 'BTC'`).run(`$.${sourceKey}`);
+  }
+  db.prepare(`INSERT INTO market_source_adapters
+    (source_key, adapter_type, endpoint_template, parser_type, parser_config_json, timeout_ms)
+    VALUES (?, 'json_http', ?, 'json_path', '{"price_path":"data.price","currency_path":"data.currency","unit":"coin"}', 1000)`)
+    .run(failingSource, `http://127.0.0.1:${port}/fail/{provider_symbol}`);
+  db.prepare(`INSERT INTO market_source_adapters
+    (source_key, adapter_type, endpoint_template, parser_type, parser_config_json, timeout_ms)
+    VALUES (?, 'json_http', ?, 'json_path', '{"price_path":"data.price","currency_path":"data.currency","unit":"coin"}', 1000)`)
+    .run(succeedingSource, `http://127.0.0.1:${port}/ok/{provider_symbol}`);
+  db.prepare('DELETE FROM market_source_attempts').run();
+  db.close();
+
+  try {
+    const { fetchCrypto } = await import('../services/price.js');
+    const quote = await fetchCrypto({ id: 3, symbol: 'BTC', type: 'crypto', currency: 'USD', unit: 'coin' }, { allowCooldownProbe: true });
+    assert.equal(quote.source, succeedingSource);
+    assert.equal(quote.price, 70123.45);
+
+    db = new Database(dbPath);
+    const states = db.prepare(`SELECT key, fail_count, cooldown_until
+      FROM market_sources
+      WHERE key IN (?, ?)
+      ORDER BY priority`).all(...recoverySources);
+    const attempts = db.prepare(`SELECT source_key, status, reason, quote_price
+      FROM market_source_attempts
+      WHERE source_key IN (?, ?)
+      ORDER BY id`).all(...recoverySources);
+    db.close();
+
+    assert.equal(states.find(row => row.key === failingSource)?.fail_count, 4);
+    assert.equal(states.find(row => row.key === succeedingSource)?.fail_count, 0);
+    assert.equal(states.find(row => row.key === succeedingSource)?.cooldown_until, null);
+    assert.equal(attempts.some(row => row.source_key === failingSource && row.status === 'failed'), true);
+    assert.equal(attempts.some(row => row.source_key === succeedingSource && row.status === 'success' && row.quote_price === 70123.45), true);
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    db = new Database(dbPath);
+    if (previousSetting == null) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run('market_crypto_sources_enabled');
+    } else {
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(previousSetting, 'market_crypto_sources_enabled');
+    }
+    for (const sourceKey of recoverySources) {
+      db.prepare('DELETE FROM market_source_adapters WHERE source_key = ?').run(sourceKey);
+      db.prepare('DELETE FROM market_source_capabilities WHERE source_key = ?').run(sourceKey);
+      db.prepare('DELETE FROM market_sources WHERE key = ?').run(sourceKey);
+    }
+    db.prepare('DELETE FROM market_source_attempts').run();
+    db.close();
+  }
+});
+
 test('resolve explain reports matched and skipped candidates for rule maintenance entrypoint', () => {
   const result = api.explainMarketResolution({ symbol: 'AU9999', type: 'gold', currency: 'CNY', unit: 'g' });
 
@@ -290,6 +413,97 @@ test('json_http/json_path adapter can execute a DB-configured source without leg
     assert.equal(Number.isFinite(quote.cny), true);
   } finally {
     await new Promise(resolve => server.close(resolve));
+  }
+});
+
+test('expanded KuCoin adapter parses configured crypto quote', async () => {
+  const server = http.createServer((req, res) => {
+    assert.equal(req.url, '/crypto/BTC-USDT');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ code: '200000', data: { price: '64012.34' } }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  let db = new Database(dbPath);
+  const previousSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('market_crypto_sources_enabled')?.value || null;
+  const previousAdapter = db.prepare('SELECT endpoint_template FROM market_source_adapters WHERE source_key = ?').get('kucoin')?.endpoint_template || null;
+  db.prepare('UPDATE settings SET value = ? WHERE key = ?').run('kucoin', 'market_crypto_sources_enabled');
+  db.prepare('UPDATE market_source_adapters SET endpoint_template = ? WHERE source_key = ?')
+    .run(`http://127.0.0.1:${port}/crypto/{provider_symbol}`, 'kucoin');
+  db.prepare('DELETE FROM market_source_attempts').run();
+  db.close();
+
+  try {
+    const { fetchPrice } = await import('../services/price.js');
+    const quote = await fetchPrice({ id: 3, symbol: 'BTC', type: 'crypto', currency: 'USD', unit: 'coin' });
+    assert.equal(quote.source, 'kucoin');
+    assert.equal(quote.price, 64012.34);
+    assert.equal(quote.currency, 'USD');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    db = new Database(dbPath);
+    if (previousSetting == null) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run('market_crypto_sources_enabled');
+    } else {
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(previousSetting, 'market_crypto_sources_enabled');
+    }
+    if (previousAdapter != null) {
+      db.prepare('UPDATE market_source_adapters SET endpoint_template = ? WHERE source_key = ?').run(previousAdapter, 'kucoin');
+    }
+    db.prepare('DELETE FROM market_source_attempts').run();
+    db.close();
+  }
+});
+
+test('expanded Yahoo metals adapter parses configured metal quote', async () => {
+  const server = http.createServer((req, res) => {
+    assert.equal(req.url, '/metal/GC%3DF');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      chart: {
+        result: [
+          {
+            meta: {
+              regularMarketPrice: 4150.25,
+              currency: 'USD',
+            },
+          },
+        ],
+      },
+    }));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const port = server.address().port;
+
+  let db = new Database(dbPath);
+  const previousSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('market_precious_metal_sources_enabled')?.value || null;
+  const previousAdapter = db.prepare('SELECT endpoint_template FROM market_source_adapters WHERE source_key = ?').get('yahoo_metals')?.endpoint_template || null;
+  db.prepare('UPDATE settings SET value = ? WHERE key = ?').run('yahoo_metals', 'market_precious_metal_sources_enabled');
+  db.prepare('UPDATE market_source_adapters SET endpoint_template = ? WHERE source_key = ?')
+    .run(`http://127.0.0.1:${port}/metal/{provider_symbol}`, 'yahoo_metals');
+  db.prepare('DELETE FROM market_source_attempts').run();
+  db.close();
+
+  try {
+    const { fetchPrice } = await import('../services/price.js');
+    const quote = await fetchPrice({ id: 11, symbol: 'XAUUSD', type: 'gold', currency: 'USD', unit: 'oz' });
+    assert.equal(quote.source, 'yahoo_metals');
+    assert.equal(quote.price, 4150.25);
+    assert.equal(quote.currency, 'USD');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    db = new Database(dbPath);
+    if (previousSetting == null) {
+      db.prepare('DELETE FROM settings WHERE key = ?').run('market_precious_metal_sources_enabled');
+    } else {
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(previousSetting, 'market_precious_metal_sources_enabled');
+    }
+    if (previousAdapter != null) {
+      db.prepare('UPDATE market_source_adapters SET endpoint_template = ? WHERE source_key = ?').run(previousAdapter, 'yahoo_metals');
+    }
+    db.prepare('DELETE FROM market_source_attempts').run();
+    db.close();
   }
 });
 
