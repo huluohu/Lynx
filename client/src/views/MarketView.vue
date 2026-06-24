@@ -62,8 +62,8 @@
             </div>
             <div class="market-card-side">
               <div style="font-size:12px;color:var(--text-muted)">{{ p.symbol }}</div>
-              <span class="badge" :class="typeBadge(p.type)" style="margin-top:4px">{{ p.type }}</span>
-              <div v-if="p.source" style="font-size:10px;color:var(--text-muted);margin-top:4px">{{ p.source }}</div>
+              <span class="badge" :class="typeBadge(p.type)" style="margin-top:4px">{{ assetTypeLabel(p.type) }}</span>
+              <div v-if="p.source" style="font-size:10px;color:var(--text-muted);margin-top:4px">{{ marketSourceLabel(p.source) }}</div>
               <button class="btn market-card-action desktop-only" type="button" @click.stop="openManualPriceDrawer(p)">
                 {{ t('marketView.manualUpdateShort') }}
               </button>
@@ -196,6 +196,12 @@ function resolveLastUpdated(items) {
 }
 function typeBadge(t) {
   return { gold:'badge-gold', precious_metal: 'badge-gold', crypto:'badge-crypto', stock:'badge-stock' }[t] || 'badge-pending'
+}
+function assetTypeLabel(type) {
+  return type === 'gold' ? t('assets.types.precious_metal') : t(`assets.types.${type}`, type)
+}
+function marketSourceLabel(source) {
+  return t(`settings.market.sourceLabels.${source}`, source)
 }
 function fmtTime(d) {
   return formatTime(d, { second: '2-digit' })
