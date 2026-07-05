@@ -51,46 +51,6 @@
       </div>
     </div>
 
-    <div v-if="selectedPlan" class="card execute-card">
-      <div class="execute-card-header">
-        <div>
-          <div class="section-title" style="margin-bottom:8px">{{ t('plans.executePlan') }} #{{ selectedPlan.seq || selectedPlan.id }}</div>
-          <div class="execute-summary">{{ selectedPlan.asset_name }} · {{ triggerLabel(selectedPlan.trigger_type) }} {{ selectedPlan.trigger_value }}</div>
-        </div>
-        <button class="btn btn-sm" @click="closeExecuteForm">{{ t('plans.close') }}</button>
-      </div>
-
-      <div class="execute-grid">
-        <div class="execute-item"><span>{{ t('plans.direction') }}</span><b>{{ selectedPlan.action === 'buy' ? t('plans.buy') : t('plans.sell') }}</b></div>
-        <div class="execute-item"><span>{{ t('plans.plannedQuantity') }}</span><b>{{ quantityText(selectedPlan.quantity) }}</b></div>
-        <div class="execute-item"><span>{{ t('plans.plannedAmount') }}</span><b>{{ moneyText(selectedPlan.amount, selectedPlan.asset_currency) }}</b></div>
-        <div class="execute-item"><span>{{ t('plans.progress') }}</span><b>{{ executionProgressLabel(selectedPlan) }}</b></div>
-        <div class="execute-item"><span>{{ t('plans.remainingQuantity') }}</span><b>{{ quantityText(remainingQuantity(selectedPlan)) }}</b></div>
-        <div class="execute-item"><span>{{ t('plans.remainingAmount') }}</span><b>{{ moneyText(remainingAmount(selectedPlan), selectedPlan.asset_currency) }}</b></div>
-      </div>
-
-      <form @submit.prevent="submitExecution">
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label">{{ t('plans.actualPrice') }}</label>
-            <input class="form-input" type="number" step="any" min="0" v-model="executeForm.price" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label">{{ t('plans.actualQuantity') }}</label>
-            <input class="form-input" type="number" step="any" min="0" v-model="executeForm.quantity" :placeholder="remainingQuantity(selectedPlan) ? String(remainingQuantity(selectedPlan)) : t('plans.actualQuantityPlaceholder')" />
-          </div>
-        </div>
-        <label class="execute-checkbox">
-          <input type="checkbox" v-model="executeForm.partial" />
-          <span>{{ t('plans.partialExecute') }}</span>
-        </label>
-        <MobileActionBar>
-          <button type="submit" class="btn btn-primary" :disabled="executeSubmitting">{{ executeSubmitting ? t('plans.executing') : t('plans.confirmExecute') }}</button>
-          <button type="button" class="btn" @click="closeExecuteForm">{{ t('common.cancel') }}</button>
-        </MobileActionBar>
-      </form>
-    </div>
-
     <div v-if="loading" class="card">
       <div v-for="i in 4" :key="i" style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div class="skeleton" style="width:32px;height:16px;border-radius:4px"></div>
@@ -155,6 +115,42 @@
       </div>
     </div>
     <div v-else class="card empty"><div class="empty-icon"><AppIcon name="plans" size="34" /></div><p>{{ t('plans.noPlans') }}</p></div>
+
+    <AppDrawer v-model="executeDrawerOpen" :title="selectedPlan ? `${t('plans.executePlan')} #${selectedPlan.seq || selectedPlan.id}` : t('plans.executePlan')" mobileHeight="fixed">
+      <div v-if="selectedPlan" class="execute-drawer-content">
+        <div class="execute-summary">{{ selectedPlan.asset_name }} · {{ triggerLabel(selectedPlan.trigger_type) }} {{ selectedPlan.trigger_value }}</div>
+
+        <div class="execute-grid">
+          <div class="execute-item"><span>{{ t('plans.direction') }}</span><b>{{ selectedPlan.action === 'buy' ? t('plans.buy') : t('plans.sell') }}</b></div>
+          <div class="execute-item"><span>{{ t('plans.plannedQuantity') }}</span><b>{{ quantityText(selectedPlan.quantity) }}</b></div>
+          <div class="execute-item"><span>{{ t('plans.plannedAmount') }}</span><b>{{ moneyText(selectedPlan.amount, selectedPlan.asset_currency) }}</b></div>
+          <div class="execute-item"><span>{{ t('plans.progress') }}</span><b>{{ executionProgressLabel(selectedPlan) }}</b></div>
+          <div class="execute-item"><span>{{ t('plans.remainingQuantity') }}</span><b>{{ quantityText(remainingQuantity(selectedPlan)) }}</b></div>
+          <div class="execute-item"><span>{{ t('plans.remainingAmount') }}</span><b>{{ moneyText(remainingAmount(selectedPlan), selectedPlan.asset_currency) }}</b></div>
+        </div>
+
+        <form @submit.prevent="submitExecution">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">{{ t('plans.actualPrice') }}</label>
+              <input class="form-input" type="number" step="any" min="0" v-model="executeForm.price" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t('plans.actualQuantity') }}</label>
+              <input class="form-input" type="number" step="any" min="0" v-model="executeForm.quantity" :placeholder="remainingQuantity(selectedPlan) ? String(remainingQuantity(selectedPlan)) : t('plans.actualQuantityPlaceholder')" />
+            </div>
+          </div>
+          <label class="execute-checkbox">
+            <input type="checkbox" v-model="executeForm.partial" />
+            <span>{{ t('plans.partialExecute') }}</span>
+          </label>
+          <MobileActionBar drawer>
+            <button type="submit" class="btn btn-primary" :disabled="executeSubmitting">{{ executeSubmitting ? t('plans.executing') : t('plans.confirmExecute') }}</button>
+            <button type="button" class="btn" @click="closeExecuteForm">{{ t('common.cancel') }}</button>
+          </MobileActionBar>
+        </form>
+      </div>
+    </AppDrawer>
 
     <AppDrawer v-model="filterDrawerOpen" :title="t('common.filter')">
       <div class="form-group">
@@ -235,6 +231,12 @@ const activeFilterChips = computed(() => ([
 ].filter(Boolean)))
 
 const selectedPlan = computed(() => plans.value.find(p => String(p.id) === String(selectedPlanId.value)) || null)
+const executeDrawerOpen = computed({
+  get: () => Boolean(selectedPlan.value),
+  set: (open) => {
+    if (!open) closeExecuteForm()
+  },
+})
 
 async function loadData() {
   loading.value = true
@@ -462,20 +464,20 @@ watch(filterDrawerOpen, (open) => {
 .plan-progress-text { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
 .plan-progress-fill { background: var(--gold); }
 .plan-action-placeholder { color: var(--text-muted); }
-.execute-card { overflow: visible; }
-.execute-card-header {
+.execute-drawer-content {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 16px;
-  align-items: flex-start;
+}
+.execute-summary {
+  font-size: 13px;
+  color: var(--text-dim);
   margin-bottom: 16px;
 }
-.execute-summary { font-size: 13px; color: var(--text-dim); }
 .execute-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 18px;
 }
 .execute-item {
   background: var(--bg);
@@ -513,8 +515,6 @@ watch(filterDrawerOpen, (open) => {
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
   .show-mobile { display: flex !important; }
-  .execute-card { margin-bottom: 120px; }
   .execute-grid { grid-template-columns: 1fr; }
-  .execute-card-header { flex-direction: column; align-items: stretch; }
 }
 </style>
