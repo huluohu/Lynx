@@ -32,6 +32,11 @@ const log = createLogger('strategy-agent');
 const AGENT_VERSION = '2026-06-agent-v2';
 const ANALYST_PROMPT_VERSION = 'analyst-2026-06-v2';
 const STRATEGIST_PROMPT_VERSION = 'strategist-2026-06-v2';
+const FEAR_GREED_CACHE_MS = 30 * 60 * 1000;
+const FEAR_GREED_FAILURE_CACHE_MS = 5 * 60 * 1000;
+const FEAR_GREED_FETCH_TIMEOUT_MS = 2500;
+let fearGreedCache = { data: null, expiresAt: 0 };
+let fearGreedRequestInFlight = null;
 
 function cleanSettingValue(value) {
   const text = String(value ?? '').trim();
@@ -657,20 +662,37 @@ async function collectData(db, assetIds, config, tracer = null) {
 }
 
 export async function fetchFearGreedIndex() {
-  try {
-    const data = await httpGet('https://api.alternative.me/fng/?limit=7', { timeout: 5000 });
-    if (data?.data) {
-      return {
-        current: {
-          value: Number(data.data[0].value),
-          label: data.data[0].value_classification,
-          date: new Date(data.data[0].timestamp * 1000).toISOString().slice(0, 10),
-        },
-        history: data.data.map(d => ({ value: Number(d.value), label: d.value_classification, date: new Date(d.timestamp * 1000).toISOString().slice(0, 10) })),
-      };
+  const now = Date.now();
+  if (now < fearGreedCache.expiresAt) return fearGreedCache.data;
+  if (fearGreedRequestInFlight) return fearGreedRequestInFlight;
+
+  fearGreedRequestInFlight = (async () => {
+    try {
+      const data = await httpGet('https://api.alternative.me/fng/?limit=7', { timeout: FEAR_GREED_FETCH_TIMEOUT_MS });
+      if (data?.data) {
+        const result = {
+          current: {
+            value: Number(data.data[0].value),
+            label: data.data[0].value_classification,
+            date: new Date(data.data[0].timestamp * 1000).toISOString().slice(0, 10),
+          },
+          history: data.data.map(d => ({ value: Number(d.value), label: d.value_classification, date: new Date(d.timestamp * 1000).toISOString().slice(0, 10) })),
+        };
+        fearGreedCache = { data: result, expiresAt: Date.now() + FEAR_GREED_CACHE_MS };
+        return result;
+      }
+      log.warn('Failed to fetch Fear & Greed', { error: 'Invalid response' });
+    } catch (e) {
+      log.warn('Failed to fetch Fear & Greed', { error: e.message });
+    } finally {
+      fearGreedRequestInFlight = null;
     }
-  } catch (e) { log.warn('Failed to fetch Fear & Greed', { error: e.message }); }
-  return null;
+
+    fearGreedCache = { data: fearGreedCache.data, expiresAt: Date.now() + FEAR_GREED_FAILURE_CACHE_MS };
+    return fearGreedCache.data;
+  })();
+
+  return fearGreedRequestInFlight;
 }
 
 function isCryptoAsset(asset) {

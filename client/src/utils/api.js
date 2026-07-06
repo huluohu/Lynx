@@ -8,13 +8,14 @@ export async function api(url, options = {}) {
   const token = localStorage.getItem('token')
   const headers = {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
     ...options.headers,
   }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(url, { ...options, headers })
+  const res = await fetch(url, { cache: 'no-store', ...options, headers })
 
   if (res.status === 401) {
     // Clear both localStorage and Pinia store

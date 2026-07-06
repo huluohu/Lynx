@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
 import { createLogger } from '../utils/logger.js';
-import { getCachedMarketSnapshot, getMarketSnapshot } from '../services/market-cache.js';
+import { getCachedMarketSnapshot, getCachedMarketSnapshots, getMarketSnapshot } from '../services/market-cache.js';
 import { buildAssetPriceTrend } from '../services/trend.js';
 import { normalizeSqliteUtcTimestamp } from '../utils/datetime.js';
 import { explainMarketResolution, lintMarketDataRules } from '../services/market-data/config.js';
@@ -425,7 +425,7 @@ router.get('/prices', async (req, res) => {
   const force = req.query.force === '1';
 
   if (!force) {
-    const results = assets.map((asset) => getCachedMarketSnapshot(db, asset));
+    const results = getCachedMarketSnapshots(db, assets);
 
     log.info('Prices served from cache', {
       total: assets.length,

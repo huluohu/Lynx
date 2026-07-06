@@ -18,22 +18,23 @@ function normalizeSignal(row) {
 
 export function getLatestSignals(db, assetId = null) {
   const params = [];
-  let sql = `SELECT ms.*, a.name AS asset_name, a.symbol, a.icon, a.type, a.currency
-    FROM market_signals ms
-    JOIN (
-      SELECT asset_id, MAX(id) AS max_id
-      FROM market_signals
-      WHERE asset_id IS NOT NULL
-      GROUP BY asset_id
-    ) latest ON latest.max_id = ms.id
-    LEFT JOIN assets a ON ms.asset_id = a.id`;
+  const filters = ['asset_id IS NOT NULL'];
 
   if (assetId) {
-    sql += ' WHERE ms.asset_id = ?';
+    filters.push('asset_id = ?');
     params.push(assetId);
   }
 
-  sql += ' ORDER BY a.id ASC';
+  const sql = `SELECT ranked.*, a.name AS asset_name, a.symbol, a.icon, a.type, a.currency
+    FROM (
+      SELECT ms.*,
+        ROW_NUMBER() OVER (PARTITION BY ms.asset_id ORDER BY ms.id DESC) AS rn
+      FROM market_signals ms
+      WHERE ${filters.join(' AND ')}
+    ) ranked
+    LEFT JOIN assets a ON ranked.asset_id = a.id
+    WHERE ranked.rn = 1
+    ORDER BY a.id ASC`;
   return db.prepare(sql).all(...params).map(normalizeSignal);
 }
 

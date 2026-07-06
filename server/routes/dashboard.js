@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
-import { getUsdCny } from '../services/price.js';
+import { getCachedUsdCny } from '../services/price.js';
 import { getLatestPriceRows } from '../services/latest-price.js';
 import { buildPortfolioProfitTrend } from '../services/trend.js';
 import { getLatestSignals } from './signals.js';
@@ -132,7 +132,7 @@ function buildAlerts(db) {
 router.get('/summary', async (req, res) => {
   try {
     const db = getDb();
-    const usdCny = await getUsdCny();
+    const usdCny = getCachedUsdCny();
     const data = buildSummary(db, usdCny);
     res.json({ success: true, data });
   } catch (error) {
@@ -143,10 +143,8 @@ router.get('/summary', async (req, res) => {
 router.get('/overview', async (req, res) => {
   try {
     const db = getDb();
-    const [usd_cny, latestSignals] = await Promise.all([
-      getUsdCny(),
-      Promise.resolve(getLatestSignals(db)),
-    ]);
+    const usd_cny = getCachedUsdCny();
+    const latestSignals = getLatestSignals(db);
 
     res.json({
       success: true,
@@ -165,7 +163,7 @@ router.get('/overview', async (req, res) => {
 router.get('/profit-trend', async (req, res) => {
   try {
     const db = getDb();
-    const usdCny = await getUsdCny();
+    const usdCny = getCachedUsdCny();
     const data = buildPortfolioProfitTrend(db, req.query.range, usdCny);
     res.json({ success: true, data });
   } catch (error) {

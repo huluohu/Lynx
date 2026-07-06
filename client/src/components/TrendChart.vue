@@ -33,41 +33,44 @@
         <span class="trend-empty-icon">〰️</span>
         <span>{{ emptyText }}</span>
       </div>
-      <svg
-        v-else
-        class="trend-svg"
-        viewBox="0 0 320 150"
-        preserveAspectRatio="none"
-        role="img"
-        :aria-label="title"
-        @pointermove="handlePointerMove"
-        @pointerleave="clearActivePoint"
-        @touchstart.passive="handlePointerMove"
-        @touchmove.passive="handlePointerMove"
-      >
-        <defs>
-          <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" :stop-color="lineColor" stop-opacity="0.24" />
-            <stop offset="100%" :stop-color="lineColor" stop-opacity="0" />
-          </linearGradient>
-        </defs>
-        <g v-for="tick in yAxisTicks" :key="tick.y">
-          <line :x1="chartLeft" :x2="chartRight" :y1="tick.y" :y2="tick.y" class="trend-grid-line" />
-        </g>
-        <path :d="areaPath" :fill="`url(#${gradientId})`" />
-        <path :d="linePath" fill="none" :stroke="lineColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-        <g v-if="activePoint">
-          <line :x1="activePoint.x" :x2="activePoint.x" :y1="chartTop" :y2="chartBottom" class="trend-crosshair" />
-        </g>
-      </svg>
-      <div v-if="chartPoints.length" class="trend-y-axis" aria-hidden="true">
-        <span v-for="tick in yAxisTicks" :key="tick.y" :style="axisLabelStyle(tick)">{{ tick.label }}</span>
-      </div>
-      <span v-if="chartPoints.length" class="trend-point trend-last-point" :style="pointStyle(lastPoint)" aria-hidden="true"></span>
-      <span v-if="activePoint" class="trend-point trend-active-point" :style="pointStyle(activePoint)" aria-hidden="true"></span>
-      <div v-if="activePoint" class="trend-tooltip" :style="tooltipStyle">
-        <strong>{{ props.valueFormatter(activePoint.rawValue) }}</strong>
-        <span>{{ pointTimeLabel(activePoint) }}</span>
+      <div v-else class="trend-chart-body">
+        <div class="trend-y-axis" aria-hidden="true">
+          <span v-for="tick in yAxisTicks" :key="tick.y" :style="axisLabelStyle(tick)">{{ tick.label }}</span>
+        </div>
+        <div class="trend-plot-area">
+          <svg
+            class="trend-svg"
+            viewBox="0 0 320 150"
+            preserveAspectRatio="none"
+            role="img"
+            :aria-label="title"
+            @pointermove="handlePointerMove"
+            @pointerleave="clearActivePoint"
+            @touchstart.passive="handlePointerMove"
+            @touchmove.passive="handlePointerMove"
+          >
+            <defs>
+              <linearGradient :id="gradientId" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" :stop-color="lineColor" stop-opacity="0.24" />
+                <stop offset="100%" :stop-color="lineColor" stop-opacity="0" />
+              </linearGradient>
+            </defs>
+            <g v-for="tick in yAxisTicks" :key="tick.y">
+              <line :x1="chartLeft" :x2="chartRight" :y1="tick.y" :y2="tick.y" class="trend-grid-line" />
+            </g>
+            <path :d="areaPath" :fill="`url(#${gradientId})`" />
+            <path :d="linePath" fill="none" :stroke="lineColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+            <g v-if="activePoint">
+              <line :x1="activePoint.x" :x2="activePoint.x" :y1="chartTop" :y2="chartBottom" class="trend-crosshair" />
+            </g>
+          </svg>
+          <span class="trend-point trend-last-point" :style="pointStyle(lastPoint)" aria-hidden="true"></span>
+          <span v-if="activePoint" class="trend-point trend-active-point" :style="pointStyle(activePoint)" aria-hidden="true"></span>
+          <div v-if="activePoint" class="trend-tooltip" :style="tooltipStyle">
+            <strong>{{ props.valueFormatter(activePoint.rawValue) }}</strong>
+            <span>{{ pointTimeLabel(activePoint) }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -102,8 +105,8 @@ const { t, locale } = useI18n()
 const gradientId = `trend-gradient-${Math.random().toString(36).slice(2)}`
 const chartWidth = 320
 const chartHeight = 150
-const chartLeft = 44
-const chartRight = 314
+const chartLeft = 4
+const chartRight = 318
 const chartTop = 12
 const chartBottom = 132
 const activePoint = ref(null)
@@ -124,23 +127,34 @@ const minMax = computed(() => {
   }
   return { min, max }
 })
-
 const plotted = computed(() => {
   const points = chartPoints.value
   const { min, max } = minMax.value
-  const plotWidth = chartRight - chartLeft
+  const plotLeft = chartLeft
+  const plotWidth = chartRight - plotLeft
   const plotHeight = chartBottom - chartTop
   return points.map((point, index) => {
-    const x = points.length === 1 ? chartLeft + plotWidth / 2 : chartLeft + (index / (points.length - 1)) * plotWidth
+    const x = points.length === 1 ? chartRight : plotLeft + (index / (points.length - 1)) * plotWidth
     const ratio = (point.rawValue - min) / (max - min)
     const y = chartTop + (1 - ratio) * plotHeight
     return { ...point, x, y }
   })
 })
 
-const linePath = computed(() => plotted.value.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' '))
+const linePath = computed(() => {
+  const points = plotted.value
+  if (!points.length) return ''
+  if (points.length === 1) {
+    const y = points[0].y.toFixed(2)
+    return `M ${chartLeft.toFixed(2)} ${y} L ${chartRight.toFixed(2)} ${y}`
+  }
+  return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+})
 const areaPath = computed(() => {
   if (!plotted.value.length) return ''
+  if (plotted.value.length === 1) {
+    return `${linePath.value} L ${chartRight.toFixed(2)} ${chartBottom} L ${chartLeft.toFixed(2)} ${chartBottom} Z`
+  }
   const first = plotted.value[0]
   const last = plotted.value[plotted.value.length - 1]
   return `${linePath.value} L ${last.x.toFixed(2)} ${chartBottom} L ${first.x.toFixed(2)} ${chartBottom} Z`
@@ -308,6 +322,15 @@ const tooltipStyle = computed(() => {
   overflow: hidden;
   touch-action: pan-y;
 }
+.trend-chart-body {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-height: 170px;
+}
+.trend-plot-area {
+  position: relative;
+  min-width: 0;
+}
 .trend-svg {
   width: 100%;
   height: 170px;
@@ -318,8 +341,20 @@ const tooltipStyle = computed(() => {
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
-.trend-y-axis { position:absolute; inset:0; pointer-events:none; }
-.trend-y-axis span { position:absolute; left:8px; transform:translateY(-50%); color:var(--text-muted); font-size:10px; font-weight:700; line-height:1; }
+.trend-y-axis {
+  position: relative;
+  pointer-events: none;
+}
+.trend-y-axis span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
 .trend-crosshair {
   stroke: var(--text-muted);
   stroke-width: 1;
@@ -402,6 +437,7 @@ const tooltipStyle = computed(() => {
     padding: 7px 4px;
   }
   .trend-chart-wrap,
+  .trend-chart-body,
   .trend-empty,
   .trend-skeleton {
     min-height: 150px;

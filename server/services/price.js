@@ -14,7 +14,11 @@ import {
 } from './market-data/config.js';
 
 const log = createLogger('price');
-let cachedRate = { usd_cny: 7.25, updated: 0 };
+const DEFAULT_USD_CNY_RATE = 7.25;
+const USD_CNY_FETCH_TIMEOUT_MS = 2500;
+const USD_CNY_FAILURE_CACHE_MS = 5 * 60 * 1000;
+let cachedRate = { usd_cny: DEFAULT_USD_CNY_RATE, updated: 0, expiresAt: 0 };
+let usdCnyRequestInFlight = null;
 
 const TROY_OUNCE_GRAMS = 31.1034768;
 const DEFAULT_PRECIOUS_METAL_SOURCES = ['sge_sina', 'neodata', 'swissquote'];
@@ -265,19 +269,51 @@ function getRateCacheDuration() {
 export async function getUsdCny() {
   const now = Date.now();
   const cacheDuration = getRateCacheDuration();
-  if (now - cachedRate.updated < cacheDuration) return cachedRate.usd_cny;
+  const expiresAt = cachedRate.expiresAt || (cachedRate.updated + cacheDuration);
+  if (now < expiresAt) return cachedRate.usd_cny;
+  if (usdCnyRequestInFlight) return usdCnyRequestInFlight;
 
-  try {
-    const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: 5000 });
-    if (data?.rates?.CNY) {
-      cachedRate = { usd_cny: data.rates.CNY, updated: now };
-      log.info('USD/CNY rate updated', { rate: data.rates.CNY });
-      return cachedRate.usd_cny;
+  usdCnyRequestInFlight = (async () => {
+    try {
+      const data = await httpGet('https://open.er-api.com/v6/latest/USD', { timeout: USD_CNY_FETCH_TIMEOUT_MS });
+      if (data?.rates?.CNY) {
+        const rate = Number(data.rates.CNY);
+        if (Number.isFinite(rate) && rate > 0) {
+          const updated = Date.now();
+          cachedRate = { usd_cny: rate, updated, expiresAt: updated + cacheDuration };
+          log.info('USD/CNY rate updated', { rate });
+          return cachedRate.usd_cny;
+        }
+      }
+      log.warn('Failed to fetch USD/CNY rate', { error: 'Invalid response' });
+    } catch (e) {
+      log.warn('Failed to fetch USD/CNY rate', { error: e.message });
+    } finally {
+      usdCnyRequestInFlight = null;
     }
-  } catch (e) {
-    log.warn('Failed to fetch USD/CNY rate', { error: e.message });
+
+    const updated = Date.now();
+    cachedRate = {
+      usd_cny: cachedRate.usd_cny || DEFAULT_USD_CNY_RATE,
+      updated,
+      expiresAt: updated + Math.min(cacheDuration, USD_CNY_FAILURE_CACHE_MS),
+    };
+    return cachedRate.usd_cny;
+  })();
+
+  return usdCnyRequestInFlight;
+}
+
+export function getCachedUsdCny({ refresh = true } = {}) {
+  const now = Date.now();
+  const cacheDuration = getRateCacheDuration();
+  const expiresAt = cachedRate.expiresAt || (cachedRate.updated + cacheDuration);
+
+  if (refresh && now >= expiresAt && !usdCnyRequestInFlight) {
+    getUsdCny().catch(() => {});
   }
-  return cachedRate.usd_cny;
+
+  return cachedRate.usd_cny || DEFAULT_USD_CNY_RATE;
 }
 
 // ===== HTTP 工具 =====

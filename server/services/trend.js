@@ -48,13 +48,13 @@ function getPriceRows(db, assetId, startMs) {
     SELECT asset_id, price, currency, source, fetched_at
     FROM price_cache
     WHERE asset_id = ? AND fetched_at >= ?
-    ORDER BY datetime(fetched_at) ASC, id ASC
+    ORDER BY fetched_at ASC, id ASC
   `).all(assetId, startSql);
   const baseline = db.prepare(`
     SELECT asset_id, price, currency, source, fetched_at
     FROM price_cache
     WHERE asset_id = ? AND fetched_at < ?
-    ORDER BY datetime(fetched_at) DESC, id DESC
+    ORDER BY fetched_at DESC, id DESC
     LIMIT 1
   `).get(assetId, startSql);
   return (baseline ? [baseline, ...rows] : rows)

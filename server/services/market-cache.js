@@ -1,11 +1,12 @@
 import { normalizeApiTimestamp } from '../utils/datetime.js';
 import { fetchPrice } from './price.js';
+import { getLatestPriceMap } from './latest-price.js';
 
 export const FRESH_MARKET_CACHE_WINDOW_MS = 5 * 60 * 1000;
 
 function getLatestCacheRow(db, assetId) {
   return db.prepare(
-    'SELECT * FROM price_cache WHERE asset_id = ? ORDER BY datetime(fetched_at) DESC, id DESC LIMIT 1'
+    'SELECT * FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC, id DESC LIMIT 1'
   ).get(assetId);
 }
 
@@ -54,6 +55,11 @@ function buildSnapshot(asset, row, { cached, details = null } = {}) {
 export function getCachedMarketSnapshot(db, asset) {
   const row = getLatestCacheRow(db, asset.id);
   return buildSnapshot(asset, row, { cached: true });
+}
+
+export function getCachedMarketSnapshots(db, assets = []) {
+  const latestPriceMap = getLatestPriceMap(db, assets.map(asset => asset.id));
+  return assets.map(asset => buildSnapshot(asset, latestPriceMap.get(asset.id), { cached: true }));
 }
 
 export async function getMarketSnapshot(db, asset, { forceRefresh = false } = {}) {

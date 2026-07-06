@@ -8,23 +8,20 @@ export function getLatestPriceRows(db, assetIds = []) {
     params.push(...assetIds);
   }
 
-  const conditions = [...filters, `NOT EXISTS (
-      SELECT 1
-      FROM price_cache newer
-      WHERE newer.asset_id = pc.asset_id
-        AND (
-          newer.fetched_at > pc.fetched_at
-          OR (newer.fetched_at = pc.fetched_at AND newer.id > pc.id)
-        )
-    )`];
-  const whereClause = `WHERE ${conditions.join('\n    AND ')}`;
+  const conditions = [...filters];
+  const whereClause = conditions.length ? `WHERE ${conditions.join('\n    AND ')}` : '';
 
   return db.prepare(`
-    SELECT pc.asset_id, pc.price, pc.currency, pc.source, pc.fetched_at,
+    SELECT ranked.asset_id, ranked.price, ranked.currency, ranked.source, ranked.fetched_at,
       a.name AS asset_name, a.symbol, a.type, a.subtype, a.unit, a.quote_currency
-    FROM price_cache pc
-    LEFT JOIN assets a ON a.id = pc.asset_id
-    ${whereClause}
+    FROM (
+      SELECT pc.*,
+        ROW_NUMBER() OVER (PARTITION BY pc.asset_id ORDER BY pc.fetched_at DESC, pc.id DESC) AS rn
+      FROM price_cache pc
+      ${whereClause}
+    ) ranked
+    LEFT JOIN assets a ON a.id = ranked.asset_id
+    WHERE ranked.rn = 1
   `).all(...params);
 }
 

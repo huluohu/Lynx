@@ -6,6 +6,23 @@ import i18n from './i18n/index.js'
 import { usePreferencesStore } from './stores/preferences.js'
 import './style.css'
 
+let reloadingForServiceWorkerUpdate = false
+
+async function registerServiceWorkerUpdates() {
+  if (!('serviceWorker' in navigator)) return
+
+  const { registerSW } = await import('virtual:pwa-register')
+  const updateServiceWorker = registerSW({ immediate: true })
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloadingForServiceWorkerUpdate) return
+    reloadingForServiceWorkerUpdate = true
+    window.location.reload()
+  })
+
+  updateServiceWorker(true)
+}
+
 function applyDisplayMode() {
   const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true
   document.documentElement.dataset.displayMode = standalone ? 'standalone' : 'browser'
@@ -25,6 +42,7 @@ function preventPageZoom() {
 
 applyDisplayMode()
 preventPageZoom()
+registerServiceWorkerUpdates().catch(() => {})
 
 const standaloneMediaQuery = window.matchMedia?.('(display-mode: standalone)')
 standaloneMediaQuery?.addEventListener?.('change', applyDisplayMode)

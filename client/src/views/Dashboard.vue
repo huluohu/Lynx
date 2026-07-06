@@ -414,9 +414,9 @@ watchEffect(() => {
 })
 
 onMounted(async () => {
-  await ensureRuntimeSettings()
   await refresh()
   startAutoRefresh()
+  ensureRuntimeSettings().then(startAutoRefresh).catch(() => {})
 })
 
 onUnmounted(() => {

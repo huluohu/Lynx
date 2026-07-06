@@ -259,12 +259,12 @@ async function refreshPage() {
   const [assetRes, strategyRes] = await Promise.all([
     api('/api/assets'),
     api('/api/strategies'),
+    loadData(),
   ])
   const assetJson = await assetRes.json()
   const strategyJson = await strategyRes.json()
   assets.value = assetJson.data || []
   strategies.value = strategyJson.data || []
-  await loadData()
 }
 
 function syncDraftFilters() {

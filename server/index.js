@@ -26,6 +26,14 @@ import { startMarketSignalRefreshScheduler, stopMarketSignalRefreshScheduler } f
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3456;
 const log = createLogger('server');
+function parseDelayMs(value, fallback) {
+  const delay = Number(value);
+  return Number.isFinite(delay) && delay >= 0 ? delay : fallback;
+}
+const STARTUP_BACKGROUND_REFRESH = process.env.STARTUP_BACKGROUND_REFRESH !== '0';
+const STARTUP_MARKET_REFRESH_DELAY_MS = parseDelayMs(process.env.STARTUP_MARKET_REFRESH_DELAY_MS, 60000);
+const STARTUP_SIGNAL_REFRESH_DELAY_MS = parseDelayMs(process.env.STARTUP_SIGNAL_REFRESH_DELAY_MS, 120000);
+const STARTUP_NEWS_FETCH_DELAY_MS = parseDelayMs(process.env.STARTUP_NEWS_FETCH_DELAY_MS, 120000);
 
 // ===== 数据库迁移 =====
 log.info('Running database migrations...');
@@ -42,7 +50,7 @@ app.use(requestLogger());
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Pragma');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -89,10 +97,27 @@ const distDir = join(__dirname, '..', 'client', 'dist');
 if (!existsSync(distDir)) {
   log.info('Development mode - API only, use Vite for frontend');
 } else {
-  app.use(express.static(distDir));
+  app.use(express.static(distDir, {
+    setHeaders(res, filePath) {
+      const normalizedPath = filePath.replaceAll('\\', '/');
+      const fileName = normalizedPath.slice(normalizedPath.lastIndexOf('/') + 1);
+      if (fileName === 'index.html' || fileName === 'sw.js' || fileName.startsWith('workbox-') || fileName === 'manifest.webmanifest') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else if (normalizedPath.includes('/assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
   app.get('*', (req, res) => {
     let html = readFileSync(join(distDir, 'index.html'), 'utf8');
-    res.type('html').send(html);
+    res
+      .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      .set('Pragma', 'no-cache')
+      .set('Expires', '0')
+      .type('html')
+      .send(html);
   });
   log.info('Production mode - serving static files from dist/');
 }
@@ -121,19 +146,21 @@ export async function scheduleNewsFetch() {
 const server = app.listen(PORT, () => {
   log.info(`InvestCompass started`, { port: PORT, db: process.env.DB_PATH || 'data/lynx.db' });
   startMonitor();
-  startMarketRefreshScheduler({ runImmediately: true, initialDelayMs: 5000 });
-  startMarketSignalRefreshScheduler({ runImmediately: true, initialDelayMs: 10000 });
+  startMarketRefreshScheduler({ runImmediately: STARTUP_BACKGROUND_REFRESH, initialDelayMs: STARTUP_MARKET_REFRESH_DELAY_MS });
+  startMarketSignalRefreshScheduler({ runImmediately: STARTUP_BACKGROUND_REFRESH, initialDelayMs: STARTUP_SIGNAL_REFRESH_DELAY_MS });
   scheduleNewsFetch();
 
-  // 启动后延迟30秒拉取新闻（避免阻塞启动）
-  setTimeout(async () => {
-    try {
-      const { fetchAllNews } = await import('./services/news.js');
-      await fetchAllNews();
-    } catch (e) {
-      log.warn('Initial news fetch failed', { error: e.message });
-    }
-  }, 30000);
+  if (STARTUP_BACKGROUND_REFRESH) {
+    // 启动后延迟拉取新闻，避免和首屏页面加载抢外部网络资源。
+    setTimeout(async () => {
+      try {
+        const { fetchAllNews } = await import('./services/news.js');
+        await fetchAllNews();
+      } catch (e) {
+        log.warn('Initial news fetch failed', { error: e.message });
+      }
+    }, STARTUP_NEWS_FETCH_DELAY_MS);
+  }
 });
 
 server.on('error', (err) => {
