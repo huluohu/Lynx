@@ -213,6 +213,12 @@ bash docker/build.sh
 4. 可选同步 `latest`
 5. 回写 `docker/.env` 中的 `APP_VERSION`
 
+默认构建会优先使用本地/BuildKit 缓存，不会每次强制拉取基础镜像；如需刷新基础镜像，可临时执行：
+
+```zsh
+PULL_BASE_IMAGE=true bash docker/build.sh
+```
+
 如需同步 Docker Hub 仓库介绍，可在 `docker/.env` 设置 `DOCKERHUB_DESCRIPTION_SYNC=true`，并将本机凭据写入不会提交到 Git 的 `docker/.env.local`：
 
 ```zsh

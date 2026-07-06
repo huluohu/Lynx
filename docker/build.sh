@@ -135,6 +135,7 @@ DOCKERHUB_DESCRIPTION_SYNC="${DOCKERHUB_DESCRIPTION_SYNC:-$(read_env_value DOCKE
 DOCKERHUB_REPOSITORY="${DOCKERHUB_REPOSITORY:-$(read_env_value DOCKERHUB_REPOSITORY "$ENV_FILE")}"
 DOCKERHUB_SHORT_DESCRIPTION="${DOCKERHUB_SHORT_DESCRIPTION:-$(read_env_value DOCKERHUB_SHORT_DESCRIPTION "$ENV_FILE")}"
 DOCKERHUB_OVERVIEW_FILE="${DOCKERHUB_OVERVIEW_FILE:-$(read_env_value DOCKERHUB_OVERVIEW_FILE "$ENV_FILE")}"
+PULL_BASE_IMAGE="${PULL_BASE_IMAGE:-$(read_env_value PULL_BASE_IMAGE "$ENV_FILE")}"
 
 # ============================================
 # 步骤 0: 选择版本类型
@@ -256,8 +257,18 @@ print_info "开始构建镜像..."
 print_info "IMAGE: ${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"
 
 TAGS="-t ${REGISTRY}/${IMAGE_NAME}:${VERSION_TAG}"
+PULL_BASE_IMAGE_NORMALIZED=$(printf '%s' "${PULL_BASE_IMAGE:-false}" | tr '[:upper:]' '[:lower:]')
+PULL_ARGS=(--pull=false)
+
+if [[ "$PULL_BASE_IMAGE_NORMALIZED" =~ ^(1|true|yes|y)$ ]]; then
+    PULL_ARGS=(--pull)
+    print_info "基础镜像策略：强制拉取最新基础镜像"
+else
+    print_info "基础镜像策略：优先使用本地/BuildKit 缓存（设置 PULL_BASE_IMAGE=true 可强制刷新）"
+fi
 
 docker buildx build \
+  "${PULL_ARGS[@]}" \
   --build-arg "APP_VERSION=${VERSION_TAG}" \
   --platform linux/amd64 \
   --provenance=false \
