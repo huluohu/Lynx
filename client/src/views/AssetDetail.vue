@@ -43,9 +43,23 @@
       :subtitle="t('assetDetail.profitTrendSubtitle')"
       :points="profitTrend.points"
       :summary="profitTrend.summary"
+      :series="profitTrendSeries"
       :loading="profitTrendLoading"
       :empty-text="t('trend.emptyProfit')"
       :value-formatter="money"
+      :percent-formatter="formatTrendPercent"
+    />
+
+    <TrendChart
+      v-model="profitTrendRange"
+      :title="t('assetDetail.holdingTrendTitle')"
+      :subtitle="t('assetDetail.holdingTrendSubtitle')"
+      :points="holdingTrend.points"
+      :summary="holdingTrend.summary"
+      :show-ranges="false"
+      :loading="profitTrendLoading"
+      :empty-text="t('trend.emptyHolding')"
+      :value-formatter="formatQuantity"
       :percent-formatter="formatTrendPercent"
     />
 
@@ -144,7 +158,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted, onUnmounted, watchEffect } from 'vue'
+import { computed, ref, reactive, watch, onMounted, onUnmounted, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
@@ -180,6 +194,20 @@ const deleting = ref(false)
 const profitTrendRange = ref('1m')
 const profitTrend = ref({ points: [], summary: null })
 const profitTrendLoading = ref(false)
+const profitTrendSeries = computed(() => [
+  { key: 'value', label: t('assetDetail.profitSeriesLabel'), area: true },
+  { key: 'avg_cost', label: t('assetDetail.costSeriesLabel'), color: 'var(--primary)', area: false, strokeDasharray: '5 4' },
+])
+const holdingTrend = computed(() => {
+  const points = (profitTrend.value.points || [])
+    .map(point => ({ ...point, value: Number(point.quantity) }))
+    .filter(point => Number.isFinite(point.value))
+
+  return {
+    points,
+    summary: summarizeTrendPoints(points),
+  }
+})
 const editForm = reactive({ name: '', symbol: '', type: '', currency: '', icon: '', data_source: '', subtype: '', unit: '', quote_currency: '', provider_symbols: '', quantity: '', avg_cost: '', total_invested: '', target_price: '', stop_loss: '' })
 const mobilePageActions = useMobilePageActions()
 
@@ -304,11 +332,31 @@ function assetTypeLabel(type) {
 function money(value) {
   return formatCurrencyAmount(value, asset.value?.currency, { maximumFractionDigits: 3 })
 }
+function formatQuantity(value) {
+  const n = Number(value || 0)
+  const formatted = new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(n)
+  return asset.value?.unit ? `${formatted} ${asset.value.unit}` : formatted
+}
 function fmtDateTime(value) {
   return formatDateTimeSeconds(value)
 }
 function formatTrendPercent(value) {
   return `${Number(value || 0).toFixed(1)}%`
+}
+function summarizeTrendPoints(points) {
+  const values = points.map(point => Number(point.value)).filter(Number.isFinite)
+  if (!values.length) return { first: null, last: null, change: null, change_pct: null, min: null, max: null }
+  const first = values[0]
+  const last = values[values.length - 1]
+  const change = last - first
+  return {
+    first,
+    last,
+    change,
+    change_pct: first ? (change / Math.abs(first)) * 100 : null,
+    min: Math.min(...values),
+    max: Math.max(...values),
+  }
 }
 
 watchEffect(() => {

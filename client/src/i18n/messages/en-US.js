@@ -750,6 +750,7 @@ export default {
   trend: {
     emptyProfit: 'Not enough profit data yet',
     emptyPrice: 'Not enough price data yet',
+    emptyHolding: 'Not enough holding data yet',
     ranges: {
       '1d': '1D',
       '1w': '1W',
@@ -1191,8 +1192,12 @@ export default {
     dataSource: 'Data source',
     auto: 'Auto',
     holdingInfo: 'Holding info',
-    profitTrendTitle: 'Asset profit trend',
-    profitTrendSubtitle: 'Estimated from current position size, invested cost, and historical quotes.',
+    profitTrendTitle: 'Asset profit & cost price trend',
+    profitTrendSubtitle: 'Shows current profit and historical average cost price, estimated from trades, position size, and quotes.',
+    profitSeriesLabel: 'Profit',
+    costSeriesLabel: 'Cost price',
+    holdingTrendTitle: 'Holding trend',
+    holdingTrendSubtitle: 'Replays historical position quantity changes from trade records.',
     targetPrice: 'Target price',
     stopLoss: 'Stop-loss',
     transactions: 'Transactions',

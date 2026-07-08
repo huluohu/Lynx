@@ -750,6 +750,7 @@ export default {
   trend: {
     emptyProfit: '暂无足够收益数据',
     emptyPrice: '暂无足够价格数据',
+    emptyHolding: '暂无足够持仓数据',
     ranges: {
       '1d': '1日',
       '1w': '1周',
@@ -1191,8 +1192,12 @@ export default {
     dataSource: '数据源',
     auto: '自动',
     holdingInfo: '持仓信息',
-    profitTrendTitle: '当前资产收益趋势',
-    profitTrendSubtitle: '按当前持仓数量、投入成本和历史行情估算。',
+    profitTrendTitle: '当前资产收益与成本价趋势',
+    profitTrendSubtitle: '同时展示当前收益和历史成本价，按交易记录、持仓数量和历史行情估算。',
+    profitSeriesLabel: '收益',
+    costSeriesLabel: '成本价',
+    holdingTrendTitle: '持仓趋势',
+    holdingTrendSubtitle: '按交易记录回放历史持仓数量变化。',
     targetPrice: '目标价',
     stopLoss: '止损线',
     transactions: '交易记录',

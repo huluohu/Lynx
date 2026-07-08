@@ -88,6 +88,148 @@ function buildSteppedPricePoints(rows, timeline, fallbackPrice = null, fallbackC
   return points;
 }
 
+function getAssetTradeRows(db, assetId, endMs) {
+  return db.prepare(`
+    SELECT id, type, quantity, price, total, COALESCE(fee, 0) AS fee, executed_at
+    FROM trade_history
+    WHERE asset_id = ?
+      AND COALESCE(reverted, 0) = 0
+      AND type IN ('buy', 'sell')
+      AND executed_at IS NOT NULL
+      AND executed_at <= ?
+    ORDER BY executed_at ASC, id ASC
+  `).all(assetId, toSqlDate(endMs));
+}
+
+function reconcileCostPointsToHolding(points, holding) {
+  if (!points.length || !holding) return points;
+  const currentQuantity = Number(holding.quantity || 0);
+  const currentInvested = Number(holding.total_invested || 0);
+  if (!Number.isFinite(currentQuantity) || !Number.isFinite(currentInvested)) return points;
+
+  const last = points[points.length - 1];
+  const quantityDelta = currentQuantity - Number(last.quantity || 0);
+  const investedDelta = currentInvested - Number(last.invested || 0);
+  const isAligned = Math.abs(quantityDelta) < 1e-8 && Math.abs(investedDelta) < 0.01;
+  if (isAligned) return points;
+
+  const adjustedAt = parseSqlDate(holding.updated_at) || parseSqlDate(last.t) || Date.now();
+  let applied = false;
+  const reconciled = points.map((point) => {
+    const pointTime = parseSqlDate(point.t);
+    if (pointTime == null || pointTime < adjustedAt) return point;
+    applied = true;
+    const quantity = Math.max(0, Number(point.quantity || 0) + quantityDelta);
+    const invested = Math.max(0, Number(point.invested || 0) + investedDelta);
+    return {
+      ...point,
+      quantity,
+      invested,
+      avg_cost: quantity > 0 ? invested / quantity : 0,
+      estimated: true,
+    };
+  });
+
+  if (!applied) {
+    reconciled[reconciled.length - 1] = {
+      ...last,
+      quantity: currentQuantity,
+      invested: currentInvested,
+      avg_cost: currentQuantity > 0 ? currentInvested / currentQuantity : 0,
+      estimated: true,
+    };
+  }
+
+  return reconciled;
+}
+
+function buildHoldingCostPoints(trades, timeline, fallbackHolding = null) {
+  if (!trades.length && fallbackHolding) {
+    const quantity = Number(fallbackHolding.quantity || 0);
+    const invested = Number(fallbackHolding.total_invested || 0);
+    const avgCost = quantity > 0 ? invested / quantity : Number(fallbackHolding.avg_cost || 0);
+    return timeline.map(ts => ({ t: new Date(ts).toISOString(), quantity, invested, avg_cost: avgCost, estimated: true }));
+  }
+
+  const points = [];
+  let idx = 0;
+  let quantity = 0;
+  let invested = 0;
+  let avgCost = 0;
+
+  for (const ts of timeline) {
+    while (idx < trades.length) {
+      const tradeTime = parseSqlDate(trades[idx].executed_at);
+      if (tradeTime == null || tradeTime > ts) break;
+
+      const trade = trades[idx];
+      const tradeQty = Math.max(0, Number(trade.quantity || 0));
+      const tradePrice = Number(trade.price || 0);
+      const tradeTotal = Number(trade.total || 0);
+      const tradeFee = Number(trade.fee || 0);
+
+      if (trade.type === 'buy' && tradeQty > 0) {
+        const grossAmount = Number.isFinite(tradeTotal) && tradeTotal > 0 ? tradeTotal : tradeQty * tradePrice;
+        const amount = grossAmount + (Number.isFinite(tradeFee) && tradeFee > 0 ? tradeFee : 0);
+        quantity += tradeQty;
+        invested += Number.isFinite(amount) ? amount : 0;
+        avgCost = quantity > 0 ? invested / quantity : 0;
+      } else if (trade.type === 'sell' && tradeQty > 0) {
+        const sellQty = Math.min(tradeQty, quantity);
+        quantity = Math.max(0, quantity - sellQty);
+        invested = quantity > 0 ? quantity * avgCost : 0;
+        avgCost = quantity > 0 ? avgCost : 0;
+      }
+
+      idx++;
+    }
+
+    points.push({
+      t: new Date(ts).toISOString(),
+      quantity,
+      invested,
+      avg_cost: avgCost,
+      estimated: false,
+    });
+  }
+
+  return reconcileCostPointsToHolding(points, fallbackHolding);
+}
+
+function currentHoldingCostPoint(holding) {
+  const quantity = Number(holding?.quantity || 0);
+  const invested = Number(holding?.total_invested || 0);
+  return {
+    quantity,
+    invested,
+    avg_cost: quantity > 0 ? invested / quantity : Number(holding?.avg_cost || 0),
+    estimated: false,
+  };
+}
+
+function costPointDiffers(a, b) {
+  if (!a || !b) return true;
+  return Math.abs(Number(a.quantity || 0) - Number(b.quantity || 0)) >= 1e-8
+    || Math.abs(Number(a.invested || 0) - Number(b.invested || 0)) >= 0.01;
+}
+
+function buildCostPointResolver(costPoints) {
+  let index = 0;
+  return (timeValue) => {
+    if (!costPoints.length) return { quantity: 0, invested: 0, avg_cost: 0, estimated: true };
+    const time = parseSqlDate(timeValue);
+    if (time == null) return costPoints[costPoints.length - 1];
+
+    while (index + 1 < costPoints.length) {
+      const nextTime = parseSqlDate(costPoints[index + 1].t);
+      if (nextTime == null || nextTime > time) break;
+      index++;
+    }
+
+    return costPoints[index] || costPoints[costPoints.length - 1];
+  };
+}
+
 function summarizePoints(points, valueKey = 'value') {
   if (!points.length) {
     return { first: null, last: null, change: null, change_pct: null, min: null, max: null };
@@ -144,11 +286,19 @@ export function buildAssetProfitTrend(db, assetId, range = '1m') {
     };
   }
 
+  const currentCost = currentHoldingCostPoint(holding);
+  const fallbackPrice = Number(holding.avg_cost || currentCost.avg_cost || 0);
   const rows = getPriceRows(db, asset.id, startMs);
-  const pricePoints = buildSteppedPricePoints(rows, timeline, holding.avg_cost, asset.currency || 'CNY');
-  const quantity = Number(holding.quantity || 0);
-  const invested = Number(holding.total_invested || 0);
-  const points = pricePoints.map(point => {
+  const pricePoints = buildSteppedPricePoints(rows, timeline, fallbackPrice, asset.currency || 'CNY');
+  const costPoints = buildHoldingCostPoints(getAssetTradeRows(db, asset.id, endMs), timeline, holding);
+  const lastCostPoint = costPoints[costPoints.length - 1];
+  const closingCost = { ...currentCost, estimated: !!lastCostPoint?.estimated || costPointDiffers(currentCost, lastCostPoint) };
+  const resolveCostPoint = buildCostPointResolver(costPoints);
+  const points = pricePoints.map((point, index) => {
+    const isLastPoint = index === pricePoints.length - 1;
+    const costPoint = isLastPoint ? closingCost : resolveCostPoint(point.t);
+    const quantity = Number(costPoint.quantity || 0);
+    const invested = Number(costPoint.invested || 0);
     const marketValue = quantity * point.price;
     const value = marketValue - invested;
     return {
@@ -156,9 +306,11 @@ export function buildAssetProfitTrend(db, assetId, range = '1m') {
       value,
       market_value: marketValue,
       invested,
+      quantity,
+      avg_cost: costPoint.avg_cost,
       price: point.price,
       currency: point.currency,
-      estimated: point.estimated,
+      estimated: point.estimated || costPoint.estimated,
     };
   });
 

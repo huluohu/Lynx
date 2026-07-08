@@ -207,7 +207,7 @@ router.get('/', (req, res) => {
 // POST 添加历史记录
 router.post('/', (req, res) => {
   const db = getDb();
-  const { asset_id, type, quantity, price, total, pnl, pnl_pct, executed_at, reason, tags, currency, plan_id } = req.body;
+  const { asset_id, type, quantity, price, total, fee = 0, pnl, pnl_pct, executed_at, reason, tags, currency, plan_id } = req.body;
 
   if (!asset_id || !type || quantity === undefined || quantity === null || price === undefined || price === null) {
     return res.status(400).json({ success: false, error: '缺少必要字段: asset_id, type, quantity, price' });
@@ -215,7 +215,9 @@ router.post('/', (req, res) => {
 
   const qty = Number(quantity);
   const prc = Number(price);
-  const amt = Number(total) || qty * prc;
+  const tradeTotal = Number(total) || qty * prc;
+  const tradeFee = Number(fee || 0);
+  const costAmount = type === 'buy' ? tradeTotal + (Number.isFinite(tradeFee) ? tradeFee : 0) : tradeTotal;
   const tradeCurrency = currency || db.prepare('SELECT currency FROM assets WHERE id = ?').get(asset_id)?.currency || 'CNY';
   const linkedPlan = plan_id
     ? db.prepare('SELECT id, strategy_id, plan_set_id FROM trading_plans WHERE id = ?').get(plan_id)
@@ -223,6 +225,9 @@ router.post('/', (req, res) => {
 
   if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(prc) || prc <= 0) {
     return res.status(400).json({ success: false, error: '数量和价格必须大于 0' });
+  }
+  if (!Number.isFinite(tradeTotal) || tradeTotal < 0 || !Number.isFinite(tradeFee) || tradeFee < 0) {
+    return res.status(400).json({ success: false, error: '成交金额和手续费不能为负数' });
   }
   if (!['buy', 'sell'].includes(type)) {
     return res.status(400).json({ success: false, error: '交易类型必须是 buy 或 sell' });
@@ -234,19 +239,20 @@ router.post('/', (req, res) => {
         assetId: Number(asset_id),
         type,
         quantity: qty,
-        amount: amt,
+        amount: costAmount,
         price: prc,
       });
 
       const info = db.prepare(`INSERT INTO trade_history (
-          asset_id, type, quantity, price, total, pnl, pnl_pct, executed_at, reason, tags, currency, plan_id, strategy_id, plan_set_id, attribution_source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          asset_id, type, quantity, price, total, fee, pnl, pnl_pct, executed_at, reason, tags, currency, plan_id, strategy_id, plan_set_id, attribution_source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(
           asset_id,
           type,
           qty,
           prc,
-          amt,
+          tradeTotal,
+          tradeFee,
           pnl || null,
           pnl_pct || null,
           executed_at || new Date().toISOString(),

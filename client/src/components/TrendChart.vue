@@ -11,7 +11,7 @@
       </div>
     </div>
 
-    <div class="trend-ranges" role="tablist" :aria-label="title">
+    <div v-if="showRanges" class="trend-ranges" role="tablist" :aria-label="title">
       <button
         v-for="range in ranges"
         :key="range"
@@ -22,6 +22,13 @@
       >
         {{ rangeLabel(range) }}
       </button>
+    </div>
+    <div v-if="showLegend" class="trend-legend" aria-hidden="true">
+      <span v-for="item in seriesLegend" :key="item.key" class="trend-legend-item">
+        <i :style="{ background: item.color }"></i>
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </span>
     </div>
 
     <div class="trend-chart-wrap" :class="{ loading }">
@@ -58,8 +65,19 @@
             <g v-for="tick in yAxisTicks" :key="tick.y">
               <line :x1="chartLeft" :x2="chartRight" :y1="tick.y" :y2="tick.y" class="trend-grid-line" />
             </g>
-            <path :d="areaPath" :fill="`url(#${gradientId})`" />
-            <path :d="linePath" fill="none" :stroke="lineColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+            <path v-for="series in areaSeries" :key="`${series.key}-area`" :d="series.areaPath" :fill="`url(#${gradientId})`" />
+            <path
+              v-for="series in plottedSeries"
+              :key="series.key"
+              :d="series.linePath"
+              fill="none"
+              :stroke="series.color"
+              :stroke-width="series.strokeWidth"
+              :stroke-dasharray="series.strokeDasharray"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              vector-effect="non-scaling-stroke"
+            />
             <g v-if="activePoint">
               <line :x1="activePoint.x" :x2="activePoint.x" :y1="chartTop" :y2="chartBottom" class="trend-crosshair" />
             </g>
@@ -67,8 +85,15 @@
           <span class="trend-point trend-last-point" :style="pointStyle(lastPoint)" aria-hidden="true"></span>
           <span v-if="activePoint" class="trend-point trend-active-point" :style="pointStyle(activePoint)" aria-hidden="true"></span>
           <div v-if="activePoint" class="trend-tooltip" :style="tooltipStyle">
-            <strong>{{ props.valueFormatter(activePoint.rawValue) }}</strong>
-            <span>{{ pointTimeLabel(activePoint) }}</span>
+            <strong>{{ showLegend ? pointTimeLabel(activePoint) : props.valueFormatter(activePoint.rawValue) }}</strong>
+            <span v-if="!showLegend">{{ pointTimeLabel(activePoint) }}</span>
+            <div v-else class="trend-tooltip-series">
+              <span v-for="item in activeSeriesValues" :key="item.key" class="trend-tooltip-row">
+                <i :style="{ background: item.color }"></i>
+                <em>{{ item.label }}</em>
+                <b>{{ item.value }}</b>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -91,8 +116,10 @@ const props = defineProps({
   subtitle: { type: String, default: '' },
   points: { type: Array, default: () => [] },
   summary: { type: Object, default: null },
+  series: { type: Array, default: () => [] },
   modelValue: { type: String, default: '1m' },
   ranges: { type: Array, default: () => ['1d', '1w', '1m', '6m', '1y'] },
+  showRanges: { type: Boolean, default: true },
   loading: { type: Boolean, default: false },
   emptyText: { type: String, default: '' },
   valueFormatter: { type: Function, default: (value) => String(value) },
@@ -110,13 +137,45 @@ const chartRight = 318
 const chartTop = 12
 const chartBottom = 132
 const activePoint = ref(null)
+const secondarySeriesColors = ['var(--primary)', 'var(--text-muted)', 'var(--market-warning)']
+
+const changeValue = computed(() => Number(props.summary?.change ?? 0))
+const lineColor = computed(() => changeValue.value >= 0 ? 'var(--market-positive)' : 'var(--market-negative)')
+
+const seriesDefs = computed(() => {
+  const customSeries = Array.isArray(props.series) ? props.series.filter(series => series?.key || series?.valueKey) : []
+  const source = customSeries.length ? customSeries : [{ key: 'value', label: '', area: true }]
+
+  return source.map((series, index) => {
+    const key = series.key || series.valueKey || 'value'
+    return {
+      key,
+      label: series.label || key,
+      color: series.color || (index === 0 ? lineColor.value : secondarySeriesColors[(index - 1) % secondarySeriesColors.length]),
+      area: series.area ?? index === 0,
+      strokeWidth: series.strokeWidth || (index === 0 ? 2.5 : 2),
+      strokeDasharray: series.strokeDasharray || '',
+    }
+  })
+})
+const primarySeries = computed(() => seriesDefs.value[0] || { key: 'value', color: lineColor.value })
+const showLegend = computed(() => seriesDefs.value.length > 1)
 
 const chartPoints = computed(() => (props.points || [])
-  .map(point => ({ ...point, rawValue: Number(point.value) }))
-  .filter(point => Number.isFinite(point.rawValue)))
+  .map((point) => {
+    const seriesValues = {}
+    for (const series of seriesDefs.value) {
+      const value = Number(point[series.key])
+      if (Number.isFinite(value)) seriesValues[series.key] = value
+    }
+    const values = Object.values(seriesValues)
+    const rawValue = seriesValues[primarySeries.value.key] ?? values[0]
+    return { ...point, rawValue, seriesValues }
+  })
+  .filter(point => Number.isFinite(point.rawValue) && Object.keys(point.seriesValues).length))
 
 const minMax = computed(() => {
-  const values = chartPoints.value.map(point => point.rawValue)
+  const values = chartPoints.value.flatMap(point => Object.values(point.seriesValues).filter(Number.isFinite))
   if (!values.length) return { min: 0, max: 1 }
   let min = Math.min(...values)
   let max = Math.max(...values)
@@ -137,27 +196,60 @@ const plotted = computed(() => {
     const x = points.length === 1 ? chartRight : plotLeft + (index / (points.length - 1)) * plotWidth
     const ratio = (point.rawValue - min) / (max - min)
     const y = chartTop + (1 - ratio) * plotHeight
-    return { ...point, x, y }
+    const seriesY = {}
+    for (const [key, value] of Object.entries(point.seriesValues)) {
+      seriesY[key] = chartTop + (1 - ((value - min) / (max - min))) * plotHeight
+    }
+    return { ...point, x, y, seriesY }
   })
 })
 
-const linePath = computed(() => {
-  const points = plotted.value
+function buildLinePath(points) {
   if (!points.length) return ''
   if (points.length === 1) {
     const y = points[0].y.toFixed(2)
     return `M ${chartLeft.toFixed(2)} ${y} L ${chartRight.toFixed(2)} ${y}`
   }
   return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
-})
-const areaPath = computed(() => {
-  if (!plotted.value.length) return ''
-  if (plotted.value.length === 1) {
-    return `${linePath.value} L ${chartRight.toFixed(2)} ${chartBottom} L ${chartLeft.toFixed(2)} ${chartBottom} Z`
+}
+function buildAreaPath(points, linePath) {
+  if (!points.length) return ''
+  if (points.length === 1) {
+    return `${linePath} L ${chartRight.toFixed(2)} ${chartBottom} L ${chartLeft.toFixed(2)} ${chartBottom} Z`
   }
-  const first = plotted.value[0]
-  const last = plotted.value[plotted.value.length - 1]
-  return `${linePath.value} L ${last.x.toFixed(2)} ${chartBottom} L ${first.x.toFixed(2)} ${chartBottom} Z`
+  const first = points[0]
+  const last = points[points.length - 1]
+  return `${linePath} L ${last.x.toFixed(2)} ${chartBottom} L ${first.x.toFixed(2)} ${chartBottom} Z`
+}
+
+const plottedSeries = computed(() => seriesDefs.value.map((series) => {
+  const points = plotted.value
+    .filter(point => Number.isFinite(point.seriesValues[series.key]) && Number.isFinite(point.seriesY[series.key]))
+    .map(point => ({ ...point, rawValue: point.seriesValues[series.key], y: point.seriesY[series.key] }))
+  const linePath = buildLinePath(points)
+  return {
+    ...series,
+    points,
+    linePath,
+    areaPath: series.area ? buildAreaPath(points, linePath) : '',
+  }
+}))
+const areaSeries = computed(() => plottedSeries.value.filter(series => series.area && series.areaPath))
+const seriesLegend = computed(() => seriesDefs.value.map((series) => {
+  const last = [...chartPoints.value].reverse().find(point => Number.isFinite(point.seriesValues[series.key]))
+  const value = last ? props.valueFormatter(last.seriesValues[series.key]) : '-'
+  return { key: series.key, label: series.label, color: series.color, value }
+}))
+const activeSeriesValues = computed(() => {
+  if (!activePoint.value) return []
+  return seriesDefs.value
+    .filter(series => Number.isFinite(activePoint.value.seriesValues?.[series.key]))
+    .map(series => ({
+      key: series.key,
+      label: series.label,
+      color: series.color,
+      value: props.valueFormatter(activePoint.value.seriesValues[series.key]),
+    }))
 })
 const yAxisTicks = computed(() => {
   const { min, max } = minMax.value
@@ -169,8 +261,6 @@ const yAxisTicks = computed(() => {
 })
 const lastPoint = computed(() => plotted.value[plotted.value.length - 1] || { x: 0, y: 0 })
 const lastRawValue = computed(() => chartPoints.value[chartPoints.value.length - 1]?.rawValue ?? null)
-const changeValue = computed(() => Number(props.summary?.change ?? 0))
-const lineColor = computed(() => changeValue.value >= 0 ? 'var(--market-positive)' : 'var(--market-negative)')
 const formattedChange = computed(() => {
   const value = Number(props.summary?.change ?? 0)
   const prefix = value > 0 ? '+' : ''
@@ -240,7 +330,7 @@ function pointStyle(point) {
   return {
     left: `${pctX(point)}%`,
     top: `${pctY(point)}%`,
-    background: lineColor.value,
+    background: primarySeries.value.color || lineColor.value,
   }
 }
 const tooltipStyle = computed(() => {
@@ -313,6 +403,32 @@ const tooltipStyle = computed(() => {
   color: white;
   box-shadow: 0 8px 18px rgba(59, 130, 246, 0.22);
 }
+.trend-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: -4px 0 12px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.trend-legend-item i,
+.trend-tooltip-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.trend-legend-item strong {
+  color: var(--text);
+  font-weight: 800;
+}
 .trend-chart-wrap {
   position: relative;
   min-height: 170px;
@@ -383,6 +499,29 @@ const tooltipStyle = computed(() => {
 }
 .trend-tooltip strong { font-size: 13px; }
 .trend-tooltip span { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+.trend-tooltip-series {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+.trend-tooltip-row {
+  display: grid;
+  grid-template-columns: auto minmax(42px, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.trend-tooltip-row em {
+  color: var(--text-dim);
+  font-style: normal;
+  font-size: 11px;
+}
+.trend-tooltip-row b {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
 .trend-empty,
 .trend-skeleton {
   min-height: 170px;
