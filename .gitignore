@@ -9,3 +9,4 @@ data/*.db
 /data/
 docker/.env.local
 docs/promo/*
+/.agents/*
