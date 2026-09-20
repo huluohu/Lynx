@@ -126,7 +126,8 @@ router.get('/', (req, res) => {
   const category = normalizeNewsCategory(req.query.category);
   const pageLimit = Math.min(100, Math.max(1, Number(limit) || 20));
   const pageOffset = Math.max(0, Number(offset) || 0);
-  const where = category ? 'WHERE category = ?' : '';
+  // 与展示列口径一致：空分类按 'other' 归类展示，也应能按 'other' 筛出
+  const where = category ? "WHERE COALESCE(NULLIF(category, ''), 'other') = ?" : '';
   const params = category ? [category] : [];
   const rows = db.prepare(`SELECT id, title, summary, url, source, published_at, read, cache_status, created_at,
       COALESCE(NULLIF(category, ''), 'other') AS category
@@ -170,6 +171,8 @@ router.post('/sources', (req, res) => {
   } catch {
     return res.status(400).json({ success: false, error: 'URL格式无效' });
   }
+  const guardError = assertPublicHttpUrl(url, { label: 'URL' });
+  if (guardError) return res.status(400).json({ success: false, error: guardError });
   const db = getDb();
   try {
     db.prepare('INSERT INTO custom_news_sources (name, url) VALUES (?, ?)').run(name, url);
@@ -217,7 +220,10 @@ router.post('/:id/translate', async (req, res) => {
   }
 
   try {
-    const { getAgentConfig, callLLM } = await import('../services/strategy-agent.js');
+    const [{ getAgentConfig }, { callLLM }] = await Promise.all([
+      import('../services/strategy-agent.js'),
+      import('../services/llm.js'),
+    ]);
     const config = getAgentConfig(db);
     if (!config.apiUrl || !config.apiKey) {
       return res.status(400).json({ success: false, error: 'AI 翻译未配置，请先在设置中配置 AI API。' });
@@ -300,7 +306,10 @@ router.post('/:id/translate/stream', async (req, res) => {
       }
     }
 
-    const { getAgentConfig, callLLM } = await import('../services/strategy-agent.js');
+    const [{ getAgentConfig }, { callLLM }] = await Promise.all([
+      import('../services/strategy-agent.js'),
+      import('../services/llm.js'),
+    ]);
     const config = getAgentConfig(db);
     if (!config.apiUrl || !config.apiKey) {
       writeNdjson(res, 'error', { error: 'AI 翻译未配置，请先在设置中配置 AI API。' });
@@ -312,12 +321,16 @@ router.post('/:id/translate/stream', async (req, res) => {
       ON CONFLICT(news_id, target_language) DO UPDATE SET status = 'fetching', error = NULL, updated_at = datetime('now')`).run(row.id, targetLanguage);
 
     const metadata = await translateMetadata({ callLLM, config, targetLanguage, title: row.title, summary: row.summary });
+    if (res.destroyed || res.writableEnded) return res.end();
     writeNdjson(res, 'meta', { data: { ...metadata, source_language: sourceLanguage, target_language: targetLanguage } });
 
     const chunks = buildTranslationChunks(row.content || row.summary || '');
     const translatedChunks = [];
     const warnings = [];
+    let aborted = false;
     for (let i = 0; i < chunks.length; i++) {
+      // 客户端已断开：停止剩余分段翻译，已翻译部分不落库
+      if (res.destroyed || res.writableEnded) { aborted = true; break; }
       let text = chunks[i];
       writeNdjson(res, 'chunk_start', { index: i, total: chunks.length });
       try {
@@ -328,6 +341,8 @@ router.post('/:id/translate/stream', async (req, res) => {
       translatedChunks.push(text);
       writeNdjson(res, 'chunk', { index: i, total: chunks.length, text, warnings: warnings.slice() });
     }
+
+    if (aborted) return res.end();
 
     const content = translatedChunks.join('\n\n');
     db.prepare(`INSERT INTO news_translations (news_id, target_language, title, summary, content, status, error, updated_at)

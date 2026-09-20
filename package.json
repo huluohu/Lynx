@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
-    "client": "cd client && npx vite --host 0.0.0.0"
+    "client": "cd client && npx vite --host 0.0.0.0",
+    "test": "cd server && npm test",
+    "check:i18n": "node scripts/check-i18n.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

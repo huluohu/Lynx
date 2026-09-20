@@ -15,13 +15,34 @@ function timestamp() {
   return new Date().toISOString();
 }
 
+const MAX_META_VALUE_LENGTH = 2000;
+
+// 防日志注入（换行伪造日志行）与超长值刷爆日志
+function sanitizeMeta(meta) {
+  if (!meta || typeof meta !== 'object') return {};
+  const out = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (typeof value === 'string') {
+      out[key] = value.replace(/[\r\n]+/g, ' ').slice(0, MAX_META_VALUE_LENGTH);
+    } else {
+      try {
+        out[key] = JSON.parse(JSON.stringify(value));
+      } catch {
+        out[key] = String(value).slice(0, MAX_META_VALUE_LENGTH);
+      }
+    }
+  }
+  return out;
+}
+
 function formatMessage(level, category, message, meta) {
+  const safeMeta = sanitizeMeta(meta);
   if (LOG_FORMAT === 'json') {
-    return JSON.stringify({ time: timestamp(), level, cat: category, msg: message, ...meta });
+    return JSON.stringify({ time: timestamp(), level, cat: category, msg: message, ...safeMeta });
   }
   const icon = { debug: '🔍', info: 'ℹ️', warn: '⚠️', error: '❌' }[level] || '';
-  const metaStr = meta && Object.keys(meta).length
-    ? ' | ' + Object.entries(meta).map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' ')
+  const metaStr = safeMeta && Object.keys(safeMeta).length
+    ? ' | ' + Object.entries(safeMeta).map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' ')
     : '';
   return `${timestamp()} ${icon} [${category}] ${message}${metaStr}`;
 }

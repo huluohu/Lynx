@@ -23,9 +23,14 @@ export async function refreshAllMarketSignals({ reason = 'scheduled' } = {}) {
 
   signalRefreshInFlight = true;
   try {
-    const signals = await analyzeAllAssets();
+    // 调度只分析有持仓/活跃策略的资产，避免无人访问时对全部资产持续消耗 LLM；
+    // 全量分析保留给手动 POST /api/signals/analyze
+    const signals = await analyzeAllAssets({ onlyActive: true });
+    const totalAssets = getDb().prepare('SELECT COUNT(*) AS count FROM assets').get().count;
     const summary = {
       total: signals.length,
+      totalAssets,
+      skipped: Math.max(0, totalAssets - signals.length),
       reason,
     };
     log.info('Market signals refreshed', summary);

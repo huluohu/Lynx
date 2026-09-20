@@ -307,7 +307,7 @@ async function confirmDelete() {
 async function doDelete() {
   deleting.value = true
   try {
-    const res = await api(`/api/assets/${route.params.id}`, { method: 'DELETE' })
+    const res = await api(`/api/assets/${route.params.id}?confirm=cascade`, { method: 'DELETE' })
     const json = await res.json()
     if (json.success) { toast.success(t('assetDetail.deleted')); router.push('/assets') }
     else toast.error(json.error || t('assetDetail.deleteFailed'))

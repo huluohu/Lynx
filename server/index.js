@@ -22,6 +22,7 @@ import systemRouter from './routes/system.js';
 import { startMonitor } from './services/strategy-monitor.js';
 import { startMarketRefreshScheduler, stopMarketRefreshScheduler } from './services/market-refresh.js';
 import { startMarketSignalRefreshScheduler, stopMarketSignalRefreshScheduler } from './services/market-signal-refresh.js';
+import { startRetentionScheduler, stopRetentionScheduler } from './services/retention.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3456;
@@ -47,10 +48,20 @@ app.use(express.json());
 app.use(requestLogger());
 
 // ===== CORS =====
+// 默认同源部署（前端由本服务托管，Vite dev 走代理），不发 CORS 头。
+// 如需跨域访问，设置 CORS_ORIGIN（逗号分隔白名单，如 https://lynx.example.com）。
+const CORS_ORIGINS = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean);
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Pragma');
+  const origin = req.headers.origin;
+  if (origin && CORS_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Pragma');
+  }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -148,6 +159,7 @@ const server = app.listen(PORT, () => {
   startMonitor();
   startMarketRefreshScheduler({ runImmediately: STARTUP_BACKGROUND_REFRESH, initialDelayMs: STARTUP_MARKET_REFRESH_DELAY_MS });
   startMarketSignalRefreshScheduler({ runImmediately: STARTUP_BACKGROUND_REFRESH, initialDelayMs: STARTUP_SIGNAL_REFRESH_DELAY_MS });
+  startRetentionScheduler({ runNow: STARTUP_BACKGROUND_REFRESH });
   scheduleNewsFetch();
 
   if (STARTUP_BACKGROUND_REFRESH) {
@@ -177,7 +189,7 @@ server.on('error', (err) => {
 });
 
 // 优雅关闭
-process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); stopMarketRefreshScheduler(); stopMarketSignalRefreshScheduler(); closeDb(); process.exit(0); });
-process.on('SIGTERM', () => { log.info('Shutting down (SIGTERM)'); stopMarketRefreshScheduler(); stopMarketSignalRefreshScheduler(); closeDb(); process.exit(0); });
+process.on('SIGINT', () => { log.info('Shutting down (SIGINT)'); stopMarketRefreshScheduler(); stopMarketSignalRefreshScheduler(); stopRetentionScheduler(); closeDb(); process.exit(0); });
+process.on('SIGTERM', () => { log.info('Shutting down (SIGTERM)'); stopMarketRefreshScheduler(); stopMarketSignalRefreshScheduler(); stopRetentionScheduler(); closeDb(); process.exit(0); });
 process.on('uncaughtException', (err) => { log.error('Uncaught exception', { error: err.message, stack: err.stack }); process.exit(1); });
 process.on('unhandledRejection', (reason) => { log.error('Unhandled rejection', { error: String(reason) }); });

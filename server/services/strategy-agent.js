@@ -9,14 +9,14 @@
  * Step 5: Post-validate  — plan constraints, auto-fix, budget cap
  * Step 6: Evaluate       — quality scoring, self-consistency
  */
-import http from 'http';
-import https from 'https';
 import { createLogger } from '../utils/logger.js';
 import { httpGet } from './price.js';
 import { getCachedMarketSnapshot } from './market-cache.js';
+import { callLLM, extractJSON } from './llm.js';
 import {
   scoreDataQuality,
   computeIndicators,
+  sampleDailySeries,
   analyzeTransactionPatterns,
   validatePlans,
   autoFixPlans,
@@ -27,6 +27,9 @@ import {
   validateStrategyResultShape,
 } from './agent-evaluator.js';
 import { AgentTracer, getResumeCheckpoints, getTraceForResume } from './agent-trace.js';
+
+// 共享 LLM 客户端（统一熔断/重试/响应上限），兼容旧的具名导出
+export { callLLM, extractJSON };
 
 const log = createLogger('strategy-agent');
 const AGENT_VERSION = '2026-06-agent-v2';
@@ -58,31 +61,6 @@ function safeUrlHost(value) {
 }
 
 // ============================================================
-// Circuit Breaker
-// ============================================================
-
-const circuitBreaker = {
-  failures: 0,
-  lastFailure: 0,
-  threshold: 3,
-  resetMs: 5 * 60 * 1000, // 5 minutes
-  isOpen() {
-    if (this.failures < this.threshold) return false;
-    if (Date.now() - this.lastFailure > this.resetMs) {
-      this.failures = 0; // reset
-      return false;
-    }
-    return true;
-  },
-  recordSuccess() { this.failures = 0; },
-  recordFailure() {
-    this.failures++;
-    this.lastFailure = Date.now();
-    log.warn('Circuit breaker: failure recorded', { failures: this.failures, threshold: this.threshold });
-  },
-};
-
-// ============================================================
 // LLM Infrastructure
 // ============================================================
 
@@ -109,36 +87,13 @@ export function getAgentConfig(db) {
   };
 }
 
-export function callLLM(apiUrl, apiKey, model, messages, { temperature = 0.7, maxTokens = 4000, timeout = 60000, retries = 2 } = {}) {
-  return new Promise(async (resolve) => {
-    if (circuitBreaker.isOpen()) {
-      log.warn('Circuit breaker open, skipping LLM call');
-      resolve(null);
-      return;
-    }
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const result = await _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout });
-      if (result) {
-        if (result.error && attempt < retries) {
-          log.warn('Agent LLM API error, retrying', { error: result.error.message, attempt: attempt + 1 });
-          await sleep(1000 * (attempt + 1));
-          continue;
-        }
-        circuitBreaker.recordSuccess();
-        resolve(result);
-        return;
-      }
-      circuitBreaker.recordFailure();
-      if (attempt < retries) {
-        log.warn('Agent LLM request failed, retrying', { attempt: attempt + 1 });
-        await sleep(1500 * (attempt + 1));
-      }
-    }
-    resolve(null);
-  });
-}
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function abortIfCancelled(shouldAbort, tracer) {
+  if (typeof shouldAbort !== 'function' || !shouldAbort()) return;
+  try { tracer?.fail('客户端断开，Agent 运行中止'); } catch {}
+  throw Object.assign(new Error('客户端已断开，Agent 运行中止'), { code: 'AGENT_ABORTED', aborted: true });
+}
 
 function sameNumberArray(a = [], b = []) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
@@ -435,56 +390,6 @@ export function loadResumeState(db, resumeTraceId, currentParams) {
   return { trace: capability.trace, checkpoints: capability.checkpoints || {}, capability };
 }
 
-function _doAgentLLMRequest(apiUrl, apiKey, model, messages, { temperature, maxTokens, timeout }) {
-  return new Promise((resolve) => {
-    const url = new URL(apiUrl.endsWith('/chat/completions') ? apiUrl : `${apiUrl}/chat/completions`);
-    const isHttps = url.protocol === 'https:';
-    const lib = isHttps ? https : http;
-
-    const body = JSON.stringify({ model, messages, temperature, max_tokens: maxTokens });
-    const opts = {
-      hostname: url.hostname,
-      port: url.port || (isHttps ? 443 : 80),
-      path: url.pathname + url.search,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Length': Buffer.byteLength(body),
-      },
-    };
-
-    const req = lib.request(opts, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        if (res.statusCode === 429 || res.statusCode >= 500) {
-          log.warn('Agent LLM HTTP error', { status: res.statusCode });
-          resolve(null);
-          return;
-        }
-        try { resolve(JSON.parse(data)); } catch { resolve(null); }
-      });
-    });
-    req.on('error', (e) => { log.error('LLM request error', { error: e.message }); resolve(null); });
-    req.setTimeout(timeout, () => { req.destroy(); resolve(null); });
-    req.write(body);
-    req.end();
-  });
-}
-
-function extractJSON(text) {
-  try { return JSON.parse(text); } catch {}
-  const match = text?.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) { try { return JSON.parse(match[1].trim()); } catch {} }
-  const start = text?.indexOf('{');
-  const end = text?.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
-  }
-  return null;
-}
-
 // Sanitize external text to prevent prompt injection
 function sanitizeExternalText(text) {
   if (!text) return '';
@@ -539,13 +444,19 @@ async function collectData(db, assetIds, config, tracer = null) {
     if (!asset) continue;
 
     const holding = db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(id);
+    // trade_history 是唯一交易事实源（transactions 为旧表，仅计划执行/手工记账前的历史数据）
     const transactions = db.prepare(
-      'SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 50'
+      `SELECT id, type, quantity, price, total, COALESCE(fee, 0) AS fee, executed_at
+       FROM trade_history
+       WHERE asset_id = ? AND COALESCE(reverted, 0) = 0
+       ORDER BY datetime(executed_at) DESC, id DESC LIMIT 50`
     ).all(id);
 
     const priceHistory = db.prepare(
       "SELECT price, currency, fetched_at FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-30 days') ORDER BY fetched_at ASC"
     ).all(id);
+    // 指标与"30日走势"按日线口径计算，避免把 5 分钟级波动当日线指标喂给模型
+    const dailyPriceHistory = sampleDailySeries(priceHistory);
 
     const latestPriceSnapshot = getCachedMarketSnapshot(db, asset);
 
@@ -564,7 +475,7 @@ async function collectData(db, assetIds, config, tracer = null) {
     result.triggeredPlans.push(...triggeredPlans);
 
     // Compute technical indicators
-    const indicators = computeIndicators(priceHistory);
+    const indicators = computeIndicators(dailyPriceHistory);
     // Analyze transaction patterns
     const tradePatterns = analyzeTransactionPatterns(transactions);
 
@@ -580,7 +491,7 @@ async function collectData(db, assetIds, config, tracer = null) {
       asset,
       holding,
       transactions,
-      priceHistory,
+      priceHistory: dailyPriceHistory,
       latestPrice: latestPriceSnapshot.price || null,
       latestPriceTime: latestPriceSnapshot.fetched_at || null,
       latestPriceQuality: latestPriceSnapshot.data_quality,
@@ -1271,6 +1182,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     userFeedback,
     trigger = 'generate',
     resumeTraceId,
+    shouldAbort = null,
   } = params;
 
   const config = getAgentConfig(db);
@@ -1308,6 +1220,7 @@ export async function runStrategyAgent(db, params, onProgress) {
   notify('precheck_done', '配置检查通过');
 
   // ── Step 1: Data Collection ────────────────────────────────
+  abortIfCancelled(shouldAbort, tracer);
   let collectedData;
   let dataQuality;
   if (resumeState.checkpoints.collect?.collectedData) {
@@ -1364,6 +1277,7 @@ export async function runStrategyAgent(db, params, onProgress) {
     tracer.skipStep('analyze', `resumed from trace #${resumeTraceId}`);
     tracer.skipStep('selfcheck', `resumed from trace #${resumeTraceId}`);
   } else {
+    abortIfCancelled(shouldAbort, tracer);
     notify('analyzing', '正在进行市场研判和趋势分析...');
 
     const { report: rawReport, usedFallback: fallbackUsed } = await runAnalysis(collectedData, config, tracer);
@@ -1388,6 +1302,7 @@ export async function runStrategyAgent(db, params, onProgress) {
   });
 
   // ── Step 4: LLM Strategy Generation ───────────────────────
+  abortIfCancelled(shouldAbort, tracer);
   notify('generating', isRegenerate ? '正在基于您的反馈优化策略...' : '正在基于分析结论生成操盘策略...');
 
   let strategyResult;
@@ -1415,6 +1330,7 @@ export async function runStrategyAgent(db, params, onProgress) {
   }
 
   // ── Step 5: Post-Validation & Auto-Fix ────────────────────
+  abortIfCancelled(shouldAbort, tracer);
   tracer.startStep('postvalidate');
   notify('postvalidating', '正在验证和修正策略约束...');
 
@@ -1464,6 +1380,7 @@ export async function runStrategyAgent(db, params, onProgress) {
   }
 
   // ── Step 6: Evaluate Output Quality ───────────────────────
+  abortIfCancelled(shouldAbort, tracer);
   tracer.startStep('evaluate');
   notify('evaluating', '正在评估策略质量...');
 

@@ -1,5 +1,6 @@
 import { getDb } from '../db/database.js';
-import { httpGet } from './price.js';
+import { httpGet, httpRequestRaw } from './price.js';
+import { assertPublicHttpUrl, createGuardedLookup } from '../utils/url-guard.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('news');
@@ -293,40 +294,31 @@ function decodeXmlBuffer(buffer, headers = {}) {
 import https from 'https';
 import http from 'http';
 
-function fetchRss(url, _depth = 0) {
-  if (_depth > 3) return Promise.resolve('');
-  return new Promise((resolve) => {
-    try {
-      const parsed = new URL(url);
-      const lib = parsed.protocol === 'https:' ? https : http;
-      const req = lib.get(url, { headers: { 'User-Agent': 'InvestCompass/1.0', 'Accept': 'application/rss+xml, application/xml, text/xml' } }, res => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          let redirectUrl = res.headers.location;
-          try { redirectUrl = new URL(res.headers.location, url).href; } catch {}
-          res.resume();
-          return fetchRss(redirectUrl, _depth + 1).then(resolve);
-        }
-        const chunks = [];
-        res.on('data', c => chunks.push(Buffer.from(c)));
-        res.on('end', () => resolve(decodeXmlBuffer(Buffer.concat(chunks), res.headers)));
-      });
-      req.on('error', () => resolve(''));
-      req.setTimeout(10000, () => { req.destroy(); resolve(''); });
-    } catch (e) {
-      log.debug('fetchRss invalid URL', { url, error: e.message });
-      resolve('');
-    }
-  });
+async function fetchRss(url) {
+  try {
+    const res = await httpRequestRaw(url, {
+      timeout: 10000,
+      maxBytes: 5 * 1024 * 1024,
+      headers: { 'User-Agent': 'InvestCompass/1.0', 'Accept': 'application/rss+xml, application/xml, text/xml' },
+    });
+    if (res.statusCode < 200 || res.statusCode >= 300) return '';
+    return decodeXmlBuffer(res.buffer, res.headers);
+  } catch {
+    return '';
+  }
 }
 
 // Generic HTML page fetcher with browser-like headers
 function fetchHtml(url, _depth = 0) {
   if (_depth > 3) return Promise.resolve('');
+  const guardError = assertPublicHttpUrl(url, { label: 'Article URL' });
+  if (guardError) return Promise.resolve('');
   return new Promise((resolve) => {
     try {
       const parsed = new URL(url);
       const lib = parsed.protocol === 'https:' ? https : http;
       const req = lib.get(url, {
+        lookup: createGuardedLookup(),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -340,9 +332,22 @@ function fetchHtml(url, _depth = 0) {
           return fetchHtml(redirectUrl, _depth + 1).then(resolve);
         }
         if (res.statusCode !== 200) { res.resume(); return resolve(''); }
-        let body = '';
-        res.on('data', c => { body += c; if (body.length > 500000) { req.destroy(); resolve(body); } });
-        res.on('end', () => resolve(body));
+        // 按 Buffer 收集后再统一解码，避免多字节字符被 chunk 边界截断
+        const chunks = [];
+        let total = 0;
+        let truncated = false;
+        res.on('data', c => {
+          if (truncated) return;
+          const buf = Buffer.isBuffer(c) ? c : Buffer.from(c);
+          total += buf.length;
+          chunks.push(buf);
+          if (total > 500000) {
+            truncated = true;
+            req.destroy();
+            resolve(decodeHtmlBody(Buffer.concat(chunks)));
+          }
+        });
+        res.on('end', () => resolve(decodeHtmlBody(Buffer.concat(chunks))));
       });
       req.on('error', () => resolve(''));
       req.setTimeout(15000, () => { req.destroy(); resolve(''); });
@@ -351,6 +356,14 @@ function fetchHtml(url, _depth = 0) {
       resolve('');
     }
   });
+}
+
+function decodeHtmlBody(buffer) {
+  try {
+    return new TextDecoder('utf-8').decode(buffer);
+  } catch {
+    return buffer.toString('utf8');
+  }
 }
 
 // 从单个 RSS 源抓取并存入数据库

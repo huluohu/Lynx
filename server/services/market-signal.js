@@ -1,27 +1,15 @@
 import { getDb } from '../db/database.js';
-import { getAgentConfig, callLLM, fetchFearGreedIndex } from './strategy-agent.js';
+import { getAgentConfig, fetchFearGreedIndex } from './strategy-agent.js';
+import { callLLM, extractJSON } from './llm.js';
+import { sampleDailySeries } from './agent-evaluator.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('market-signal');
 
-function isValidFutureTime(value) {
-  if (!value) return false;
-  const d = new Date(value);
-  return !isNaN(d.getTime()) && d.getTime() > Date.now();
-}
-
-function extractJSON(text) {
-  try { return JSON.parse(text); } catch {}
-  const match = text?.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) {
-    try { return JSON.parse(match[1].trim()); } catch {}
-  }
-  const start = text?.indexOf('{');
-  const end = text?.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
-  }
-  return null;
+function clampStrength(value, fallback = 5) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(1, Math.min(10, Math.round(num)));
 }
 
 function mean(values) {
@@ -123,12 +111,6 @@ function buildIndicators(history, macroIndicators = {}) {
   return indicators;
 }
 
-function clampStrength(value, fallback = 5) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  return Math.max(1, Math.min(10, Math.round(num)));
-}
-
 function fallbackSignal(db, asset, indicators) {
   const latest = Number(indicators.latest_price);
   const ma5 = Number(indicators.ma5);
@@ -188,13 +170,13 @@ export async function analyzeMarketSignals(assetId, macroIndicators = null) {
   const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
   if (!asset) throw new Error('资产不存在');
 
-  const history = db.prepare(`SELECT price, currency, fetched_at FROM (
-    SELECT price, currency, fetched_at
+  // 信号指标（MA/RSI/1d/7d/30d 涨跌）按日线口径计算：
+  // price_cache 是分钟级缓存，直接 LIMIT 120 只覆盖约 10 小时，会把小时级变化标成"7日/30日涨跌"。
+  const rawHistory = db.prepare(`SELECT price, currency, fetched_at
     FROM price_cache
-    WHERE asset_id = ?
-    ORDER BY fetched_at DESC
-    LIMIT 120
-  ) ORDER BY fetched_at ASC`).all(assetId);
+    WHERE asset_id = ? AND fetched_at >= datetime('now', '-90 days')
+    ORDER BY fetched_at ASC, id ASC`).all(assetId);
+  const history = sampleDailySeries(rawHistory);
 
   const resolvedMacroIndicators = isCryptoAsset(asset)
     ? (macroIndicators || { fearGreed: await fetchFearGreedIndex() })
@@ -234,7 +216,8 @@ export async function analyzeMarketSignals(assetId, macroIndicators = null) {
             strength: clampStrength(parsed.strength, fallback.strength),
             summary: parsed.summary || fallback.summary,
             ai_analysis: parsed.ai_analysis || fallback.ai_analysis,
-            valid_until: isValidFutureTime(parsed.valid_until) ? parsed.valid_until : fallback.valid_until,
+            // 有效期由服务端按 signal_valid_hours 统一控制，不采信模型给出的未来时间
+            valid_until: fallback.valid_until,
           };
         } else {
           log.warn('Market signal parse failed, using fallback', { assetId, preview: content?.slice?.(0, 200) || response?.error?.message || '' });
@@ -264,9 +247,25 @@ export async function analyzeMarketSignals(assetId, macroIndicators = null) {
   return normalizeSavedSignal(saved);
 }
 
-export async function analyzeAllAssets() {
+function hasActiveInterest(db, assetId) {
+  const holding = db.prepare("SELECT 1 FROM holdings WHERE asset_id = ? AND status = 'active' LIMIT 1").get(assetId);
+  if (holding) return true;
+  // %"5"% 带引号匹配 JSON 数组元素，避免 id=5 误匹配 15/51
+  const strategy = db.prepare(`SELECT 1
+    FROM strategies s
+    JOIN plan_sets ps ON ps.strategy_id = s.id AND ps.status = 'active'
+    WHERE s.status = 'active'
+      AND (s.asset_id = ? OR s.asset_ids LIKE ?)
+    LIMIT 1`).get(assetId, `%"${Number(assetId)}"%`);
+  return Boolean(strategy);
+}
+
+export async function analyzeAllAssets({ onlyActive = false } = {}) {
   const db = getDb();
-  const assets = db.prepare('SELECT id, type FROM assets ORDER BY id ASC').all();
+  let assets = db.prepare('SELECT id, type FROM assets ORDER BY id ASC').all();
+  if (onlyActive) {
+    assets = assets.filter(asset => hasActiveInterest(db, asset.id));
+  }
   const hasCrypto = assets.some(asset => isCryptoAsset(asset));
   const macroIndicators = hasCrypto ? { fearGreed: await fetchFearGreedIndex() } : {};
   const signals = [];

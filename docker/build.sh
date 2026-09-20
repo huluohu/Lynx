@@ -207,6 +207,13 @@ if [ -z "$IMAGE_NAMESPACE" ]; then
     exit 1
 fi
 
+# 防呆：把版本号（如 1.3.3）误输入到 namespace 提示，会推到不存在的仓库导致 push denied
+if printf '%s' "$IMAGE_NAMESPACE" | grep -Eq '^[0-9]+(\.[0-9]+)+$|^[0-9]+$'; then
+    print_error "\"$IMAGE_NAMESPACE\" 是版本号而不是 namespace（应为 ${DOCKERHUB_USERNAME:-你的 Docker Hub 用户名}）"
+    print_error "请重新运行 bash docker/build.sh，在 namespace 提示处直接回车使用默认值，在随后的「版本号」提示处再输入版本"
+    exit 1
+fi
+
 IMAGE_NAME="${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}"
 print_info "镜像目标：${REGISTRY}/${IMAGE_NAME}"
 echo ""

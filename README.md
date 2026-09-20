@@ -81,11 +81,11 @@ Agent 相关能力：
 
 ### 行情、信号与资讯
 
-- **行情缓存**：所有资产价格写入 `price_cache`，默认 5 分钟新鲜窗口；接口失败时优先展示缓存快照。
+- **行情缓存**：所有资产价格写入 `price_cache`，默认 5 分钟新鲜窗口；接口失败时优先展示缓存快照。超过保留期的明细自动降采样为每日一笔，避免库无限膨胀。
 - **多行情源**：BTC 默认支持 CoinGecko、Binance、Coinbase、Kraken、OKX、Bitstamp、Gemini；黄金默认支持 neodata 与 Swissquote。
 - **手工价格**：支持手动写入单个资产价格，便于接口不可用或特殊资产补录。
 - **汇率服务**：支持 USD/CNY 汇率缓存，用于跨币种组合汇总。
-- **市场信号**：可对单资产或全部资产执行信号分析，并在仪表盘展示最新信号。
+- **市场信号**：可对单资产或全部资产执行信号分析，并在仪表盘展示最新信号。定时分析仅覆盖有持仓或活跃策略的资产（技术指标按日线口径计算），全量分析可手动触发
 - **资讯缓存**：支持内置资讯源、自定义资讯源、定时刷新、正文缓存和批量缓存。
 
 ### 设置、推送与多端体验
@@ -190,6 +190,9 @@ docker compose pull
 docker compose up -d
 ```
 
+> `docker-compose.yml` 不再内置任何密钥：启动前必须在 `docker/.env`（已被 `.gitignore` 忽略）中配置
+> `JWT_SECRET` 与 `AUTH_PASSWORD`，否则容器会拒绝启动。生成密钥：`openssl rand -base64 48`。
+
 默认端口：
 
 - 宿主机：`3003`
@@ -234,10 +237,12 @@ DOCKERHUB_TOKEN=your-dockerhub-access-token
 | --- | --- | --- |
 | `PORT` | `3456` | 后端监听端口 |
 | `DB_PATH` | `data/lynx.db` | SQLite 数据库路径 |
-| `JWT_SECRET` | `lynx-invest-jwt-secret` | 登录签名密钥，生产环境必须替换 |
+| `JWT_SECRET` | `lynx-invest-jwt-secret` | 登录签名密钥，生产环境必须替换；更换后所有已签发 token 失效 |
 | `AUTH_USERNAME` | `admin` | 后台登录账号 |
 | `AUTH_PASSWORD` | `admin123` | 后台登录密码，生产环境必须替换 |
 | `AUTH_GATEWAY_PORT` | `19000` | neodata 金价代理端口 |
+| `CORS_ORIGIN` | 空（同源） | 跨域白名单（逗号分隔）。默认同源部署，不发 CORS 头 |
+| `STRICT_URL_GUARD` | `0`（不拦截） | 设为 `1` 后，自定义行情/资讯源指向内网地址时会被拒绝（默认仅提示不拦截，兼容 fake-ip 代理/内网自建源） |
 | `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` | 空 / 空 / `gpt-4o-mini` | AI 策略生成与 Agent 默认模型配置 |
 | `AGENT_LLM_RETRIES` | `3` | Agent LLM 调用重试次数，系统设置中的 `agent_llm_retries` 优先级更高 |
 | `AGENT_SEARCH_API_URL` / `AGENT_SEARCH_API_KEY` | 空 / 空 | Agent 可选外部搜索接口配置 |
@@ -252,6 +257,9 @@ DOCKERHUB_TOKEN=your-dockerhub-access-token
 - `news_refresh_interval`、`news_sources_enabled`、`news_auto_cache`、`news_cache_batch_size`
 - `push_enabled`、`push_webhook_type`、`push_webhook_url`
 - `ai_api_url`、`ai_api_key`、`ai_model`、`agent_analysis_model`、`agent_llm_retries`
+- 数据保留：`price_retention_days`（价格明细保留天数，过期降采样为每日一笔，默认 45）、
+  `signal_retention_days`（市场信号，默认 90）、`trace_retention_days`（Agent 轨迹，默认 90）、
+  `generation_log_retention_days`（AI 草稿，默认 90）、`source_attempt_retention_days`（行情源尝试记录，默认 14）
 
 ## 主要 API 模块
 
@@ -279,7 +287,11 @@ DOCKERHUB_TOKEN=your-dockerhub-access-token
 
 ## 安全建议
 
-- 首次部署后立即修改 `AUTH_USERNAME`、`AUTH_PASSWORD`、`JWT_SECRET`
+- 首次部署后立即修改 `AUTH_USERNAME`、`AUTH_PASSWORD`、`JWT_SECRET`（更换 `JWT_SECRET` 会使所有已签发 token 失效，需重新登录）
+- 登录接口内置限速：15 分钟最多 10 次尝试，连续失败 5 次锁定该 IP 10 分钟
+- 服务默认只做同源部署（不发 CORS 头）；需要跨域访问时通过 `CORS_ORIGIN` 配置白名单，勿使用 `*`
+- 自定义行情源/资讯源/AI API/Webhook 地址默认**不做内网拦截**（兼容 fake-ip 代理、内网自建源、本地 Ollama 等场景），仅校验 http/https 格式；解析到私网地址时只在日志中提示一次。需要强制拦截时设置 `STRICT_URL_GUARD=1`
+- 删除资产会级联删除其持仓、交易历史、操盘计划和行情缓存，且不可恢复；API 需显式带 `?confirm=cascade`，前端会二次确认
 - 不要将真实的 `AI_API_KEY`、`agent_search_api_key`、Webhook 地址写入仓库
 - 生产环境建议仅在可信内网或反向代理认证之后暴露服务
 - 定期备份 `data/`，升级前先备份数据库

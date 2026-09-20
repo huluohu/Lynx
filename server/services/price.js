@@ -1,6 +1,7 @@
 import http from 'http';
 import https from 'https';
 import { createLogger } from '../utils/logger.js';
+import { assertPublicHttpUrl, createGuardedLookup } from '../utils/url-guard.js';
 import { getDb } from '../db/database.js';
 import {
   isStablePegProfile,
@@ -159,7 +160,8 @@ function fillTemplate(template, asset, source) {
 async function fetchCustomHttpSource(asset, source) {
   const config = (() => { try { return JSON.parse(source.config_json || '{}'); } catch { return {}; } })();
   const url = fillTemplate(config.url_template || config.url, asset, source);
-  if (!/^https?:\/\//i.test(url)) throw new Error('Invalid custom source URL');
+  const guardError = assertPublicHttpUrl(url, { label: 'Custom source URL' });
+  if (guardError) throw new Error(guardError);
   const headers = config.headers && typeof config.headers === 'object' ? config.headers : {};
   const data = await httpGet(url, { timeout: Number(source.timeout_ms || config.timeout_ms || 5000), headers, throwOnError: true });
   if (!data) return null;
@@ -317,102 +319,94 @@ export function getCachedUsdCny({ refresh = true } = {}) {
 }
 
 // ===== HTTP 工具 =====
-export function httpGet(url, opts = {}) {
+const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * 底层 GET：跟随重定向（最多 3 跳）、限制响应体大小、DNS 解析结果经 url-guard 校验。
+ * 成功时返回 { statusCode, headers, buffer }，失败 reject。
+ */
+export function httpRequestRaw(url, opts = {}, _depth = 0) {
   return new Promise((resolve, reject) => {
-    let settled = false;
-
-    function done(value) {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    }
-
-    function fail(error) {
-      if (settled) return;
-      settled = true;
-      if (opts.throwOnError) reject(error);
-      else resolve(null);
-    }
-
+    const maxBytes = Number.isFinite(opts.maxBytes) ? opts.maxBytes : DEFAULT_MAX_BYTES;
     try {
       const lib = url.startsWith('https') ? https : http;
       const reqOpts = {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'InvestTracker/1.0', ...opts.headers }
+        headers: { 'Accept': 'application/json', 'User-Agent': 'InvestTracker/1.0', ...opts.headers },
+        lookup: createGuardedLookup(),
       };
-      const req = lib.get(url, reqOpts, res => {
-        let body = '';
-        res.on('data', c => body += c);
-        res.on('end', () => {
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            fail(new Error(`HTTP ${res.statusCode}`));
+      const req = lib.get(url, reqOpts, (res) => {
+        const status = res.statusCode;
+        if (status >= 300 && status < 400 && res.headers.location) {
+          if (_depth >= 3) {
+            res.resume();
+            return reject(new Error('Too many redirects'));
+          }
+          res.resume();
+          let next;
+          try {
+            next = new URL(res.headers.location, url).toString();
+          } catch {
+            return reject(new Error('Invalid redirect URL'));
+          }
+          return resolve(httpRequestRaw(next, opts, _depth + 1));
+        }
+        const chunks = [];
+        let total = 0;
+        res.on('data', (c) => {
+          total += c.length;
+          if (total > maxBytes) {
+            req.destroy();
+            reject(new Error(`Response body exceeds ${maxBytes} bytes limit`));
             return;
           }
-
-          try {
-            done(JSON.parse(body));
-          } catch {
-            const summary = String(body || '').slice(0, 120).replace(/\s+/g, ' ');
-            fail(new Error(`Invalid JSON response${summary ? `: ${summary}` : ''}`));
-          }
+          chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c));
         });
+        res.on('error', (e) => reject(e instanceof Error ? e : new Error(String(e))));
+        res.on('end', () => resolve({ statusCode: status, headers: res.headers, buffer: Buffer.concat(chunks) }));
       });
-      req.on('error', error => fail(new Error(error?.message || 'HTTP request failed')));
+      req.on('error', (e) => reject(e instanceof Error ? e : new Error(String(e))));
       req.setTimeout(opts.timeout || 8000, () => {
         req.destroy();
-        fail(new Error(`Request timeout after ${opts.timeout || 8000}ms`));
+        reject(new Error(`Request timeout after ${opts.timeout || 8000}ms`));
       });
     } catch (error) {
-      fail(error);
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
+}
+
+async function fetchWithPolicy(url, opts, handle) {
+  try {
+    const res = await httpRequestRaw(url, opts);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw new Error(`HTTP ${res.statusCode}`);
+    }
+    return handle(res);
+  } catch (e) {
+    if (opts.throwOnError) throw e instanceof Error ? e : new Error(String(e));
+    return null;
+  }
+}
+
+export function httpGet(url, opts = {}) {
+  return fetchWithPolicy(url, opts, (res) => {
+    const body = res.buffer.toString('utf8');
+    try {
+      return JSON.parse(body);
+    } catch {
+      const summary = String(body || '').slice(0, 120).replace(/\s+/g, ' ');
+      throw new Error(`Invalid JSON response${summary ? `: ${summary}` : ''}`);
     }
   });
 }
 
 export function httpGetText(url, opts = {}) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-
-    function done(value) {
-      if (settled) return;
-      settled = true;
-      resolve(value);
-    }
-
-    function fail(error) {
-      if (settled) return;
-      settled = true;
-      if (opts.throwOnError) reject(error);
-      else resolve(null);
-    }
-
+  return fetchWithPolicy(url, opts, (res) => {
+    const encoding = opts.encoding || 'utf8';
     try {
-      const lib = url.startsWith('https') ? https : http;
-      const reqOpts = {
-        headers: { 'Accept': '*/*', 'User-Agent': 'InvestTracker/1.0', ...opts.headers }
-      };
-      const req = lib.get(url, reqOpts, res => {
-        const chunks = [];
-        res.on('data', c => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-        res.on('end', () => {
-          if (res.statusCode < 200 || res.statusCode >= 300) {
-            fail(new Error(`HTTP ${res.statusCode}`));
-            return;
-          }
-          const buffer = Buffer.concat(chunks);
-          const encoding = opts.encoding || 'utf8';
-          try {
-            done(new TextDecoder(encoding).decode(buffer));
-          } catch {
-            done(buffer.toString(encoding));
-          }
-        });
-      });
-      req.on('error', error => fail(new Error(error?.message || 'HTTP request failed')));
-      req.setTimeout(opts.timeout || 8000, () => {
-        req.destroy();
-        fail(new Error(`Request timeout after ${opts.timeout || 8000}ms`));
-      });
-    } catch (error) {
-      fail(error);
+      return new TextDecoder(encoding).decode(res.buffer);
+    } catch {
+      return res.buffer.toString(encoding);
     }
   });
 }

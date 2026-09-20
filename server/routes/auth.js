@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import jwt from 'jsonwebtoken';
+import { timingSafeEqual, createHash } from 'crypto';
 import { createLogger } from '../utils/logger.js';
+import createRateLimiter, { createHitCounter } from '../utils/rate-limit.js';
 
 const log = createLogger('auth');
 
@@ -15,8 +17,22 @@ if (!process.env.JWT_SECRET || !process.env.AUTH_PASSWORD) {
   log.warn('⚠️  Using default credentials. Set JWT_SECRET, AUTH_USERNAME, AUTH_PASSWORD env vars for production!');
 }
 
+// 登录限速：全局尝试限制 + 失败专用锁定（连续失败 5 次锁 10 分钟）
+const loginAttemptLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+const loginFailureCounter = createHitCounter({ windowMs: 10 * 60 * 1000, max: 5, lockoutMs: 10 * 60 * 1000 });
+
+function safeEqual(a, b) {
+  // 先做定长摘要再比较，避免时序侧信道与长度泄露
+  const da = createHash('sha256').update(String(a ?? '')).digest();
+  const db = createHash('sha256').update(String(b ?? '')).digest();
+  return timingSafeEqual(da, db);
+}
+
+function cleanLogValue(value) {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').slice(0, 80);
+}
+
 export function authMiddleware(req, res, next) {
-  if (req.path === '/api/health' || req.path === '/api/auth/login') return next();
   if (req.method === 'OPTIONS') return next();
 
   const auth = req.headers.authorization;
@@ -38,16 +54,27 @@ export function authMiddleware(req, res, next) {
 export function createAuthRouter() {
   const router = Router();
 
-  router.post('/login', (req, res) => {
-    const { username, password, rememberMe } = req.body;
-    if (username !== AUTH_USERNAME || password !== AUTH_PASSWORD) {
-      log.warn('Login failed', { username, ip: req.ip });
+  router.post('/login', loginAttemptLimiter, (req, res) => {
+    const { username, password, rememberMe } = req.body || {};
+    const ipKey = req.ip || req.connection?.remoteAddress || 'unknown';
+
+    const failureCheck = loginFailureCounter.hit(`${ipKey}:fail`);
+    if (!failureCheck.ok) {
+      log.warn('Login blocked: too many failures', { ip: ipKey });
+      res.setHeader('Retry-After', String(failureCheck.retryAfterSec));
+      return res.status(429).json({ success: false, error: `失败次数过多，请 ${failureCheck.retryAfterSec} 秒后重试` });
+    }
+
+    if (!safeEqual(username, AUTH_USERNAME) || !safeEqual(password, AUTH_PASSWORD)) {
+      log.warn('Login failed', { username: cleanLogValue(username), ip: ipKey });
       return res.status(401).json({ success: false, error: '用户名或密码错误' });
     }
+
+    loginFailureCounter.reset(`${ipKey}:fail`);
     const expiry = rememberMe ? TOKEN_EXPIRY_REMEMBER : TOKEN_EXPIRY;
-    const token = jwt.sign({ username, role: 'admin' }, JWT_SECRET, { expiresIn: expiry });
-    log.info('Login successful', { username, ip: req.ip, rememberMe: !!rememberMe });
-    res.json({ success: true, data: { token, username, expiresIn: expiry } });
+    const token = jwt.sign({ username: AUTH_USERNAME, role: 'admin' }, JWT_SECRET, { expiresIn: expiry });
+    log.info('Login successful', { ip: ipKey, rememberMe: !!rememberMe });
+    res.json({ success: true, data: { token, username: AUTH_USERNAME, expiresIn: expiry } });
   });
 
   router.get('/me', (req, res) => {

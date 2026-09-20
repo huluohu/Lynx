@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { applyTradeToHoldings } from '../services/holdings-service.js';
 import { createNotification } from './notifications.js';
 import { pushPendingNotifications } from '../services/push.js';
 
@@ -36,39 +37,40 @@ router.post('/', (req, res) => {
     return res.status(400).json({ success: false, error: 'type must be "buy" or "sell"' });
   }
 
+  // Numeric validation：字符串/NaN 一旦入库会在持仓计算中传染成 NaN
+  const qty = Number(quantity);
+  const prc = Number(price);
+  const feeNum = Number(fee) || 0;
+  if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(prc) || prc <= 0) {
+    return res.status(400).json({ success: false, error: '数量和价格必须是大于 0 的数字' });
+  }
+  if (!Number.isFinite(feeNum) || feeNum < 0) {
+    return res.status(400).json({ success: false, error: '手续费不能为负数' });
+  }
+
   // Validate sell doesn't exceed holding
   if (type === 'sell') {
     const holding = db.prepare('SELECT * FROM holdings WHERE asset_id = ? AND status = ?').get(asset_id, 'active');
-    if (!holding || holding.quantity < quantity) {
+    if (!holding || Number(holding.quantity) < qty) {
       return res.status(400).json({ success: false, error: '卖出数量不能超过持仓数量' });
     }
   }
 
   // Wrap everything in a transaction for atomicity
   const executeTransaction = db.transaction(() => {
-    const total = quantity * price + (type === 'buy' ? fee : -fee);
+    const total = qty * prc + (type === 'buy' ? feeNum : -feeNum);
     const info = db.prepare(`INSERT INTO transactions (asset_id, type, quantity, price, total, fee, executed_at, notes)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(asset_id, type, quantity, price, total, fee, executed_at || new Date().toISOString(), notes || null);
+      .run(asset_id, type, qty, prc, total, feeNum, executed_at || new Date().toISOString(), notes || null);
 
-    // 1. 自动更新持仓
-    const holding = db.prepare('SELECT * FROM holdings WHERE asset_id = ? AND status = ?').get(asset_id, 'active');
-    if (holding) {
-      if (type === 'buy') {
-        const newQty = holding.quantity + quantity;
-        const newTotal = holding.total_invested + total;
-        const newAvgCost = newTotal / newQty;
-        db.prepare('UPDATE holdings SET quantity = ?, avg_cost = ?, total_invested = ? WHERE id = ?')
-          .run(newQty, Math.round(newAvgCost * 100) / 100, Math.round(newTotal * 100) / 100, holding.id);
-      } else {
-        const newQty = holding.quantity - quantity;
-        const ratio = newQty / holding.quantity;
-        const newTotal = holding.total_invested * ratio;
-        const newAvgCost = newQty > 0 ? newTotal / newQty : 0;
-        db.prepare('UPDATE holdings SET quantity = ?, avg_cost = ?, total_invested = ? WHERE id = ?')
-          .run(newQty, Math.round(newAvgCost * 100) / 100, Math.round(newTotal * 100) / 100, holding.id);
-      }
-    }
+    // 1. 自动更新持仓（统一走共享持仓服务，与 /api/history、计划执行同口径）
+    applyTradeToHoldings(db, {
+      assetId: Number(asset_id),
+      type,
+      quantity: qty,
+      amount: total,
+      price: prc,
+    });
 
     // 2. 检查触发操盘计划
     const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(asset_id);
@@ -124,7 +126,7 @@ router.post('/', (req, res) => {
       createNotification(db, {
         type: 'trade_executed',
         title: `${type === 'buy' ? '买入' : '卖出'} ${asset.name}`,
-        message: `${type === 'buy' ? '买入' : '卖出'} ${quantity} ${asset.symbol} @ ${currSymbol}${price}，金额 ${currSymbol}${Math.round(total)}`,
+        message: `${type === 'buy' ? '买入' : '卖出'} ${qty} ${asset.symbol} @ ${currSymbol}${prc}，金额 ${currSymbol}${Math.round(total)}`,
         asset_id,
         severity: 'info',
         channel: 'all',

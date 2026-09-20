@@ -1,23 +1,10 @@
 import { getDb } from '../db/database.js';
-import { getAgentConfig, callLLM } from './strategy-agent.js';
+import { getAgentConfig } from './strategy-agent.js';
+import { callLLM, extractJSON } from './llm.js';
 import { getLatestPriceRows } from './latest-price.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('ai-review');
-
-function extractJSON(text) {
-  try { return JSON.parse(text); } catch {}
-  const match = text?.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) {
-    try { return JSON.parse(match[1].trim()); } catch {}
-  }
-  const start = text?.indexOf('{');
-  const end = text?.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
-  }
-  return null;
-}
 
 function safeParse(value, fallback) {
   try { return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback); } catch { return fallback; }

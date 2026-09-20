@@ -84,7 +84,13 @@ function postWebhook(url, payload, type = 'custom') {
       };
       const req = lib.request(options, (res) => {
         let body = '';
-        res.on('data', c => body += c);
+        res.on('data', c => {
+          body += c;
+          if (body.length > 1024 * 1024) {
+            req.destroy();
+            body = body.slice(0, 1024 * 1024);
+          }
+        });
         res.on('end', () => {
           try {
             validateWebhookResponse(type, res.statusCode, body);
@@ -170,10 +176,23 @@ export async function sendTestPush() {
   }
 }
 
+let pushInFlight = null;
+
 /**
- * Send batch notifications (called by strategy monitor)
+ * Send batch notifications (called by strategy monitor / manual push).
+ * 进程内去重：定时器与手动触发并发调用时只执行一次，防止同一批通知重复推送。
  */
 export async function pushPendingNotifications() {
+  if (pushInFlight) return pushInFlight;
+  pushInFlight = doPushPendingNotifications();
+  try {
+    return await pushInFlight;
+  } finally {
+    pushInFlight = null;
+  }
+}
+
+async function doPushPendingNotifications() {
   const config = getWebhookConfig();
   if (!config.enabled || !config.url) return 0;
 

@@ -37,7 +37,8 @@ export function isNotificationTypeEnabled(db, type) {
 
 // GET 未读通知列表
 router.get('/', (req, res) => {
-  const { status, limit = 20 } = req.query;
+  const { status } = req.query;
+  const parsedLimit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
   let sql = 'SELECT * FROM notifications';
   const params = [];
   if (status) {
@@ -45,7 +46,7 @@ router.get('/', (req, res) => {
     params.push(status);
   }
   sql += ' ORDER BY created_at DESC LIMIT ?';
-  params.push(Number(limit));
+  params.push(parsedLimit);
   const rows = getDb().prepare(sql).all(...params).map(normalizeNotification);
   res.json({ success: true, data: rows });
 });
@@ -118,41 +119,19 @@ router.delete('/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// POST 推送微信通知（原子操作：获取 → 标记 → 返回）
-router.post('/send-wechat', (req, res) => {
-  const db = getDb();
-
-  // Atomically select and mark notifications as sent
-  const sendBatch = db.transaction(() => {
-    const rows = db.prepare(`SELECT * FROM notifications
-      WHERE status = 'pending' AND channel IN ('wechat', 'all')
-      ORDER BY created_at ASC`).all();
-
-    if (rows.length === 0) return { rows: [], message: '' };
-
-    // Mark as sent
-    const ids = rows.map(r => r.id);
-    const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`UPDATE notifications SET status = 'sent', sent_at = datetime('now') WHERE id IN (${placeholders})`).run(...ids);
-
-    // Format message
-    const lines = ['📊 **投资提醒**'];
-    for (const n of rows) {
-      const icons = {
-        plan_triggered: '📌',
-        plan_approaching: '⏳',
-        stop_loss: '🛑',
-        price_swing: '📊',
-        trade_executed: '💱',
-      };
-      lines.push(`${icons[n.type] || '🔔'} ${n.title}: ${n.message}`);
-    }
-
-    return { rows, message: lines.join('\n') };
-  });
-
-  const result = sendBatch();
-  res.json({ success: true, data: result.rows, message: result.message });
+// POST 立即推送待发送通知（服务端投递成功后才标记 sent，避免通知丢失）
+router.post('/send-wechat', async (req, res) => {
+  try {
+    const pushed = await pushPendingNotifications();
+    const rows = getDb().prepare(`SELECT * FROM notifications
+      WHERE status = 'sent' AND channel IN ('wechat', 'all')
+      ORDER BY sent_at DESC, id DESC LIMIT 10`).all();
+    const icons = { plan_triggered: '📌', plan_approaching: '⏳', stop_loss: '🛑', price_swing: '📊', trade_executed: '💱' };
+    const message = ['📊 **投资提醒**', ...rows.map(n => `${icons[n.type] || '🔔'} ${n.title}: ${n.message}`)].join('\n');
+    res.json({ success: true, data: rows, message, pushed });
+  } catch (e) {
+    res.status(502).json({ success: false, error: e.message || '推送失败，通知保持待发送状态' });
+  }
 });
 
 // 插入通知（被其他模块调用）

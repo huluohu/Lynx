@@ -110,6 +110,7 @@ function buildAlerts(db) {
     ORDER BY
       CASE n.severity WHEN 'danger' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END,
       n.created_at DESC
+    LIMIT 100
   `).all();
 
   const levelMap = { danger: 'danger', warning: 'warning', info: 'info' };
@@ -182,12 +183,26 @@ router.get('/alerts', (req, res) => {
 // GET 资产配置
 router.get('/allocation', (req, res) => {
   const db = getDb();
-  // 按资产类型汇总
-  const rows = db.prepare(`SELECT a.type, SUM(h.total_invested) as invested, COUNT(*) as count
+  const usdCny = getCachedUsdCny();
+  const rows = db.prepare(`SELECT a.type, a.currency, SUM(h.total_invested) as invested, COUNT(*) as count
     FROM holdings h JOIN assets a ON h.asset_id = a.id WHERE h.status = 'active'
-    GROUP BY a.type`).all();
+    GROUP BY a.type, a.currency`).all();
 
-  res.json({ success: true, data: rows });
+  // 与 summary 同口径折算到基础币种（USD/USDT×汇率），避免混币直接求和
+  const byType = new Map();
+  for (const row of rows) {
+    const item = byType.get(row.type) || { type: row.type, invested: 0, invested_base: 0, count: 0 };
+    item.invested += Number(row.invested) || 0;
+    item.invested_base += convertToCny(row.invested, row.currency, usdCny);
+    item.count += Number(row.count) || 0;
+    byType.set(row.type, item);
+  }
+  const data = [...byType.values()].map(item => ({
+    ...item,
+    invested_base: Math.round(item.invested_base * 100) / 100,
+  }));
+
+  res.json({ success: true, data });
 });
 
 export default router;

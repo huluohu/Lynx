@@ -18,9 +18,12 @@ services:
       NODE_OPTIONS: "--max-old-space-size=512"
       # neodata 代理（金价查询需要）
       AUTH_GATEWAY_PORT: "19000"
-      JWT_SECRET: DEUoQFwXHIwS8JZ7spl212BJShlo4mjPITjwMHkMebmETc6k7SaXSoKY7AEMv27u
-      AUTH_USERNAME: admin
-      AUTH_PASSWORD: admin123
+      # 安全要求：JWT_SECRET / AUTH_PASSWORD 必须通过 docker/.env 提供（该文件已被 .gitignore 忽略）。
+      # 生成方式：openssl rand -base64 48
+      # 注意：更换 JWT_SECRET 会使所有已签发的登录 token 失效，需要重新登录。
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required - put it in docker/.env, e.g. openssl rand -base64 48}
+      AUTH_USERNAME: ${AUTH_USERNAME:-admin}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:?AUTH_PASSWORD is required - put it in docker/.env (change the default admin123)}
     volumes:
       # 持久化 SQLite 数据库
       - ../data:/app/data:rw

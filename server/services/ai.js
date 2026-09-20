@@ -2,10 +2,10 @@
  * AI 策略生成服务
  * 调用 LLM API，根据持仓数据生成策略参数和操盘计划
  */
-import http from 'http';
-import https from 'https';
 import { createLogger } from '../utils/logger.js';
 import { getCachedMarketSnapshot } from './market-cache.js';
+import { sampleDailySeries, validateStrategyResultShape } from './agent-evaluator.js';
+import { callLLM, extractJSON } from './llm.js';
 
 const log = createLogger('ai');
 
@@ -144,107 +144,6 @@ ${isMulti ? `- 每条操盘计划的 asset_id 必须是以下之一: ${assetList
 }
 
 /**
- * 调用 OpenAI 兼容 API（带重试和状态码检查）
- */
-function callLLM(apiUrl, apiKey, model, prompt, retries = 2) {
-  return new Promise(async (resolve) => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      const result = await _doLLMRequest(apiUrl, apiKey, model, prompt);
-      if (result) {
-        // Check for API-level errors
-        if (result.error) {
-          log.warn('LLM API error', { error: result.error.message, attempt });
-          if (attempt < retries) {
-            await sleep(1000 * (attempt + 1)); // backoff
-            continue;
-          }
-        }
-        resolve(result);
-        return;
-      }
-      // null result = network/timeout error
-      if (attempt < retries) {
-        log.warn('LLM request failed, retrying', { attempt: attempt + 1 });
-        await sleep(1000 * (attempt + 1));
-      }
-    }
-    resolve(null);
-  });
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function _doLLMRequest(apiUrl, apiKey, model, prompt) {
-  return new Promise((resolve) => {
-    const url = new URL(apiUrl.endsWith('/chat/completions') ? apiUrl : `${apiUrl}/chat/completions`);
-    const isHttps = url.protocol === 'https:';
-    const lib = isHttps ? https : http;
-
-    const body = JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: '你是一位专业量化策略师，只输出 JSON，不输出任何其他文字。' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 2000,
-    });
-
-    const opts = {
-      hostname: url.hostname,
-      port: url.port || (isHttps ? 443 : 80),
-      path: url.pathname + url.search,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Length': Buffer.byteLength(body),
-      },
-    };
-
-    const req = lib.request(opts, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        if (res.statusCode >= 500 || res.statusCode === 429) {
-          log.warn('LLM HTTP error', { status: res.statusCode });
-          resolve(null); // trigger retry
-          return;
-        }
-        try { resolve(JSON.parse(data)); } catch { resolve(null); }
-      });
-    });
-    req.on('error', () => resolve(null));
-    req.setTimeout(30000, () => { req.destroy(); resolve(null); });
-    req.write(body);
-    req.end();
-  });
-}
-
-/**
- * 从 LLM 响应中提取 JSON
- */
-function extractJSON(text) {
-  // 尝试直接解析
-  try { return JSON.parse(text); } catch {}
-
-  // 尝试提取 ```json ... ``` 块
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) {
-    try { return JSON.parse(match[1].trim()); } catch {}
-  }
-
-  // 尝试找到第一个 { 和最后一个 }
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
-  }
-
-  return null;
-}
-
-/**
  * AI 生成策略主入口（支持多资产）
  */
 export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, riskLevel }) {
@@ -269,12 +168,17 @@ export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, 
     const marketSnapshot = getCachedMarketSnapshot(db, asset);
     const currentPrice = marketSnapshot.price;
 
-    // Price history for trend analysis
-    const priceHistory = db.prepare(
+    // Price history for trend analysis（日线口径）
+    const priceHistory = sampleDailySeries(db.prepare(
       "SELECT price, fetched_at FROM price_cache WHERE asset_id = ? AND fetched_at > datetime('now', '-30 days') ORDER BY fetched_at ASC"
-    ).all(id);
+    ).all(id));
 
-    const recentTrades = db.prepare('SELECT * FROM transactions WHERE asset_id = ? ORDER BY executed_at DESC LIMIT 10').all(id);
+    const recentTrades = db.prepare(
+      `SELECT id, type, quantity, price, total, COALESCE(fee, 0) AS fee, executed_at
+       FROM trade_history
+       WHERE asset_id = ? AND COALESCE(reverted, 0) = 0
+       ORDER BY datetime(executed_at) DESC, id DESC LIMIT 10`
+    ).all(id);
 
     assetList.push({
       asset,
@@ -322,7 +226,10 @@ export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, 
 
   // 调用 LLM
   const startTime = Date.now();
-  const response = await callLLM(config.apiUrl, config.apiKey, config.model, prompt);
+  const response = await callLLM(config.apiUrl, config.apiKey, config.model, [
+    { role: 'system', content: '你是一位专业量化策略师，只输出 JSON，不输出任何其他文字。' },
+    { role: 'user', content: prompt },
+  ], { temperature: 0.7, maxTokens: 2000, timeout: 30000, retries: 2 });
   const elapsed = Date.now() - startTime;
 
   if (!response) {
@@ -345,6 +252,15 @@ export async function aiGenerateStrategy(db, { assetIds, assetId, budget, goal, 
   if (!result || !result.strategy || !result.plans) {
     log.error('AI JSON parse failed', { contentPreview: content.slice(0, 300) });
     throw new Error('AI 返回格式异常，无法解析策略');
+  }
+
+  // 结构校验：非法 action/trigger_type/asset_id 的计划不允许流入 trading_plans
+  // （执行端把非 buy 一律当 sell 处理，脏数据会变成错误的卖出计划）
+  const shape = validateStrategyResultShape(result, { assets: assetList });
+  if (!shape.valid) {
+    const errors = shape.issues.filter(i => i.severity === 'error').map(i => i.message).join('; ');
+    log.error('AI strategy shape invalid', { errors });
+    throw new Error(`AI 返回的策略包含无效计划: ${errors}`);
   }
 
   log.info('AI strategy generated', { strategyName: result.strategy.name, plans: result.plans.length });

@@ -77,8 +77,19 @@ router.put('/:id', (req, res) => {
 });
 
 // DELETE
+// 级联影响面大（holdings/trade_history/trading_plans/price_cache 均 ON DELETE CASCADE），
+// 必须显式带 ?confirm=cascade 才执行，防止误调用一键抹掉全部历史。
 router.delete('/:id', (req, res) => {
   const db = getDb();
+  const existing = db.prepare('SELECT id, name FROM assets WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
+  if (req.query.confirm !== 'cascade') {
+    return res.status(400).json({
+      success: false,
+      code: 'CASCADE_CONFIRM_REQUIRED',
+      error: '删除资产将同时删除其持仓、交易历史、操盘计划和行情缓存，且不可恢复。请带 ?confirm=cascade 显式确认。',
+    });
+  }
   db.prepare('DELETE FROM assets WHERE id = ?').run(req.params.id);
   res.json({ success: true });
 });

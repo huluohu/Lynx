@@ -5,6 +5,7 @@ import { getCachedMarketSnapshot, getCachedMarketSnapshots, getMarketSnapshot } 
 import { buildAssetPriceTrend } from '../services/trend.js';
 import { normalizeSqliteUtcTimestamp } from '../utils/datetime.js';
 import { explainMarketResolution, lintMarketDataRules } from '../services/market-data/config.js';
+import { assertPublicHttpUrl } from '../utils/url-guard.js';
 
 const router = Router();
 const log = createLogger('market');
@@ -160,6 +161,8 @@ function validateCustomSourcePayload(payload) {
     const url = String(payload.config.url_template || payload.config.url).replace(/{[^}]+}/g, 'BTC');
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) return 'only http/https URLs are allowed';
+    const guardError = assertPublicHttpUrl(url, { label: 'url_template' });
+    if (guardError) return guardError;
   } catch {
     return 'invalid url_template';
   }
@@ -419,6 +422,7 @@ router.post('/data/lint', (req, res) => {
 });
 
 // GET 所有资产价格
+let forceRefreshInFlight = null;
 router.get('/prices', async (req, res) => {
   const db = getDb();
   const assets = db.prepare('SELECT * FROM assets').all();
@@ -437,16 +441,34 @@ router.get('/prices', async (req, res) => {
     return;
   }
 
-  const freshResults = await Promise.all(assets.map((asset) => getMarketSnapshot(db, asset, { forceRefresh: true })));
+  // 并发去重：强刷进行中时后续请求直接拿当前结果，避免重复打外部源
+  if (forceRefreshInFlight) {
+    const results = await forceRefreshInFlight;
+    return res.json({ success: true, data: results, deduplicated: true });
+  }
 
-  log.info('Prices fetched', {
-    total: assets.length,
-    fresh: freshResults.filter((item) => !item.cached).length,
-    fallback: freshResults.filter((item) => item.cached && item.cache_status !== 'missing').length,
-    empty: freshResults.filter((item) => item.empty_cache).length,
+  const { mapWithConcurrency } = await import('../utils/concurrency.js');
+  forceRefreshInFlight = mapWithConcurrency(assets, 4, async (asset) => {
+    try {
+      return await getMarketSnapshot(db, asset, { forceRefresh: true });
+    } catch {
+      return getCachedMarketSnapshot(db, asset);
+    }
   });
+  try {
+    const freshResults = await forceRefreshInFlight;
 
-  res.json({ success: true, data: freshResults });
+    log.info('Prices fetched', {
+      total: assets.length,
+      fresh: freshResults.filter((item) => !item.cached).length,
+      fallback: freshResults.filter((item) => item.cached && item.cache_status !== 'missing').length,
+      empty: freshResults.filter((item) => item.empty_cache).length,
+    });
+
+    res.json({ success: true, data: freshResults });
+  } finally {
+    forceRefreshInFlight = null;
+  }
 });
 
 // POST 手工更新单个资产行情

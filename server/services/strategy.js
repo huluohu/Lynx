@@ -41,13 +41,16 @@ export function generateRecovery(holding, params = {}) {
 
   // 减仓线
   for (const sl of sell_lines) {
+    const sellPrice = Number(sl.price);
+    if (!Number.isFinite(sellPrice) || sellPrice <= 0) continue; // 无效触发价会导致数量为 Infinity
+    const sellQty = sl.quantity || Number(sl.amount) / sellPrice;
     plans.push({
       seq: plans.length + 1,
       asset_id: sl.asset_id || null,
       trigger_type: 'price_above',
-      trigger_value: sl.price,
+      trigger_value: sellPrice,
       action: 'sell',
-      quantity: sl.quantity || sl.amount / sl.price,
+      quantity: sellQty,
       amount: sl.amount,
       new_avg_cost: null,
       notes: sl.notes || '',
@@ -58,10 +61,22 @@ export function generateRecovery(holding, params = {}) {
 }
 
 /**
+ * 参考价：优先最新行情价（路由层注入 latest_price），无行情时回退持仓成本。
+ */
+function referencePrice(holding) {
+  const latest = Number(holding?.latest_price);
+  if (Number.isFinite(latest) && latest > 0) return latest;
+  const avg = Number(holding?.avg_cost);
+  if (Number.isFinite(avg) && avg > 0) return avg;
+  throw new Error('缺少可用参考价格（无行情缓存且无持仓成本），无法生成定投/价值平均计划');
+}
+
+/**
  * DCA 定投策略
  */
 export function generateDCA(holding, params = {}) {
   const { frequency = 'weekly', amount_per = 1000, periods = 10 } = params;
+  const refPrice = referencePrice(holding);
   const plans = [];
   for (let i = 0; i < periods; i++) {
     plans.push({
@@ -69,7 +84,7 @@ export function generateDCA(holding, params = {}) {
       trigger_type: 'time',
       trigger_value: i * (frequency === 'weekly' ? 7 : 1),
       action: 'buy',
-      quantity: amount_per / holding.avg_cost,
+      quantity: amount_per / refPrice,
       amount: amount_per,
       new_avg_cost: null,
       notes: `第${i + 1}期定投`,
@@ -84,6 +99,9 @@ export function generateDCA(holding, params = {}) {
 export function generateGrid(holding, params = {}) {
   const { low, high, grids = 5 } = params;
   const step = (high - low) / grids;
+  const perGridAmount = Number(params.amount_per) > 0
+    ? Number(params.amount_per)
+    : (Number(params.budget) > 0 ? Number(params.budget) / grids : 0);
   const plans = [];
   let seq = 0;
 
@@ -96,7 +114,7 @@ export function generateGrid(holding, params = {}) {
       trigger_value: Math.round(buyPrice * 100) / 100,
       action: 'buy',
       quantity: null,
-      amount: params.amount_per || (params.budget / grids),
+      amount: perGridAmount,
       new_avg_cost: null,
       notes: `网格第${i + 1}档买入`,
     });
@@ -105,8 +123,9 @@ export function generateGrid(holding, params = {}) {
       trigger_type: 'price_above',
       trigger_value: Math.round(sellPrice * 100) / 100,
       action: 'sell',
+      // 卖单也带金额：执行链可按 成交价=金额/数量 推导数量，否则计划永远无法执行
       quantity: null,
-      amount: null,
+      amount: perGridAmount,
       new_avg_cost: null,
       notes: `网格第${i + 1}档卖出`,
     });
@@ -120,17 +139,18 @@ export function generateGrid(holding, params = {}) {
  */
 export function generateValueAvg(holding, params = {}) {
   const { target_value = 50000, periods = 10, growth_rate = 0.02 } = params;
+  const refPrice = referencePrice(holding);
   const plans = [];
   for (let i = 0; i < periods; i++) {
     const t = target_value * Math.pow(1 + growth_rate, i + 1);
-    const current = (holding.quantity * holding.avg_cost) * Math.pow(1 + growth_rate, i);
+    const current = (Number(holding?.quantity || 0) * Number(holding?.avg_cost || 0)) * Math.pow(1 + growth_rate, i);
     const need = Math.max(0, t - current);
     plans.push({
       seq: i + 1,
       trigger_type: 'time',
       trigger_value: i * 30,
       action: need > 0 ? 'buy' : 'sell',
-      quantity: need / holding.avg_cost,
+      quantity: need / refPrice,
       amount: Math.abs(need),
       new_avg_cost: null,
       notes: `第${i + 1}期调整至${Math.round(t)}元`,

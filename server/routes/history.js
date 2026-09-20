@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { applyTradeToHoldings, recomputeHoldingFromTrades } from '../services/holdings-service.js';
 
 const router = Router();
 const HISTORY_SELECT = `SELECT h.*, a.name as asset_name, a.symbol, a.type as asset_type,
@@ -8,99 +9,6 @@ const HISTORY_SELECT = `SELECT h.*, a.name as asset_name, a.symbol, a.type as as
 
 function loadTrade(db, id) {
   return db.prepare(`${HISTORY_SELECT} WHERE h.id = ?`).get(id);
-}
-
-function getActiveHolding(db, assetId) {
-  return db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(assetId);
-}
-
-function getLatestHolding(db, assetId) {
-  return db.prepare(`SELECT * FROM holdings
-    WHERE asset_id = ?
-    ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC, id DESC
-    LIMIT 1`).get(assetId);
-}
-
-function applyTradeToHoldings(db, { assetId, type, quantity, amount, price }) {
-  const holding = getActiveHolding(db, assetId);
-
-  if (type === 'buy') {
-    if (holding) {
-      const newQty = Number(holding.quantity || 0) + quantity;
-      const newTotalInvested = Number(holding.total_invested || 0) + amount;
-      const newAvgCost = newQty > 0 ? newTotalInvested / newQty : 0;
-      db.prepare(`UPDATE holdings
-        SET quantity = ?, avg_cost = ?, total_invested = ?, status = 'active', updated_at = datetime('now')
-        WHERE id = ?`)
-        .run(newQty, newAvgCost, newTotalInvested, holding.id);
-    } else {
-      db.prepare(`INSERT INTO holdings (asset_id, quantity, avg_cost, total_invested, status)
-        VALUES (?, ?, ?, ?, 'active')`)
-        .run(assetId, quantity, amount / quantity || price, amount);
-    }
-    return;
-  }
-
-  if (!holding || Number(holding.quantity || 0) < quantity) {
-    throw Object.assign(new Error('当前没有足够持仓可卖出'), { statusCode: 400 });
-  }
-
-  const newQty = Number(holding.quantity || 0) - quantity;
-  const newTotalInvested = newQty > 0 ? newQty * Number(holding.avg_cost || 0) : 0;
-  if (newQty <= 0) {
-    db.prepare(`UPDATE holdings
-      SET quantity = 0, total_invested = 0, status = 'closed', updated_at = datetime('now')
-      WHERE id = ?`)
-      .run(holding.id);
-  } else {
-    db.prepare(`UPDATE holdings
-      SET quantity = ?, total_invested = ?, updated_at = datetime('now')
-      WHERE id = ?`)
-      .run(newQty, newTotalInvested, holding.id);
-  }
-}
-
-function rollbackTradeHoldings(db, trade) {
-  const quantity = Number(trade.quantity || 0);
-  const total = Number(trade.total || 0);
-  const price = Number(trade.price || 0);
-  const holding = getLatestHolding(db, trade.asset_id);
-
-  if (trade.type === 'buy') {
-    if (!holding) return;
-
-    const currentQty = Number(holding.quantity || 0);
-    const currentTotal = Number(holding.total_invested || 0);
-    const avgCost = currentQty > 0 ? currentTotal / currentQty : Number(holding.avg_cost || price || 0);
-    const qtyReduction = Math.min(quantity, currentQty);
-    const newQty = Math.max(0, currentQty - quantity);
-    const deductedCost = currentQty > 0 ? avgCost * qtyReduction : Math.min(total, currentTotal);
-    const newTotalInvested = Math.max(0, currentTotal - deductedCost);
-    const newAvgCost = newQty > 0 ? newTotalInvested / newQty : 0;
-    const nextStatus = newQty > 0 ? 'active' : 'closed';
-
-    db.prepare(`UPDATE holdings
-      SET quantity = ?, avg_cost = ?, total_invested = ?, status = ?, updated_at = datetime('now')
-      WHERE id = ?`)
-      .run(newQty, newAvgCost, newTotalInvested, nextStatus, holding.id);
-    return;
-  }
-
-  const costBasis = holding && Number(holding.avg_cost || 0) > 0 ? Number(holding.avg_cost) : price;
-  if (!holding) {
-    db.prepare(`INSERT INTO holdings (asset_id, quantity, avg_cost, total_invested, status)
-      VALUES (?, ?, ?, ?, 'active')`)
-      .run(trade.asset_id, quantity, costBasis, quantity * costBasis);
-    return;
-  }
-
-  const newQty = Number(holding.quantity || 0) + quantity;
-  const newTotalInvested = Number(holding.total_invested || 0) + quantity * costBasis;
-  const newAvgCost = newQty > 0 ? newTotalInvested / newQty : costBasis;
-  db.prepare(`UPDATE holdings
-    SET quantity = ?, avg_cost = ?, total_invested = ?, status = 'active', updated_at = datetime('now')
-    WHERE id = ?`)
-    .run(newQty, newAvgCost, newTotalInvested, holding.id);
 }
 
 function revertPlanExecution(db, trade) {
@@ -159,6 +67,8 @@ router.get('/', (req, res) => {
   const conditions = [];
   const params = [];
   const countParams = [];
+  const parsedLimit = Math.min(500, Math.max(1, Math.trunc(Number(limit)) || 50));
+  const parsedOffset = Math.max(0, Math.trunc(Number(offset)) || 0);
 
   if (asset_id) {
     conditions.push('h.asset_id = ?');
@@ -199,7 +109,7 @@ router.get('/', (req, res) => {
     total_asc: 'h.total ASC, h.id ASC',
   }[sort] || 'h.executed_at DESC, h.id DESC';
   const rows = db.prepare(`${HISTORY_SELECT}${whereSql}
-    ORDER BY ${orderBySql} LIMIT ? OFFSET ?`).all(...params, Number(limit), Number(offset));
+    ORDER BY ${orderBySql} LIMIT ? OFFSET ?`).all(...params, parsedLimit, parsedOffset);
   const total = db.prepare(`SELECT COUNT(*) as count FROM trade_history h JOIN assets a ON h.asset_id = a.id${whereSql}`).get(...countParams).count;
   res.json({ success: true, data: rows, total });
 });
@@ -291,12 +201,14 @@ router.post('/:id/undo', (req, res) => {
         throw Object.assign(new Error('该交易记录已撤销'), { statusCode: 400 });
       }
 
+      const revertedAt = new Date().toISOString();
+      // 先标记撤销，再基于剩余交易全量重放持仓，保证重放不含被撤销的这笔
+      db.prepare('UPDATE trade_history SET reverted = 1, reverted_at = ? WHERE id = ?').run(revertedAt, trade.id);
+
       if (rollbackHoldings) {
-        rollbackTradeHoldings(db, trade);
+        recomputeHoldingFromTrades(db, trade.asset_id);
       }
 
-      const revertedAt = new Date().toISOString();
-      db.prepare('UPDATE trade_history SET reverted = 1, reverted_at = ? WHERE id = ?').run(revertedAt, trade.id);
       revertPlanExecution(db, trade);
       return loadTrade(db, trade.id);
     })();
@@ -308,11 +220,15 @@ router.post('/:id/undo', (req, res) => {
   }
 });
 
-// PUT 编辑复盘
+// PUT 编辑复盘（部分更新：仅覆盖显式传入的字段）
 router.put('/:id', (req, res) => {
   const db = getDb();
-  const { reason, tags } = req.body;
-  db.prepare('UPDATE trade_history SET reason=?, tags=? WHERE id=?').run(reason || null, tags || null, req.params.id);
+  const existing = db.prepare('SELECT id, reason, tags FROM trade_history WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: '交易记录不存在' });
+  const { reason, tags } = req.body || {};
+  const nextReason = reason === undefined ? existing.reason : reason;
+  const nextTags = tags === undefined ? existing.tags : tags;
+  db.prepare('UPDATE trade_history SET reason=?, tags=? WHERE id=?').run(nextReason, nextTags, req.params.id);
   res.json({ success: true });
 });
 

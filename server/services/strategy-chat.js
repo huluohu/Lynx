@@ -1,25 +1,12 @@
 import { getDb } from '../db/database.js';
-import { getAgentConfig, callLLM } from './strategy-agent.js';
+import { getAgentConfig } from './strategy-agent.js';
+import { callLLM, extractJSON } from './llm.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('strategy-chat');
 
 const STRATEGY_FIELDS = new Set(['name', 'description', 'type', 'asset_id', 'asset_ids', 'parameters', 'status']);
 const PLAN_FIELDS = new Set(['asset_id', 'trigger_type', 'trigger_value', 'action', 'quantity', 'amount', 'new_avg_cost', 'status', 'notes']);
-
-function extractJSON(text) {
-  try { return JSON.parse(text); } catch {}
-  const match = text?.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) {
-    try { return JSON.parse(match[1].trim()); } catch {}
-  }
-  const start = text?.indexOf('{');
-  const end = text?.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(text.slice(start, end + 1)); } catch {}
-  }
-  return null;
-}
 
 function safeParse(value, fallback) {
   try { return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback); } catch { return fallback; }
@@ -273,7 +260,13 @@ function buildFinalPlans(strategy, currentPlans, changes) {
   for (const patch of changes?.plans_update || []) {
     const index = findPlanIndex(working, patch);
     if (index === -1) throw new Error(`${planLabel(patch)}不存在，无法更新`);
-    applyPlanUpdates(working[index], patch);
+    const target = working[index];
+    const safePatch = { ...patch };
+    // 已执行/部分执行的计划带有执行痕迹（executed_quantity 等），不允许改回待执行态
+    if (['executed', 'partial'].includes(String(target.status)) && 'status' in safePatch) {
+      delete safePatch.status;
+    }
+    applyPlanUpdates(target, safePatch);
   }
 
   for (const addition of changes?.plans_add || []) {

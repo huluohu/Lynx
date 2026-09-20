@@ -328,8 +328,13 @@ router.put('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ success: false, error: 'Not found' });
 
   const { name, description, type, asset_id, asset_ids, parameters, status } = req.body;
-  const assetIdsJson = asset_ids ? JSON.stringify(asset_ids) : existing.asset_ids;
-  const primaryAssetId = asset_id ?? (asset_ids ? asset_ids[0] : existing.asset_id);
+  // asset_ids 传空数组视为清空多资产（存 NULL）；避免 asset_ids[0] 为 undefined 导致绑定报错
+  const assetIdsProvided = Array.isArray(asset_ids);
+  const assetIdsJson = assetIdsProvided
+    ? (asset_ids.length > 0 ? JSON.stringify(asset_ids) : null)
+    : existing.asset_ids;
+  const primaryAssetId = asset_id
+    ?? (assetIdsProvided && asset_ids.length > 0 ? asset_ids[0] : existing.asset_id);
 
   db.prepare(`UPDATE strategies SET name=?, description=?, type=?, asset_id=?, asset_ids=?, parameters=?,
     status=?, updated_at=datetime('now') WHERE id=?`).run(
@@ -371,6 +376,10 @@ router.post('/:id/generate-plan', (req, res) => {
     avg_cost: strategy.avg_cost || 0,
     total_invested: strategy.total_invested || 0,
   };
+  // 注入最新行情价：无持仓成本时（如首次定投）生成器仍能推导数量
+  const latestPriceRow = db.prepare('SELECT price FROM price_cache WHERE asset_id = ? ORDER BY fetched_at DESC, id DESC LIMIT 1')
+    .get(strategy.asset_id);
+  holding.latest_price = Number(latestPriceRow?.price) > 0 ? Number(latestPriceRow.price) : null;
 
   try {
     const plans = generatePlan(holding, strategy.type, params);
@@ -452,7 +461,7 @@ router.get('/:id/backtest-results', (req, res) => {
     sql += ' AND plan_set_id = ?';
     params.push(activePlanSetId);
   }
-  sql += ' ORDER BY created_at DESC, id DESC';
+  sql += ' ORDER BY created_at DESC, id DESC LIMIT 50';
   const rows = db.prepare(sql).all(...params).map(row => {
       let details = [];
       try { details = row.details ? JSON.parse(row.details) : []; } catch {}
@@ -498,7 +507,12 @@ router.post('/ai-agent-generate', async (req, res) => {
     'X-Accel-Buffering': 'no',
   });
 
+  // 客户端断开后停止推进 Agent（各步骤边界检查），避免无人消费地烧 LLM 调用
+  let clientClosed = false;
+  req.on('close', () => { clientClosed = true; });
+
   const sendEvent = (event, data) => {
+    if (clientClosed || res.writableEnded || res.destroyed) return;
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
@@ -602,7 +616,10 @@ router.post('/ai-agent-generate', async (req, res) => {
       }
     }
 
-    const result = await runStrategyAgent(db, agentOpts, (step, message, detail) => {
+    const result = await runStrategyAgent(db, {
+      ...agentOpts,
+      shouldAbort: () => clientClosed || res.writableEnded || res.destroyed,
+    }, (step, message, detail) => {
       sendEvent('progress', { step, message, detail: detail || null });
     });
 
@@ -627,6 +644,10 @@ router.post('/ai-agent-generate', async (req, res) => {
     sendEvent('result', { success: true, data: { ...result, generation_id: generationId } });
     log.info('Agent generate success', { asset_ids: ids, strategy: result.strategy?.name, generation_id: generationId, trace_id: result._meta?.trace_id });
   } catch (e) {
+    if (e.code === 'AGENT_ABORTED') {
+      log.warn('Agent generate aborted by client disconnect', { asset_ids: ids });
+      return res.end();
+    }
     log.error('Agent generate failed', { asset_ids: ids, error: e.message, stack: e.stack?.split('\n').slice(0, 4).join(' | ') });
     const traceId = e.traceId || (resume_trace_id ? Number(resume_trace_id) : null);
     let capability = null;

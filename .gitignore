@@ -10,3 +10,5 @@ data/*.db
 docker/.env.local
 docs/promo/*
 /.agents/*
+/.zcode/
+/.video_agent/

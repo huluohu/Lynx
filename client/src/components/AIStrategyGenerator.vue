@@ -306,7 +306,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../utils/api.js'
 import { useConfirm } from '../utils/confirm.js'
@@ -879,6 +879,14 @@ function fmt(n) {
 onMounted(async () => {
   await loadAssets()
   applyPreset()
+})
+
+// 离开页面时中止进行中的 Agent 请求（服务端也会随之停止后续 LLM 调用）
+onUnmounted(() => {
+  if (_abortController) {
+    _abortController.abort()
+    _abortController = null
+  }
 })
 </script>
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../db/database.js';
+import { applyTradeToHoldings } from '../services/holdings-service.js';
 
 const router = Router();
 const VALID_PLAN_STATUSES = new Set(['pending', 'triggered', 'partial', 'executed', 'cancelled']);
@@ -73,49 +74,6 @@ export function resolveExecutionQuantityAndAmount(plan, body = {}, executionPric
   };
 }
 
-function getActiveHolding(db, assetId) {
-  return db.prepare("SELECT * FROM holdings WHERE asset_id = ? AND status = 'active'").get(assetId);
-}
-
-function applyTradeToHoldings(db, { assetId, type, quantity, amount, price }) {
-  const holding = getActiveHolding(db, assetId);
-
-  if (type === 'buy') {
-    if (holding) {
-      const newQty = Number(holding.quantity || 0) + quantity;
-      const newTotalInvested = Number(holding.total_invested || 0) + amount;
-      const newAvgCost = newQty > 0 ? newTotalInvested / newQty : 0;
-      db.prepare(`UPDATE holdings
-        SET quantity = ?, avg_cost = ?, total_invested = ?, status = 'active', updated_at = datetime('now')
-        WHERE id = ?`)
-        .run(newQty, newAvgCost, newTotalInvested, holding.id);
-    } else {
-      db.prepare(`INSERT INTO holdings (asset_id, quantity, avg_cost, total_invested, status)
-        VALUES (?, ?, ?, ?, 'active')`)
-        .run(assetId, quantity, amount / quantity || price, amount);
-    }
-    return;
-  }
-
-  if (!holding || Number(holding.quantity || 0) < quantity) {
-    throw Object.assign(new Error('当前持仓数量不足，无法执行卖出计划'), { statusCode: 400 });
-  }
-
-  const newQty = Number(holding.quantity || 0) - quantity;
-  const newTotalInvested = newQty > 0 ? newQty * Number(holding.avg_cost || 0) : 0;
-  if (newQty <= 0) {
-    db.prepare(`UPDATE holdings
-      SET quantity = 0, total_invested = 0, status = 'closed', updated_at = datetime('now')
-      WHERE id = ?`)
-      .run(holding.id);
-  } else {
-    db.prepare(`UPDATE holdings
-      SET quantity = ?, total_invested = ?, updated_at = datetime('now')
-      WHERE id = ?`)
-      .run(newQty, newTotalInvested, holding.id);
-  }
-}
-
 // GET 所有/某策略下的计划
 router.get('/', (req, res) => {
   const db = getDb();
@@ -181,9 +139,13 @@ router.put('/:id', (req, res) => {
 // POST 标记触发
 router.post('/:id/trigger', (req, res) => {
   const db = getDb();
-  const plan = db.prepare('SELECT id FROM trading_plans WHERE id = ?').get(req.params.id);
-  if (!plan) return res.status(404).json({ success: false, error: '计划不存在' });
-  try { assertPlanSetExecutable(loadPlan(db, req.params.id)); } catch (error) { return res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
+  const existing = loadPlan(db, req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: '计划不存在' });
+  // 仅 pending 计划可标记触发，防止把已执行/已取消的计划改回触发态造成重复执行
+  if (existing.status !== 'pending') {
+    return res.status(400).json({ success: false, error: `当前计划状态为 ${existing.status}，仅待执行计划可标记触发` });
+  }
+  try { assertPlanSetExecutable(existing); } catch (error) { return res.status(error.statusCode || 400).json({ success: false, error: error.message }); }
   db.prepare("UPDATE trading_plans SET status='triggered', updated_at=datetime('now') WHERE id = ?").run(req.params.id);
   res.json({ success: true, data: loadPlan(db, req.params.id) });
 });
@@ -205,6 +167,16 @@ router.post('/:id/execute', (req, res) => {
       assertPlanSetExecutable(plan);
       if (!EXECUTABLE_PLAN_STATUSES.has(plan.status)) {
         throw Object.assign(new Error('当前计划状态不允许执行'), { statusCode: 400 });
+      }
+
+      // 币种一致性：持仓/成本没有币种维度，跨币种执行会把不同币种的金额混入同一持仓成本
+      const requestedCurrency = req.body?.currency ? String(req.body.currency).trim().toUpperCase() : null;
+      const planCurrency = plan.asset_currency ? String(plan.asset_currency).trim().toUpperCase() : null;
+      if (requestedCurrency && planCurrency && requestedCurrency !== planCurrency) {
+        throw Object.assign(
+          new Error(`成交币种 ${requestedCurrency} 与资产币种 ${planCurrency} 不一致，为避免混币持仓已拒绝`),
+          { statusCode: 400 },
+        );
       }
 
       const {
@@ -243,7 +215,11 @@ router.post('/:id/execute', (req, res) => {
 
       const nextExecutedQuantity = executedQuantity + actualQuantity;
       const nextExecutedAmount = executedAmount + actualAmount;
-      const isPartial = Boolean(req.body.partial) || (plannedQuantity ? nextExecutedQuantity < plannedQuantity - 1e-8 : false);
+      // 已无可执行剩余量时一律视为完成：手动勾选"部分执行"不能把已执行完的计划卡在 partial 态
+      const remainingAfter = plannedQuantity ? plannedQuantity - nextExecutedQuantity : null;
+      const isPartial = remainingAfter !== null
+        ? remainingAfter > 1e-8
+        : Boolean(req.body.partial);
       const nextStatus = isPartial ? 'partial' : 'executed';
 
       db.prepare(`UPDATE trading_plans
@@ -281,9 +257,12 @@ router.post('/:id/execute', (req, res) => {
 // POST 取消计划
 router.post('/:id/cancel', (req, res) => {
   const db = getDb();
-  const plan = db.prepare('SELECT id FROM trading_plans WHERE id = ?').get(req.params.id);
-  if (!plan) return res.status(404).json({ success: false, error: '计划不存在' });
-
+  const existing = loadPlan(db, req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: '计划不存在' });
+  // 已执行的计划不允许取消（否则交易与计划状态脱钩）
+  if (!['pending', 'triggered', 'partial'].includes(existing.status)) {
+    return res.status(400).json({ success: false, error: `当前计划状态为 ${existing.status}，不能取消` });
+  }
   db.prepare("UPDATE trading_plans SET status='cancelled', updated_at=datetime('now') WHERE id = ?").run(req.params.id);
   res.json({ success: true, data: loadPlan(db, req.params.id) });
 });

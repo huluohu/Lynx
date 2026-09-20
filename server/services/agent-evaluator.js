@@ -106,6 +106,23 @@ export function computeIndicators(priceHistory) {
 }
 
 /**
+ * 将高频价格序列（如 5 分钟级缓存）降采样为"每日最后一笔"的日线序列。
+ * 输入必须按时间升序；SMA/RSI/涨跌等按日计算的指标都应基于日线，
+ * 否则 5 分钟级的短期均线会被当作日线指标误读。
+ */
+export function sampleDailySeries(priceHistory = []) {
+  const byDay = new Map();
+  for (const row of priceHistory || []) {
+    const day = String(row?.fetched_at || '').slice(0, 10);
+    if (!day) continue;
+    byDay.set(day, row); // 升序输入下，后写覆盖即当日最后一笔
+  }
+  return [...byDay.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([, row]) => row);
+}
+
+/**
  * Analyze transaction patterns (DCA frequency, avg size, buy/sell ratio).
  */
 export function analyzeTransactionPatterns(transactions) {
@@ -114,7 +131,7 @@ export function analyzeTransactionPatterns(transactions) {
   const sells = transactions.filter(t => t.type === 'sell');
 
   const avgBuyPrice = buys.length > 0 ? buys.reduce((s, t) => s + Number(t.price), 0) / buys.length : null;
-  const avgBuyAmount = buys.length > 0 ? buys.reduce((s, t) => s + Number(t.amount || t.price * t.quantity || 0), 0) / buys.length : null;
+  const avgBuyAmount = buys.length > 0 ? buys.reduce((s, t) => s + Number(t.total || t.price * t.quantity || 0), 0) / buys.length : null;
 
   // Avg interval between trades (days)
   let avgIntervalDays = null;
