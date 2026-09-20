@@ -137,7 +137,7 @@ router.post('/', (req, res) => {
     return res.status(400).json({ success: false, error: '数量和价格必须大于 0' });
   }
   if (!Number.isFinite(tradeTotal) || tradeTotal < 0 || !Number.isFinite(tradeFee) || tradeFee < 0) {
-    return res.status(400).json({ success: false, error: '成交金额和手续费不能为负数' });
+    return res.status(400).json({ success: false, error: '成交金额和手续费必须是非负数字' });
   }
   if (!['buy', 'sell'].includes(type)) {
     return res.status(400).json({ success: false, error: '交易类型必须是 buy 或 sell' });

@@ -23,6 +23,19 @@ function parseSqlDate(value) {
   return Number.isFinite(time) ? time : null;
 }
 
+// trade_history.executed_at 存在两种写入格式：计划执行写 ISO 瞬时（plans.js，
+// "2026-07-08T10:00:00.000Z"），手工录入写本地墙上时间（history.js 的
+// datetime-local 表单，"2026-07-08 18:00:00"）。展示端用 `new Date()` 解析，
+// 这里沿用同一语义：带 T 的按 UTC 瞬时，空格分隔的按本地时间。
+function parseTradeTimestamp(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const normalized = text.includes('T') ? text : text.replace(' ', 'T');
+  const time = new Date(normalized).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
 function convertToCny(value, currency, usdCny) {
   const amount = Number(value || 0);
   if (!Number.isFinite(amount)) return 0;
@@ -89,16 +102,20 @@ function buildSteppedPricePoints(rows, timeline, fallbackPrice = null, fallbackC
 }
 
 function getAssetTradeRows(db, assetId, endMs) {
-  return db.prepare(`
+  // executed_at 混有两种格式（见 parseTradeTimestamp），不能在 SQL 里做
+  // 字符串比较或排序（'T' > ' '，ISO 行会整体排错），所以在 JS 里解析后处理。
+  const rows = db.prepare(`
     SELECT id, type, quantity, price, total, COALESCE(fee, 0) AS fee, executed_at
     FROM trade_history
     WHERE asset_id = ?
       AND COALESCE(reverted, 0) = 0
       AND type IN ('buy', 'sell')
       AND executed_at IS NOT NULL
-      AND executed_at <= ?
-    ORDER BY executed_at ASC, id ASC
-  `).all(assetId, toSqlDate(endMs));
+  `).all(assetId);
+  return rows
+    .map(row => ({ ...row, executedMs: parseTradeTimestamp(row.executed_at) }))
+    .filter(row => row.executedMs != null && row.executedMs <= endMs)
+    .sort((a, b) => a.executedMs - b.executedMs || a.id - b.id);
 }
 
 function reconcileCostPointsToHolding(points, holding) {
@@ -159,7 +176,7 @@ function buildHoldingCostPoints(trades, timeline, fallbackHolding = null) {
 
   for (const ts of timeline) {
     while (idx < trades.length) {
-      const tradeTime = parseSqlDate(trades[idx].executed_at);
+      const tradeTime = trades[idx].executedMs;
       if (tradeTime == null || tradeTime > ts) break;
 
       const trade = trades[idx];
